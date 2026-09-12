@@ -1,5 +1,21 @@
 # Development handoff
 
+## Functional repairs — September 12, 2026
+
+Branch `codex/theme-artwork-repair`, release target v1.0.2. The importer now
+decodes the supplied ROM using its graphics header, expands all normal/shiny
+sprites and finds the PC wallpaper table. Game setup shares the background
+importer and discovers the stable retained game filename. No game assets ship.
+
+Settings retain companion choices. GameScreen releases held inputs on focus
+loss and teardown. GameController retains a failed asynchronous save and blocks
+normal close/vault changes until retry persists it. Disk-failure tests use a
+synthetic save; local integration checks use external files only.
+
+Moonlight and one illustrated companion are optional. The owner prioritized
+functional repairs over further theme design.
+
+
 ## Current direction — September 11, 2026
 
 The v1.0 release plan is pinned in [ROADMAP.md](ROADMAP.md) and tracked on

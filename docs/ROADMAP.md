@@ -1,6 +1,16 @@
 # Yoru roadmap
 
-Updated 2026-09-11. **The goal is v1.0, the first public release.** It is
+Updated 2026-09-12. **v1.0 has shipped; v1.0.2 focuses on functional repairs.**
+
+Completed in this repair: ROM sprite and PC wallpaper extraction, background
+imports and bounded nested archives, imported-game discovery, settings
+preservation, game input release on focus loss, and retry of failed vault saves.
+The optional Moonlight companion is deliberately limited; functionality is the
+priority. Validation includes the full synthetic suite, real local ROM import,
+an installed-core boot check, and page/dialog renders. Full campaign completion
+has not been re-verified in this repair.
+
+The original v1.0 plan below is historical. It was It is
 tracked on GitHub in the pinned [v1.0 release plan](https://github.com/Rabadakku/yoru/issues/55)
 and the [v1.0 milestone](https://github.com/Rabadakku/yoru/milestone/1). Read
 [AGENTS.md](../AGENTS.md) before contributing, [PRODUCT-GOALS.md](PRODUCT-GOALS.md)

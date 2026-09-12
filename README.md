@@ -156,7 +156,10 @@ tracker never write at the same time — the controls disable while the game run
 
 Each vault keeps its own game save, so two workspaces never share a journey.
 
-Artwork is optional too. Drop in a folder or a `.zip` of your own PNGs, or use
+Artwork is optional too. Import your supported Emerald `.gba` or `.zip` to extract
+all normal/shiny sprites and PC wallpapers locally. Settings → **Extract from
+current game** repairs artwork for a game you already chose. You can also drop
+in a folder or a `.zip` of your own PNGs, or use
 **Collection → Choose local artwork folder**; without it, the collection shows
 National Dex numbers instead.
 
