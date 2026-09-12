@@ -227,6 +227,36 @@ public class VaultStore {
     }
 
     /**
+     * Takes the password off a vault that has one, so that it opens without
+     * being asked for anything (#41).
+     *
+     * The vault is handed in already open. Only a vault somebody has opened has
+     * proved its password, and a change made while the app is running has to
+     * write the state that is on screen rather than the one last read off the
+     * disk. The unlock key is written first and taken back if the re-encryption
+     * fails, so the one shape this class refuses to let anything else land on —
+     * a key beside a vault it cannot open — is never left behind.
+     *
+     * @return the vault's new unlock secret, for the session that has to keep it
+     */
+    public char[] removePassword(String name, EncryptedVault vault, State state) throws IOException {
+        name = validate(name);
+        if (!exists(name)) throw new IOException("There is no vault called \"" + name + "\".");
+        if (passwordless(name)) throw new IOException("\"" + name + "\" already opens without a password.");
+        char[] secret = LocalAccess.write(path(name));
+        try {
+            vault.changeSecret(secret.clone(), state);
+        } catch (IOException | RuntimeException e) {
+            // The vault still opens with the password it always had: changeSecret
+            // puts its own key back, and the file was never written.
+            deleteQuietly(LocalAccess.keyPath(path(name)));
+            throw e;
+        }
+        forceDir(root);
+        return secret;
+    }
+
+    /**
      * Refuses a name that is already spoken for: by a vault, or by the unlock key
      * of one that is not there.
      *

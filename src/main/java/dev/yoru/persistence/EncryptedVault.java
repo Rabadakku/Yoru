@@ -415,6 +415,50 @@ public final class EncryptedVault implements Repository {
         try { Files.setPosixFilePermissions(backup,PosixFilePermissions.fromString("rw-------")); }
         catch(UnsupportedOperationException ignored) { }
     }
+    /**
+     * Re-encrypts this vault under a new unlock secret, keeping everything in it.
+     *
+     * The salt is replaced along with the key rather than reused: a fresh one
+     * costs a single write and leaves nothing of the old secret's derivation
+     * behind. The state is handed in rather than taken from {@link #load()},
+     * so a change made while the app is running writes what is on screen and
+     * not what was last read off the disk.
+     *
+     * A failure puts the old key and salt back and leaves the file alone —
+     * {@link #save} writes through a temporary file and an atomic move, so the
+     * vault on disk is either the old one or the new one, never half of each.
+     */
+    public void changeSecret(char[] secret,State state)throws IOException {
+        try {
+            if(secret.length<12)throw new IOException("Use an unlock secret of at least 12 characters.");
+            byte[] previousKey=key,previousSalt=salt.clone(),fresh=new byte[salt.length];
+            new SecureRandom().nextBytes(fresh);
+            System.arraycopy(fresh,0,salt,0,salt.length);
+            try {
+                key=derive(secret,salt);
+            }
+            catch(GeneralSecurityException e) {
+                System.arraycopy(previousSalt,0,salt,0,salt.length);
+                key=previousKey;
+                throw new IOException("Could not change how this vault is unlocked.",e);
+            }
+            try {
+                save(state);
+            }
+            catch(IOException|RuntimeException e) {
+                Arrays.fill(key,(byte)0);
+                System.arraycopy(previousSalt,0,salt,0,salt.length);
+                key=previousKey;
+                throw e;
+            }
+            Arrays.fill(previousKey,(byte)0);
+            Arrays.fill(previousSalt,(byte)0);
+        }
+        finally {
+            Arrays.fill(secret,'\0');
+        }
+    }
+
     public void close()throws IOException {
         Arrays.fill(key,(byte)0);
         lock.release();

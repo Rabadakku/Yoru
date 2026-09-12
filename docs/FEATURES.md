@@ -106,7 +106,8 @@ Legend: ✅ working · 🟡 partly working · ⬜ not started
 |---|---|---|
 | Local-only, no server to host | ✅ | |
 | Encrypted vault | ✅ | AES-256-GCM, PBKDF2 600k |
-| Optional password | ✅ | |
+| Optional password | ✅ | Chosen when the vault is made; the note beside the tick box says what going without one costs |
+| Remove a vault's password | ✅ | Welcome screen → *Rename or delete…*, or Data → Vaults. Re-encrypts under a key kept beside the vault; refuses and rolls back rather than leaving a vault nothing can open |
 | Vault reopens after creation | ✅ | |
 | Settings menu | ✅ | Appearance, tracking, artwork, integrations, reset |
 | Plugins | ⬜ | Not exposed in 1.0: the Integrations card says they are planned. Removed from the UI in #47, back with the adapters |

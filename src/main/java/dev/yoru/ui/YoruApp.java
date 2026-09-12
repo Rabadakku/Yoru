@@ -1196,6 +1196,10 @@ public final class YoruApp extends JPanel implements Shell {
         actions.add(named(button("Switch vault…",this::switchVault),"vault.switch"));
         actions.add(named(button("New vault…",this::newVault),"vault.new"));
         actions.add(named(button("Rename vault…",this::renameVault),"vault.rename"));
+        // Only for a vault that has a password: there is nothing to take off one
+        // that opens without asking, and an action that cannot act is noise.
+        if(!store.passwordless(name))
+            actions.add(named(button("Remove password…",this::removeVaultPassword),"vault.removePassword"));
         actions.add(named(button("Delete vault…",this::deleteVault),"vault.delete"));
         c.add(actions);
         return c;
@@ -1273,6 +1277,41 @@ public final class YoruApp extends JPanel implements Shell {
             if(!reopen(target))return;
             vaultName=target;
             VaultLauncher.remember(target);
+            rebuildTo(page);
+        });
+    }
+
+    /**
+     * Takes the password off the open vault, so it opens without asking (#41).
+     *
+     * Done to the vault that is open rather than to a copy opened for the
+     * purpose: this window holds the file's lock, so nothing else may open it,
+     * and the state written is the one on screen rather than the one last read
+     * off the disk. The session keeps the new unlock secret, because a rename
+     * or a failed delete still has to reopen the vault afterwards.
+     */
+    private void removeVaultPassword() {
+        VaultLauncher.whenGameStopped(game,()->{
+            String name=vaultName;
+            if(store==null||name==null||!(vault instanceof EncryptedVault open))return;
+            if(store.passwordless(name)) {
+                Dialogs.info(this,"\""+name+"\" already opens without a password.");
+                return;
+            }
+            if(!VaultLauncher.confirmRemovePassword(this,name))return;
+            char[] fresh;
+            try { fresh=store.removePassword(name,open,tracker.state()); }
+            catch(Exception e) {
+                // The store put its own key back and never wrote the vault, so
+                // the password that was there is still the password.
+                Dialogs.error(this,"The password was not removed",
+                    e.getMessage()+"\n\n\""+name+"\" still opens with the password it had.");
+                return;
+            }
+            forgetSecret();
+            secret=fresh;
+            Dialogs.info(this,"\""+name+"\" now opens without a password.\n\n"
+                +"Its unlock key is kept beside it, so anyone who can read your files can open it.");
             rebuildTo(page);
         });
     }

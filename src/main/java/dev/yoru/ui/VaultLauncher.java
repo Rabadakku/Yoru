@@ -262,15 +262,22 @@ final class VaultLauncher {
         var form = stack();
         form.add(label(name, 20, CYAN)); gap(form, 12);
         form.add(protect);
-        form.add(label("Without a password, anyone who can read your files can open this vault.", 11, MUTED));
+        form.add(label("Optional. Untick this and the vault opens without asking for anything —", 11, MUTED));
+        form.add(label("which also means anyone who can read your files can open it.", 11, MUTED));
         form.add(label("Yoru keeps the unlock key beside it, and keeps both together.", 11, MUTED));
         gap(form, 12);
         form.add(label("Password · 12 or more characters", 12, TEXT)); form.add(pass);
         form.add(label("Repeat password", 12, TEXT)); form.add(repeat);
-        protect.addActionListener(e -> {
+        // Emptied as well as disabled: a password typed before the box was
+        // unticked is not the password of the vault that gets made, and leaving
+        // it on screen says that it is.
+        Runnable wanted = () -> {
             pass.setEnabled(protect.isSelected());
             repeat.setEnabled(protect.isSelected());
-        });
+            if (!protect.isSelected()) { pass.setText(""); repeat.setText(""); }
+        };
+        protect.addActionListener(e -> wanted.run());
+        wanted.run();
         while (true) {
             if (!Dialogs.confirm(parent, form, "New vault", "Create")) return null;
             boolean local = !protect.isSelected();
@@ -280,7 +287,10 @@ final class VaultLauncher {
             Arrays.fill(again, '\0');
             if (!valid) {
                 Arrays.fill(secret, '\0');
-                Dialogs.error(parent, "Use at least 12 characters, and make both password fields match.");
+                Dialogs.error(parent, "That password cannot be used",
+                    "Use at least 12 characters, and make both password fields match.\n\n"
+                    + "A password is optional. Untick \"Require a password\" to make a vault that "
+                    + "opens without one.");
                 continue;
             }
             try {
@@ -307,10 +317,18 @@ final class VaultLauncher {
     private static void manage(Component parent, VaultStore store) {
         String name = pick(parent, store, null);
         if (name == null) return;
-        int action = Dialogs.choose(parent, "What would you like to do with \"" + name + "\"?", name,
-            "Rename", "Delete", "Cancel");
-        if (action == 0) rename(parent, store, name);
-        else if (action == 1) delete(parent, store, name);
+        boolean hasPassword = !store.passwordless(name);
+        String[] actions = hasPassword
+            ? new String[] { "Rename", "Remove password", "Delete", "Cancel" }
+            : new String[] { "Rename", "Delete", "Cancel" };
+        int action = Dialogs.choose(parent, "What would you like to do with \"" + name + "\"?", name, actions);
+        if (action < 0) return;
+        switch (actions[action]) {
+            case "Rename" -> rename(parent, store, name);
+            case "Remove password" -> removePassword(parent, store, name);
+            case "Delete" -> delete(parent, store, name);
+            default -> { }
+        }
     }
 
     /** Renames a closed vault. */
@@ -353,6 +371,58 @@ final class VaultLauncher {
             // The store puts the vault back before it throws: this is a report, not a loss.
             Dialogs.error(parent, "Nothing was lost", e.getMessage());
         }
+    }
+
+    /**
+     * Takes the password off a vault, so that it opens without asking (#41).
+     *
+     * The password is asked for first and the vault opened with it: a vault
+     * nobody can open is not one whose password anybody may take off, and the
+     * unlock the store needs is the same unlock that proves the right to do it.
+     *
+     * @return the vault's new unlock secret when it was taken off, or null
+     */
+    static char[] removePassword(Component parent, VaultStore store, String name) {
+        if (store.passwordless(name)) {
+            Dialogs.info(parent, "\"" + name + "\" already opens without a password.");
+            return null;
+        }
+        if (!confirmRemovePassword(parent, name)) return null;
+        var opened = unlock(parent, store, name);
+        if (opened == null) return null;
+        try {
+            char[] secret = store.removePassword(name, opened.vault(), opened.vault().load());
+            Dialogs.info(parent, "\"" + name + "\" now opens without a password.\n\n"
+                + "Its unlock key is kept beside it, so anyone who can read your files can open it.");
+            return secret;
+        } catch (Exception e) {
+            Dialogs.error(parent, "The password was not removed",
+                e.getMessage() + "\n\n\"" + name + "\" still opens with the password it had.");
+            return null;
+        } finally {
+            close(opened.vault());
+            Arrays.fill(opened.secret(), '\0');
+        }
+    }
+
+    /**
+     * What taking a password off costs, said before it is taken off.
+     *
+     * Not reversible by this screen — there is no way back to a password from
+     * here — and it turns a vault that needed something somebody knew into one
+     * that needs only the files, so it is asked the way deletions are asked.
+     */
+    static boolean confirmRemovePassword(Component parent, String name) {
+        var message = stack();
+        message.add(label("\"" + name + "\" will open without a password.", 14, TEXT));
+        gap(message, 10);
+        message.add(label("·  Yoru keeps the unlock key in a file beside the vault.", 12, MUTED));
+        message.add(label("·  Anyone who can read your files can then open it.", 12, MUTED));
+        message.add(label("·  Everything in the vault is kept, and stays encrypted on disk.", 12, MUTED));
+        gap(message, 12);
+        message.add(label("Yoru cannot put the password back from this screen.", 11, MUTED));
+        return Dialogs.confirmDestructive(parent, message, "Remove the password from \"" + name + "\"",
+            "Remove it");
     }
 
     /**

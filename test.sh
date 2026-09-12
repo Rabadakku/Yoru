@@ -17,6 +17,8 @@ java -ea -cp build/classes dev.yoru.DistributionTest
 java -ea -cp build/classes dev.yoru.PrivacyTest
 java -ea -cp build/classes dev.yoru.LegacyVaultTest
 java -ea -cp build/classes dev.yoru.persistence.VaultStoreTest
+java -ea -cp build/classes dev.yoru.persistence.PasswordTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.DialogFocusTest
 java -ea -cp build/classes dev.yoru.VaultSwitchTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.VaultUiTest
 java -ea -cp build/classes dev.yoru.assets.ArtworkTest

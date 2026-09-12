@@ -19,9 +19,25 @@ public final class LocalAccess {
     }
     public static char[] create(Path vault) throws IOException {
         if(Files.exists(vault)) throw new IOException("Choose a new vault for password-free setup.");
+        return write(vault);
+    }
+
+    /**
+     * Writes a fresh unlock key beside a vault, whether or not the vault is
+     * already there.
+     *
+     * {@link #create} is for a vault that does not exist yet and refuses one
+     * that does, which is the right guard when a key is being written before
+     * its vault. Taking the password off a vault is the other way round: the
+     * vault exists, holds everything, and is what the key is being made for.
+     * The caller re-encrypts the vault under this key and takes the key back
+     * if that fails, so a key is never left beside a vault it cannot open.
+     */
+    public static char[] write(Path vault) throws IOException {
         byte[] random=new byte[32];new SecureRandom().nextBytes(random);
         String value=HexFormat.of().formatHex(random); Arrays.fill(random,(byte)0);
         Path key=keyPath(vault);
+        Files.deleteIfExists(key);
         try {
             Files.createFile(key,PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         } catch(UnsupportedOperationException e) { Files.createFile(key); }

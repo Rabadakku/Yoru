@@ -1,3 +1,46 @@
+# Yoru 1.0.1
+
+A day-one patch for a single bug that made vaults very hard to use, and one
+thing 1.0 could not do.
+
+## Typing into a dialog now works
+
+Every dialog in Yoru opened with the keyboard on one of its buttons rather than
+on the field it was asking you to fill in. Typing a password into the unlock
+dialog went to the **Unlock** button instead of the box, the box stayed empty,
+and Yoru then refused a password that had never reached it. The same thing made
+a new vault's optional password look mandatory — pressing **Create** on a form
+you had not been able to type into asked for at least 12 characters — and made
+renaming a vault look like nothing had happened.
+
+The field a dialog asks you to fill in now has the keyboard when it opens, and
+Enter finishes the dialog from inside the field. Destructive prompts are
+unchanged: they still open on **Cancel**, so Enter cannot delete anything.
+
+If you made a vault in 1.0 and could not get back into it, your password was
+almost certainly right the whole time. Nothing about how vaults are encrypted
+has changed, and no vault needs to be remade.
+
+## A password is optional, and says so
+
+The **Require a password** tick box is where it always was, but the note beside
+it now says what unticking it does, and unticking it clears the two password
+boxes instead of leaving a password on screen that the vault would not use.
+
+## Remove the password from a vault that has one
+
+New in this patch. A vault whose password you no longer want can be opened
+without one:
+
+- **Welcome screen** — *Rename or delete…* → pick the vault → **Remove password**
+- **Inside the app** — Data → Vaults → **Remove password…**
+
+Yoru asks for the password once, re-encrypts the vault under a fresh unlock key
+kept in a file beside it, and tells you what that costs: anyone who can read
+your files can then open the vault. Everything in the vault is kept and stays
+encrypted on disk. If any part of it fails, the key is taken back and the vault
+still opens with the password it had.
+
 # Yoru 1.0.0
 
 The first public release. Yoru is a local-first desktop study workspace: timers,
