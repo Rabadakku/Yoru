@@ -26,13 +26,24 @@ public final class EmeraldArtworkTest {
         check(image.getRGB(8,0)==0xffff0000);
         check(image.getRGB(0,8)==0);
         byte[] cells=new byte[720];
+        palette=Arrays.copyOf(palette,64);
+        for(int i=1;i<cells.length;i+=2) cells[i]=0x10;
         var wall=EmeraldArtwork.wallpaper(tiles,cells,palette);
         check(wall.getRGB(0,0)==0xffff0000);
-        cells[1]=4;wall=EmeraldArtwork.wallpaper(tiles,cells,palette);
+        cells[1]=0x14;wall=EmeraldArtwork.wallpaper(tiles,cells,palette);
         check(wall.getRGB(7,0)==0xffff0000);
         check(wall.getRGB(0,0)==0xff000000);
-        cells[0]=(byte)255;cells[1]=3;
-        rejects(()->EmeraldArtwork.wallpaper(tiles,cells,palette));
+        cells[0]=(byte)255;cells[1]=0x13;
+        final byte[] wallpaperPalette = palette;
+        rejects(()->EmeraldArtwork.wallpaper(tiles,cells,wallpaperPalette));
+        cells[0]=0; cells[1]=0x20;
+        palette[34]=(byte)0xe0; palette[35]=3; // bank 2, index 1: green
+        wall=EmeraldArtwork.wallpaper(tiles,cells,palette);
+        check(wall.getRGB(0,0)==0xff00ff00);
+        cells[1]=0; wall=EmeraldArtwork.wallpaper(tiles,cells,palette);
+        check(wall.getRGB(0,0)==0); // frame uses the native UI, not the wrong palette
+        cells[1]=0x30;
+        rejects(()->EmeraldArtwork.wallpaper(tiles,cells,wallpaperPalette));
         rejects(()->EmeraldArtwork.extract(new byte[100],Path.of("unused")));
         // Optional local integration check. Output and input stay outside version control.
         if(args.length==2) {

@@ -14,6 +14,11 @@ public final class EmeraldArtwork {
     private EmeraldArtwork() { }
 
     public static void extract(byte[] rom, Path destination) throws IOException {
+        extractAvailable(rom, destination);
+    }
+
+    public static java.util.List<String> extractAvailable(byte[] rom, Path destination) throws IOException {
+        var warnings = new java.util.ArrayList<String>();
         if (rom.length < 0x138 || rom[0xac]!='B' || rom[0xad]!='P' || rom[0xae]!='E' || rom[0xaf]!='E')
             throw new IOException("Artwork extraction needs an English Emerald game file.");
         int fronts=pointer(rom,0x128), normal=pointer(rom,0x130), shiny=pointer(rom,0x134);
@@ -29,13 +34,19 @@ public final class EmeraldArtwork {
                 images[variant][n-1]=render(tiles,palette);
             }
         }
-        var wallpapers=wallpapers(rom);
+        BufferedImage[] wallpapers;
+        try { wallpapers=wallpapers(rom); }
+        catch (IOException e) {
+            wallpapers=new BufferedImage[0];
+            warnings.add("Pokémon artwork is ready. Box backgrounds could not be extracted; themed backgrounds remain available.");
+        }
         Files.createDirectories(destination.resolve("shiny"));
         for(int variant=0;variant<2;variant++)for(int n=1;n<=386;n++)
             ImageIO.write(images[variant][n-1],"png",destination.resolve((variant==0?"":"shiny/")+n+".png").toFile());
         Files.createDirectories(destination.resolve("pc"));
         for(int i=0;i<wallpapers.length;i++)
             ImageIO.write(wallpapers[i],"png",destination.resolve(String.format(java.util.Locale.ROOT,"pc/wallpaper-%02d.png",i)).toFile());
+        return java.util.List.copyOf(warnings);
     }
 
     /** Same self-describing table search as tools/extract-storage-graphics.py. */
@@ -51,8 +62,8 @@ public final class EmeraldArtwork {
                     byte[] tiles=lz77(rom,pointer(rom,entry));
                     byte[] cells=lz77(rom,pointer(rom,entry+4));
                     int palette=pointer(rom,entry+8);
-                    if(cells.length!=720||palette>rom.length-32)throw new IOException("Invalid wallpaper table");
-                    out[i]=wallpaper(tiles,cells,java.util.Arrays.copyOfRange(rom,palette,palette+32));
+                    if(cells.length!=720||palette>rom.length-64)throw new IOException("Invalid wallpaper table");
+                    out[i]=wallpaper(tiles,cells,java.util.Arrays.copyOfRange(rom,palette,palette+64));
                 }
                 return out;
             } catch(IOException ignored) { /* Continue to the next possible table. */ }
@@ -67,16 +78,24 @@ public final class EmeraldArtwork {
     }
 
     static BufferedImage wallpaper(byte[] tiles,byte[] cells,byte[] palette)throws IOException {
-        var image=new BufferedImage(160,144,BufferedImage.TYPE_INT_RGB);
+        if (cells.length != 720 || palette.length != 64)
+            throw new IOException("A wallpaper needs a 20 by 18 tilemap and two palette banks.");
+        var image=new BufferedImage(160,144,BufferedImage.TYPE_INT_ARGB);
         for(int y=0;y<144;y++)for(int x=0;x<160;x++) {
             int cellAt=((y/8)*20+x/8)*2;
             int cell=(cells[cellAt]&255)|((cells[cellAt+1]&255)<<8);
+            // DrawWallpaper adds three to the map's palette number; the two
+            // wallpaper palettes are loaded into hardware banks four and five.
+            // Bank zero belongs to the surrounding storage UI, not this asset.
+            int bank = cell >>> 12;
+            if (bank == 0) continue;
+            if (bank > 2) throw new IOException("Unsupported wallpaper palette bank.");
             int sx=(cell&0x400)!=0?7-x%8:x%8,sy=(cell&0x800)!=0?7-y%8:y%8;
             int offset=(cell&1023)*32+sy*4+sx/2;
             if(offset>=tiles.length)throw new IOException("Invalid wallpaper tile");
-            int index=(tiles[offset]>>((sx%2)*4))&15;
+            int index=((tiles[offset]>>((sx%2)*4))&15) + (bank - 1) * 16;
             int color=(palette[index*2]&255)|((palette[index*2+1]&255)<<8);
-            image.setRGB(x,y,((color&31)*255/31<<16)|(((color>>5)&31)*255/31<<8)|((color>>10)&31)*255/31);
+            image.setRGB(x,y,0xff000000|((color&31)*255/31<<16)|(((color>>5)&31)*255/31<<8)|((color>>10)&31)*255/31);
         }
         return image;
     }

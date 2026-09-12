@@ -41,6 +41,7 @@ public final class GameSession implements AutoCloseable, SessionHandle.Stoppable
     private byte[] lastWritten;
     /** Whether a save has ever been handed over, so Close knows there is one to offer again. */
     private boolean savedOnce;
+    private boolean saveTransferFailed;
 
     /**
      * Everything the player needs told, kept as a list rather than one string,
@@ -94,16 +95,15 @@ public final class GameSession implements AutoCloseable, SessionHandle.Stoppable
     private void restore(byte[] save, SaveSink sink) {
         this.sink = sink;
         long expected = core.memorySize(LibretroCore.MEMORY_SAVE_RAM);
-        if (save != null && save.length != expected) {
-            // Refusing to load it is not enough: the next flush would write the
-            // core's blank memory back over it. So this session keeps nothing.
-            notice("The save is " + save.length + " bytes but this game uses " + expected
-                + ". It has been left untouched, and this session will not be saved.");
-            this.sink = null;
-            return;
-        }
+        validateSaveSize(save, expected);
         if (save != null) core.writeMemory(LibretroCore.MEMORY_SAVE_RAM, save);
         lastWritten = core.memory(LibretroCore.MEMORY_SAVE_RAM);
+    }
+
+    static void validateSaveSize(byte[] save, long expected) {
+        if (expected <= 0 || (save != null && save.length != expected))
+            throw new IllegalArgumentException("This emulator's save format does not match your game. "
+                + "Your existing save has been left untouched. Choose a compatible core before playing.");
     }
 
     /** Hands on the game's save if it changed since it was last passed on. */
@@ -131,14 +131,16 @@ public final class GameSession implements AutoCloseable, SessionHandle.Stoppable
      */
     private synchronized boolean flushSave(boolean atClose) {
         if (sink == null) return false;
+        saveTransferFailed = false;
         byte[] now;
         try {
             now = core.memory(LibretroCore.MEMORY_SAVE_RAM);
         } catch (RuntimeException e) {
+            saveTransferFailed = true;
             notice("Could not read the game's save: " + e.getMessage());
             return false;
         }
-        if (now.length == 0) return false;
+        if (now.length == 0) { saveTransferFailed = true; return false; }
         boolean owed = !Arrays.equals(now, lastWritten);
         if (!owed && !(atClose && savedOnce)) return false;
         try {
@@ -149,6 +151,7 @@ public final class GameSession implements AutoCloseable, SessionHandle.Stoppable
             savedOnce = true;
             return true;
         } catch (RuntimeException e) {
+            saveTransferFailed = true;
             notice("Could not keep the game's save: " + e.getMessage());
             return false;
         }
@@ -283,6 +286,7 @@ public final class GameSession implements AutoCloseable, SessionHandle.Stoppable
         // when they are the ones last dispatched is what makes a queued write
         // that failed recoverable, and the tracker ignores bytes it holds.
         flushSave(true);
+        if (saveTransferFailed) return false;
         if (speaker != null) { speaker.stop(); speaker.close(); speaker = null; }
         core.close();
         disposed = true;

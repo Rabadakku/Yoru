@@ -25,7 +25,7 @@ final class SpriteAssets {
     };
 
     /** Clears the cache so newly imported artwork is picked up without a restart. */
-    static void refresh() { CACHE.clear(); }
+    static synchronized void refresh() { CACHE.clear(); }
 
     /** Report artwork the renderer can actually use, including portable installations. */
     static ArtworkLibrary.Report survey() {
@@ -68,8 +68,8 @@ final class SpriteAssets {
         return paths;
     }
 
-    static BufferedImage load(String name) {
-        String key=System.getProperty("yoru.art.dir","")+"|"+name;
+    static synchronized BufferedImage load(String name) {
+        String key=System.getProperty("yoru.art.dir","")+"|"+ArtworkLibrary.root()+"|"+name;
         if(CACHE.containsKey(key))return CACHE.get(key);
         BufferedImage image=null;
         try {
