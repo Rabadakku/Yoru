@@ -1,6 +1,18 @@
-# Yoru 1.0.0
+# Yoru 1.0.1
 
-The first public release.
+A patch for 1.0.0. It fixes one crash and changes nothing else.
+
+## Fixed in 1.0.1: a crash with "JComboBox.getUI() is null"
+
+Creating a vault — or opening the app — could crash with that message on macOS,
+most often when an accessibility feature such as VoiceOver or Full Keyboard
+Access was on. Yoru ships as a Java module, and the look-and-feel delegates it
+installs for combo boxes, check boxes and sliders were not reachable from the
+Swing toolkit inside that module, so each of those controls was built with no
+UI. The macOS accessibility bridge is the first thing that touches a control
+with no UI, and it threw. The module now exports the UI package the way the
+look-and-feel needs, so the controls build correctly and the crash is gone.
+Vaults are stored and encrypted exactly as before; nothing needs to be remade.
 
 ## Typing into a dialog now works
 

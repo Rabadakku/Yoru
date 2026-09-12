@@ -61,3 +61,27 @@ java -ea -cp build/classes dev.yoru.importer.NotionTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.NotionImportTest
 
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.RouteCameoTest
+
+# The packaged app runs as a named module (jpackage --module dev.yoru), where the
+# custom combo/checkbox/slider UI delegates are instantiated reflectively by
+# java.desktop. That needs dev.yoru.ui exported; without it every one of those
+# controls is built with a null UI and the macOS accessibility bridge throws
+# (JComboBox.getUI() is null). The classpath tests above cannot see this — they
+# run in the unnamed module — so run one check the way the app actually runs.
+mkdir -p build/module-check/dev/yoru/ui
+cat > build/module-check/dev/yoru/ui/ModuleUiCheck.java <<'EOF'
+package dev.yoru.ui;
+import javax.swing.*;
+public final class ModuleUiCheck {
+    public static void main(String[] args) throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            Theme.install();
+            if (new JComboBox<>().getUI() == null) throw new RuntimeException("ComboBoxUI is null in the module build");
+            if (new JCheckBox("x").getUI() == null) throw new RuntimeException("CheckBoxUI is null in the module build");
+        });
+        System.out.println("PASS: module UI delegates load reflectively (dev.yoru.ui is reachable)");
+    }
+}
+EOF
+javac --release 22 --module-path build/classes --add-modules dev.yoru -d build/classes build/module-check/dev/yoru/ui/ModuleUiCheck.java
+java --module-path build/classes --module dev.yoru/dev.yoru.ui.ModuleUiCheck
