@@ -148,8 +148,17 @@ final class Theme {
         new Color[]{new Color(0xEAE2D4),new Color(0xD9C9AE),new Color(0xC7AE86),
                     new Color(0xB39566),new Color(0x9C7C4C),new Color(0x836437)});
 
+    /** Violet nights and rose accents, paired with the full-size anime companion. */
+    private static final Palette MOONLIGHT = new Palette(true,
+        new Color(0x131019), new Color(0x201A29), new Color(0x41344F), new Color(0xF4EDF9),
+        new Color(0xB9A9C9), new Color(0xF2A6CB), new Color(0xF2A6CB), new Color(0xEBC391),
+        new Color(0xEBC391), new Color(0xBCACF5), new Color(0xF09FAF), new Color(0xC2B7CF),
+        new Color(0x302637),
+        new Color[]{new Color(0x302637),new Color(0x644973),new Color(0x895B97),
+                    new Color(0xB47AAA),new Color(0xD695C5),new Color(0xF2BDD9)});
+
     static Palette palette(ThemeId id) {
-        return switch (id) { case MIDNIGHT -> MIDNIGHT; case EMBER -> EMBER; case SAKURA -> SAKURA; case LINEN -> LINEN; };
+        return switch (id) { case MIDNIGHT -> MIDNIGHT; case EMBER -> EMBER; case SAKURA -> SAKURA; case LINEN -> LINEN; case MOONLIGHT -> MOONLIGHT; };
     }
     /**
      * What a theme is, in one short line.
@@ -165,6 +174,7 @@ final class Theme {
             case EMBER -> "Warm amber dark, after Gruvbox.";
             case SAKURA -> "Blossom pink light, after Rosé Pine Dawn.";
             case LINEN -> "Warm paper light, low chroma, quiet.";
+            case MOONLIGHT -> "Violet nights, rose accents, anime companion.";
         };
     }
 
@@ -200,14 +210,14 @@ final class Theme {
     // Role fonts. A page asks for the role; the size lives in one place so the
     // whole app moves together if a role ever has to change.
     static Font timerFont() { return mono(TYPE_TIMER); }
-    static Font titleFont() { return mono(TYPE_TITLE); }
+    static Font titleFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_TITLE):mono(TYPE_TITLE); }
     static Font figureFont() { return mono(TYPE_FIGURE); }
-    static Font headingFont() { return mono(TYPE_HEADING); }
+    static Font headingFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_HEADING):mono(TYPE_HEADING); }
     static Font proseFont() { return sans(TYPE_PROSE); }
-    static Font labelFont() { return mono(TYPE_LABEL); }
-    static Font sectionFont() { return mono(TYPE_SECTION); }
-    static Font bodyFont() { return mono(TYPE_BODY); }
-    static Font captionFont() { return mono(TYPE_CAPTION); }
+    static Font labelFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_LABEL):mono(TYPE_LABEL); }
+    static Font sectionFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_SECTION):mono(TYPE_SECTION); }
+    static Font bodyFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_BODY):mono(TYPE_BODY); }
+    static Font captionFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_CAPTION):mono(TYPE_CAPTION); }
 
     static void install() {
         // Aqua ignores nearly every UIManager colour key and all setBackground on
@@ -888,7 +898,7 @@ final class Theme {
         var l=new JLabel(s);
         l.putClientProperty("html.disable",true);
         l.setAlignmentX(0);
-        l.setFont(mono(size));
+        l.setFont(currentId==ThemeId.MOONLIGHT && size!=TYPE_TIMER ? sans(size) : mono(size));
         l.setForeground(color);
         return l;
     }

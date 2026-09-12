@@ -21,6 +21,7 @@ java -ea -cp build/classes dev.yoru.persistence.PasswordTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.DialogFocusTest
 java -ea -cp build/classes dev.yoru.VaultSwitchTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.VaultUiTest
+java -ea -cp build/classes dev.yoru.assets.EmeraldArtworkTest
 java -ea -cp build/classes dev.yoru.assets.ArtworkTest
 java -ea -cp build/classes dev.yoru.assets.MusicTest
 java -ea -cp build/classes dev.yoru.game.Gen3FormatTest
@@ -32,6 +33,8 @@ java -ea -cp build/classes dev.yoru.game.LearnsetTest
 java -ea -cp build/classes dev.yoru.game.StudyGiftTest
 java -ea -cp build/classes dev.yoru.game.StatsTest
 java -ea -cp build/classes dev.yoru.game.EncounterTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.GameInputTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.GameSaveFailureTest
 java -ea -cp build/classes dev.yoru.game.GameDeliveryTest
 java -ea -cp build/classes dev.yoru.game.StorageEditTest
 java -ea -cp build/classes dev.yoru.SaveEditTest
@@ -84,4 +87,4 @@ public final class ModuleUiCheck {
 }
 EOF
 javac --release 22 --module-path build/classes --add-modules dev.yoru -d build/classes build/module-check/dev/yoru/ui/ModuleUiCheck.java
-java --module-path build/classes --module dev.yoru/dev.yoru.ui.ModuleUiCheck
+java -Djava.awt.headless=true --module-path build/classes --module dev.yoru/dev.yoru.ui.ModuleUiCheck

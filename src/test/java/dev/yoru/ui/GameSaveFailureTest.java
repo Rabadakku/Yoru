@@ -1,0 +1,44 @@
+package dev.yoru.ui;
+
+import dev.yoru.application.*;
+import dev.yoru.domain.Model.State;
+import dev.yoru.game.Gen3Fixture;
+import java.io.IOException;
+import java.time.Clock;
+import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import javax.swing.SwingUtilities;
+
+/** A disk failure must not let closing discard the last game save. */
+public final class GameSaveFailureTest {
+    private static final class Memory implements Repository {
+        State state=State.empty();boolean fail=true;
+        public State load(){return state;}
+        public void save(State next)throws IOException {if(fail)throw new IOException("test disk unavailable");state=next;}
+        public void close(){}
+    }
+    public static void main(String[] args)throws Exception {
+        var repo=new Memory();var tracker=new Tracker(repo,Clock.systemUTC());
+        var game=new GameController(tracker);byte[] save=Gen3Fixture.save(1,3);
+        SwingUtilities.invokeAndWait(()->game.saved(save));
+        if(tracker.state().game()!=null)throw new AssertionError("failed save published");
+        var phase=GameController.class.getDeclaredField("phase");phase.setAccessible(true);
+        SwingUtilities.invokeAndWait(()-> {try{phase.set(game,GameController.Phase.RUNNING);}catch(Exception e){throw new RuntimeException(e);} });
+        var closed=new CountDownLatch(1);
+        SwingUtilities.invokeAndWait(()->game.close(closed::countDown));
+        if(!closed.await(5,TimeUnit.SECONDS))throw new AssertionError("close stalled");
+        SwingUtilities.invokeAndWait(()-> {
+            if(game.phase()!=GameController.Phase.STUCK)throw new AssertionError("close discarded pending save");
+            if(!game.running())throw new AssertionError("vault switching is not blocked");
+        });
+        repo.fail=false;var retried=new CountDownLatch(1);
+        SwingUtilities.invokeAndWait(()->game.close(retried::countDown));
+        if(!retried.await(5,TimeUnit.SECONDS))throw new AssertionError("retry stalled");
+        SwingUtilities.invokeAndWait(()-> {
+            if(game.phase()!=GameController.Phase.IDLE)throw new AssertionError("retry did not finish");
+            if(!Arrays.equals(save,tracker.state().game().bytes()))throw new AssertionError("latest save not recovered");
+        });
+        System.out.println("PASS: failed game saves survive Close and retry after the vault recovers");
+    }
+}

@@ -86,7 +86,9 @@ public final class ArtworkTest {
             System.setProperty("user.home", gameHome.toString());
             try {
                 var game = ArtworkLibrary.install(Path.of(supplied));
-                check(game.games() == 1, "the supplied Emerald National Dex game is accepted");
+                check(game.games() == 1, "duplicate nested copies resolve to one game");
+                check(game.species()==386 && game.shiny()==386,"the supplied game produces all normal and shiny sprites");
+                check(Files.isRegularFile(ArtworkLibrary.root().resolve("games/emerald-national-dex.gba")),"archives retain a usable game filename");
                 try (var games = Files.list(ArtworkLibrary.root().resolve("games"))) {
                     check(games.findAny().isPresent(), "the accepted game is retained in the local library");
                 }

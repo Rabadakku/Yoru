@@ -1,3 +1,22 @@
+# v1.0.2 — functionality and artwork repairs
+
+- Importing the supported Emerald game now extracts all 386 normal sprites,
+  386 shiny sprites and 16 PC wallpapers locally. The game archive can be
+  selected from Game setup or dropped onto the window; imported copies keep a
+  stable filename that the Game tab discovers automatically.
+- Artwork extraction runs in the background. Nested archives have shared size,
+  entry and depth limits. Settings can re-extract from the current game.
+- Game controls release when the window loses focus or the player leaves the
+  Game tab, preventing stuck movement and buttons.
+- Failed game-save writes remain available for retry. Closing and vault changes
+  wait until the latest save reaches the vault, even after the emulator stops.
+- Changing theme, trainer or tracking settings preserves the companion choice.
+- Optional Moonlight palette and a full-size original anime companion. Existing
+  themes and pixel portraits remain available.
+
+Game artwork is extracted on the player's machine and is never in the release.
+Older vaults open normally; choosing Moonlight requires this release or newer.
+
 # Yoru 1.0.1
 
 A patch for 1.0.0. It fixes one crash and changes nothing else.

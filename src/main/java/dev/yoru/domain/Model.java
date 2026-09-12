@@ -45,7 +45,7 @@ public final class Model {
     }
 
     /** Named separately from dev.yoru.ui.Theme, which resolves one of these to colours. */
-    public enum ThemeId { MIDNIGHT, EMBER, SAKURA, LINEN }
+    public enum ThemeId { MIDNIGHT, EMBER, SAKURA, LINEN, MOONLIGHT }
     /** Overworld sprite set. Not called Character — that shadows java.lang.Character. */
     public enum TrainerId { BRENDAN, MAY }
     /**

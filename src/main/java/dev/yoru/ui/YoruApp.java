@@ -191,7 +191,7 @@ public final class YoruApp extends JPanel implements Shell {
         if(closed)return;
         game.close(()->{
             boolean stuck=game.phase()==GameController.Phase.STUCK;
-            if(stuck&&!Dialogs.confirm(this,"The game has not stopped. Every save it made is already in your vault.\n\nQuit anyway?","Quit Yoru","Quit"))return;
+            if(stuck&&!Dialogs.confirm(this,"The game has not finished closing. Its most recent save may not be in your vault.\n\nQuit anyway?","Quit Yoru","Quit"))return;
             try {
                 vault.close();
                 forgetSecret();
@@ -353,12 +353,19 @@ public final class YoruApp extends JPanel implements Shell {
         // Two columns while there is room for both, stacked when there is not:
         // the companion card used to be a fixed 315 px in an EAST slot, which
         // broke the page below about 900 px rather than reflowing.
-        p.add(new Hero(focusCard(),companionColumn()));
-        gap(p,SPACE_XL);
-
-        // Decoration, under the two cards that are not: the panel says how to
-        // set a folder when there is none, so it is never a blank surface.
-        p.add(new WaifuPanel(tracker.state().settings().waifu()));
+        String portrait=tracker.state().settings().waifu();
+        if (portrait!=null && !WaifuCatalog.imagesFor(portrait).isEmpty()) {
+            p.add(new Hero(focusCard(),new WaifuPanel(portrait)));
+            gap(p,SPACE_LG);
+            p.add(companionColumn());
+        } else {
+            p.add(new Hero(focusCard(),companionColumn()));
+            gap(p,SPACE_LG);
+            var invitation=new WaifuPanel(null);
+            invitation.add(button("Try Moonlight",()->applySettings(s->new Settings(ThemeId.MOONLIGHT,
+                s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),"nightfall"))),BorderLayout.EAST);
+            p.add(invitation);
+        }
         gap(p,SPACE_XL);
 
         var daily=Analytics.daily(tracker.state(),null,zone,Instant.now());
@@ -1518,7 +1525,7 @@ public final class YoruApp extends JPanel implements Shell {
         // disabled one, so the chosen theme is the most prominent thing here.
         var pick=chosen
             ?accentButton("Active",()->{})
-            :button("Use this",()->applySettings(s->new Settings(id,s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn())));
+            :button("Use this",()->applySettings(s->new Settings(id,s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),id==ThemeId.MOONLIGHT && s.waifu()==null?"nightfall":s.waifu())));
         if(chosen)pick.setToolTipText("This theme is already in use");
         box.add(pick);
         return box;
@@ -1526,12 +1533,7 @@ public final class YoruApp extends JPanel implements Shell {
 
     /** Accepts a folder, a .zip or a single PNG, from the picker or a drop. */
     private void installArtwork(java.io.File chosen) {
-        try {
-            var report=dev.yoru.assets.ArtworkLibrary.install(chosen.toPath());
-            SpriteAssets.refresh();
-            Dialogs.info(this,"Artwork added","Artwork added.\n\n"+report.summary());
-            showPage(page);
-        } catch(Exception e) { error(e); }
+        ArtworkImport.start(this,chosen.toPath(),()->showPage(page),this::error);
     }
 
     private void importMusic() {
@@ -1548,7 +1550,7 @@ public final class YoruApp extends JPanel implements Shell {
 
     void importArtwork() {
         var chooser=new JFileChooser();
-        chooser.setDialogTitle("Choose an artwork folder or .zip");
+        chooser.setDialogTitle("Choose your Emerald game, artwork folder or .zip");
         chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
         if(chooser.showDialog(this,"Add artwork")==JFileChooser.APPROVE_OPTION)
             installArtwork(chooser.getSelectedFile());
@@ -1604,7 +1606,7 @@ public final class YoruApp extends JPanel implements Shell {
         gap(appearance,SPACE_SM);
         appearance.add(bodyLabel("Themes are stored in your vault, so they travel with the workspace."));
         gap(appearance,SPACE_LG);
-        var themes=new JPanel(new GridLayout(1,0,SPACE_MD,0));
+        var themes=new JPanel(new GridLayout(0,2,SPACE_MD,SPACE_MD));
         themes.setOpaque(false);
         themes.setAlignmentX(0);
         for(var id:ThemeId.values()) themes.add(themeCard(id));
@@ -1614,7 +1616,7 @@ public final class YoruApp extends JPanel implements Shell {
         trainerRow.add(label("TRAINER SPRITE",TYPE_CAPTION,MUTED));
         for(var t:TrainerId.values()) {
             String name=t.name().charAt(0)+t.name().substring(1).toLowerCase();
-            var pick=button(name,()->applySettings(s->new Settings(s.theme(),t,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn())));
+            var pick=button(name,()->applySettings(s->new Settings(s.theme(),t,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),s.waifu())));
             trainerRow.add(selected(pick,settings.trainer()==t));
         }
         appearance.add(trainerRow);
@@ -1681,7 +1683,7 @@ public final class YoruApp extends JPanel implements Shell {
         tracking.add(bodyLabel("Used by the week calendar and the task calendar."));
         gap(tracking,SPACE_LG);
         tracking.add(button("Save tracking settings",()->applySettings(s->new Settings(s.theme(),s.trainer(),
-            (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem()))));
+            (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem(),s.waifu()))));
         p.add(tracking);
         gap(p,SPACE_XL);
 
@@ -1742,15 +1744,17 @@ public final class YoruApp extends JPanel implements Shell {
         var artwork=card();
         artwork.add(sectionHeader("ARTWORK"));
         gap(artwork,SPACE_SM);
-        artwork.add(bodyLabel("Yoru ships no game artwork. Add your own and it is copied into your library."));
+        artwork.add(bodyLabel("Add your Emerald game to extract all 386 normal and shiny sprites, or import your own PNG artwork."));
         gap(artwork,SPACE_MD);
         var survey=SpriteAssets.survey();
         artwork.add(label(survey.summary(),TYPE_BODY,survey.empty()?MUTED:TEXT));
         gap(artwork,SPACE_MD);
-        artwork.add(bodyLabel("Drop a folder or a .zip anywhere on this window, or:"));
+        artwork.add(bodyLabel("Drop your .gba, folder or .zip anywhere on this window, or:"));
         gap(artwork,SPACE_SM);
         var artworkActions=row();
         artworkActions.add(button("Add artwork…",this::importArtwork));
+        var currentGame=GameFiles.rom();
+        if(currentGame!=null)artworkActions.add(button("Extract from current game",()->installArtwork(currentGame.toFile())));
         artworkActions.add(button("Open library folder",()->{
             try {
                 java.nio.file.Files.createDirectories(dev.yoru.assets.ArtworkLibrary.root());
@@ -1770,7 +1774,7 @@ public final class YoruApp extends JPanel implements Shell {
         var waifu=card();
         waifu.add(sectionHeader("WAIFU"));
         gap(waifu,SPACE_SM);
-        waifu.add(bodyLabel("A decorative portrait on the Today page. Pick one, or rotate through them all."));
+        waifu.add(bodyLabel("Full-size artwork beside your focus timer. Nightfall is the new illustrated companion; the pixel classics are still available."));
         gap(waifu,SPACE_MD);
         // One picker for every choice, so there is nothing to remember: the
         // combo shows what is set now and writes what is picked next.
@@ -1850,10 +1854,10 @@ public final class YoruApp extends JPanel implements Shell {
         message.add(label("Yoru ships without game artwork.",TYPE_HEADING,TEXT));gap(message,SPACE_MD);
         message.add(bodyLabel("The collection works either way — it shows National Dex numbers"));
         message.add(bodyLabel("until you add sprites of your own. Nothing else is affected."));gap(message,SPACE_MD);
-        message.add(bodyLabel("Point Yoru at a folder or .zip of PNGs named 1.png to 386.png,"));
-        message.add(bodyLabel("or drop one onto the window at any time."));
+        message.add(bodyLabel("Choose your Emerald game to extract sprites and box wallpapers,"));
+        message.add(bodyLabel("or add a folder or .zip of your own PNG artwork."));
         int choice=Dialogs.choose(app,message,"Add your own artwork",
-            "Choose a folder…","Not now","Don't ask again");
+            "Choose game or artwork…","Not now","Don't ask again");
         if(choice==0) app.importArtwork();
         else if(choice==2) preferences.putBoolean("artwork.prompt.dismissed",true);
     }

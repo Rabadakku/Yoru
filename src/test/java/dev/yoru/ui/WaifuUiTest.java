@@ -59,6 +59,14 @@ public final class WaifuUiTest {
         return null;
     }
 
+    private static boolean clickText(Container root,String text) {
+        for(Component c:root.getComponents()) {
+            if(c instanceof JButton b && text.equals(b.getText())) { b.doClick();return true; }
+            if(c instanceof Container child && clickText(child,text))return true;
+        }
+        return false;
+    }
+
     private static void layout(Container c) {
         c.doLayout();
         for(Component child:c.getComponents()) if(child instanceof Container nested) layout(nested);
@@ -124,6 +132,26 @@ public final class WaifuUiTest {
         check(first!=null,"rotate draws a portrait");
         onEdt(WaifuUiTest::click);
         check(showing()!=first,"clicking the panel moves to the next portrait");
+
+        onEdt(()-> {
+            tracker.settings(settings("nightfall"));openToday();
+            panel=(WaifuPanel)find(app,"waifu.panel");
+        });
+        check(showing().getWidth()>=1024,"illustrated companion has full-size artwork");
+        onEdt(()->panel.addNotify());
+        check(!panel.cycling(),"one portrait does not waste a rotation timer");
+        onEdt(()-> {
+            panel.removeNotify();
+            ((JButton)find(app,"Settings")).doClick();
+            clickText(app,"May");
+            check("nightfall".equals(tracker.state().settings().waifu()),"trainer change preserves companion");
+            clickText(app,"Save tracking settings");
+            check("nightfall".equals(tracker.state().settings().waifu()),"tracking change preserves companion");
+            clickText(app,"Use this");
+            check("nightfall".equals(tracker.state().settings().waifu()),"theme change preserves companion");
+            tracker.settings(settings("rotate"));openToday();
+            panel=(WaifuPanel)find(app,"waifu.panel");
+        });
 
         // Decoration lives on the Today page alone.
         onEdt(()->{ ((JButton)find(app,"Tasks")).doClick(); layout(app); });
