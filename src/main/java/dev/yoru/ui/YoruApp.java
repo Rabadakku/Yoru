@@ -1753,6 +1753,8 @@ public final class YoruApp extends JPanel implements Shell {
         gap(artwork,SPACE_SM);
         var artworkActions=row();
         artworkActions.add(button("Add artwork…",this::importArtwork));
+        var currentGame=GameFiles.rom();
+        if(currentGame!=null)artworkActions.add(button("Extract from current game",()->installArtwork(currentGame.toFile())));
         artworkActions.add(button("Open library folder",()->{
             try {
                 java.nio.file.Files.createDirectories(dev.yoru.assets.ArtworkLibrary.root());
@@ -1852,10 +1854,10 @@ public final class YoruApp extends JPanel implements Shell {
         message.add(label("Yoru ships without game artwork.",TYPE_HEADING,TEXT));gap(message,SPACE_MD);
         message.add(bodyLabel("The collection works either way — it shows National Dex numbers"));
         message.add(bodyLabel("until you add sprites of your own. Nothing else is affected."));gap(message,SPACE_MD);
-        message.add(bodyLabel("Point Yoru at a folder or .zip of PNGs named 1.png to 386.png,"));
-        message.add(bodyLabel("or drop one onto the window at any time."));
+        message.add(bodyLabel("Choose your Emerald game to extract sprites and box wallpapers,"));
+        message.add(bodyLabel("or add a folder or .zip of your own PNG artwork."));
         int choice=Dialogs.choose(app,message,"Add your own artwork",
-            "Choose a folder…","Not now","Don't ask again");
+            "Choose game or artwork…","Not now","Don't ask again");
         if(choice==0) app.importArtwork();
         else if(choice==2) preferences.putBoolean("artwork.prompt.dismissed",true);
     }
