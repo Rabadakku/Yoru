@@ -22,6 +22,7 @@ final class WaifuCatalog {
     record Waifu(String id, String name) { }
 
     private static final List<Waifu> ALL = List.of(
+        new Waifu("nightfall", "Nightfall · illustrated"),
         new Waifu("hikari",  "Hikari"),
         new Waifu("yuki",    "Yuki"),
         new Waifu("ember",   "Ember"),
@@ -35,7 +36,15 @@ final class WaifuCatalog {
     static List<Waifu> all() { return ALL; }
 
     /** The portrait for a stored id, or null if it is not one of the roster. */
-    static BufferedImage load(String id) {
+    private static final java.util.Map<String, BufferedImage> CACHE = new java.util.HashMap<>();
+    static synchronized BufferedImage load(String id) {
+        if (ALL.stream().noneMatch(w -> w.id().equals(id))) return null;
+        if (CACHE.containsKey(id)) return CACHE.get(id);
+        BufferedImage image = decode(id);
+        CACHE.put(id, image);
+        return image;
+    }
+    private static BufferedImage decode(String id) {
         try (var stream = WaifuCatalog.class.getResourceAsStream("/dev/yoru/waifu/" + id + ".png")) {
             if (stream == null) return null;
             return ImageIO.read(stream);

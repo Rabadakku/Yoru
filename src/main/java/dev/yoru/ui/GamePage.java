@@ -266,8 +266,12 @@ final class GamePage {
     }
 
     private void chooseRom() {
-        var picked = Dialogs.chooseFile(shell.owner(), "Choose your game file", "Game Boy Advance game", "gba");
-        if (picked != null) { GameFiles.rememberRom(picked); shell.show("Game"); }
+        var picked = Dialogs.chooseFile(shell.owner(), "Choose your game file", "Emerald game or archive", "gba", "zip");
+        if (picked != null) ArtworkImport.start(shell.owner(),picked,()-> {
+            Path game=picked.toString().toLowerCase(java.util.Locale.ROOT).endsWith(".gba")?picked:
+                dev.yoru.assets.ArtworkLibrary.root().resolve("games/emerald-national-dex.gba");
+            GameFiles.rememberRom(game);shell.show("Game");
+        },shell::error);
     }
 
     /**
@@ -370,8 +374,9 @@ final class GamePage {
      */
     private void stuck(JPanel p) {
         var game = shell.game();
-        p.add(label("The game has not shut down.", TYPE_HEADING, DANGER)); gap(p, SPACE_SM);
-        p.add(bodyLabel("It still holds the emulator, so Yoru will not start a second copy. Every save it made is in your vault."));
+        p.add(label("The game could not finish closing.", TYPE_HEADING, DANGER)); gap(p, SPACE_SM);
+        p.add(bodyLabel("Yoru is keeping this session until the emulator stops and its latest save is safely in your vault. Fix the reported problem, then retry."));
+        if(game.problem()!=null) { gap(p, SPACE_SM);p.add(bodyLabel(game.problem())); }
         gap(p, SPACE_LG);
         var again = button("Try closing it again", () -> game.close(null));
         again.setToolTipText("Attempts: " + game.attempts() + " · " + game.failure());
