@@ -256,21 +256,30 @@ final class VaultLauncher {
 
         var pass = new JPasswordField(24);
         var repeat = new JPasswordField(24);
-        // Off by default: a password is optional, and the vault you make with
-        // one keystroke is the password-free one. Tick the box to require one.
-        var protect = new JCheckBox("Require a password", false);
+        // Two explicit choices rather than a box one has to notice is off: the
+        // vault made with one keystroke is the password-free one, and "no
+        // password" is spelled out as a choice instead of being the box's
+        // unchecked meaning.
+        var noPassword = new JRadioButton("No password", true);
+        var protect = new JRadioButton("Require a password", false);
+        noPassword.setOpaque(false);
         protect.setOpaque(false);
+        noPassword.setForeground(TEXT);
         protect.setForeground(TEXT);
+        var group = new ButtonGroup();
+        group.add(noPassword);
+        group.add(protect);
         var form = stack();
         form.add(label(name, 20, CYAN)); gap(form, 12);
+        form.add(noPassword);
         form.add(protect);
-        form.add(label("A password is optional. Without one, anyone who can read your files", 11, MUTED));
-        form.add(label("can open this vault. Yoru keeps the unlock key beside it, together.", 11, MUTED));
+        form.add(label("Without a password, anyone who can read your files can open this vault.", 11, MUTED));
+        form.add(label("Yoru keeps the unlock key beside it, and keeps both together.", 11, MUTED));
         gap(form, 12);
         form.add(label("Password · 12 or more characters", 12, TEXT)); form.add(pass);
         form.add(label("Repeat password", 12, TEXT)); form.add(repeat);
         // Emptied as well as disabled, and focused the moment it is asked for: a
-        // password typed before the box was unticked is not the password of the
+        // password typed before the choice was changed is not the password of the
         // vault that gets made, and leaving it on screen says that it is.
         Runnable wanted = () -> {
             boolean on = protect.isSelected();
@@ -279,6 +288,7 @@ final class VaultLauncher {
             if (!on) { pass.setText(""); repeat.setText(""); }
             else pass.requestFocusInWindow();
         };
+        noPassword.addActionListener(e -> wanted.run());
         protect.addActionListener(e -> wanted.run());
         wanted.run();
         while (true) {
@@ -292,7 +302,7 @@ final class VaultLauncher {
                 Arrays.fill(secret, '\0');
                 Dialogs.error(parent, "That password cannot be used",
                     "Use at least 12 characters, and make both password fields match.\n\n"
-                    + "A password is optional. Untick \"Require a password\" to make a vault that "
+                    + "A password is optional. Choose \"No password\" to make a vault that "
                     + "opens without one.");
                 continue;
             }

@@ -22,9 +22,10 @@ has changed, and no vault needs to be remade.
 
 ## A password is optional, and says so
 
-A new vault now defaults to **no password**: the **Require a password** box is
-unticked to start, so the vault you make with one keystroke opens without one.
-Tick the box to require a password.
+A new vault now defaults to **no password**: the dialog offers two choices,
+**No password** and **Require a password**, and **No password** is the one
+selected. The vault you make with one keystroke opens without one; choose
+**Require a password** to add one.
 
 ## Remove the password from a vault that has one
 

@@ -32,8 +32,8 @@ public final class DialogFocusTest {
         return form;
     }
 
-    /** The new-vault dialog's shape: a checkbox with a default, then the fields. */
-    private static JPanel createForm(JCheckBox protect, JPasswordField pass, JPasswordField repeat) {
+    /** The new-vault dialog's shape: the password choice, then the fields. */
+    private static JPanel createForm(JRadioButton protect, JPasswordField pass, JPasswordField repeat) {
         var form = stack();
         form.add(label("New Vault", 20, CYAN));
         form.add(protect);
@@ -49,13 +49,13 @@ public final class DialogFocusTest {
         check(Dialogs.firstInput(unlockForm(pass)) == pass,
             "the unlock dialog offers its password field, not a label or a button");
 
-        // The checkbox has a sensible default and the password is what somebody
+        // The choice has a sensible default and the password is what somebody
         // has to type, so the first field wins over the first control.
-        var protect = new JCheckBox("Require a password", true);
+        var protect = new JRadioButton("Require a password", true);
         var first = new JPasswordField(24);
         var second = new JPasswordField(24);
         check(Dialogs.firstInput(createForm(protect, first, second)) == first,
-            "the new-vault dialog offers the first password field, not the checkbox");
+            "the new-vault dialog offers the first password field, not the choice");
 
         // A dialog that only says something keeps the keyboard on its button:
         // the wrapped message body is neither editable nor focusable.
