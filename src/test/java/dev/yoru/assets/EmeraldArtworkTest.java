@@ -25,11 +25,19 @@ public final class EmeraldArtworkTest {
         check(image.getRGB(2,0)==0);
         check(image.getRGB(8,0)==0xffff0000);
         check(image.getRGB(0,8)==0);
+        byte[] cells=new byte[720];
+        var wall=EmeraldArtwork.wallpaper(tiles,cells,palette);
+        check(wall.getRGB(0,0)==0xffff0000);
+        cells[1]=4;wall=EmeraldArtwork.wallpaper(tiles,cells,palette);
+        check(wall.getRGB(7,0)==0xffff0000);
+        check(wall.getRGB(0,0)==0xff000000);
+        cells[0]=(byte)255;cells[1]=3;
+        rejects(()->EmeraldArtwork.wallpaper(tiles,cells,palette));
         rejects(()->EmeraldArtwork.extract(new byte[100],Path.of("unused")));
         // Optional local integration check. Output and input stay outside version control.
         if(args.length==2) {
             EmeraldArtwork.extract(Files.readAllBytes(Path.of(args[0])),Path.of(args[1]));
-            try(var files=Files.walk(Path.of(args[1]))) { check(files.filter(p->p.toString().endsWith(".png")).count()==772); }
+            try(var files=Files.walk(Path.of(args[1]))) { check(files.filter(p->p.toString().endsWith(".png")).count()==788); }
         }
         System.out.println("PASS: "+checks+" artwork decoder checks");
     }
