@@ -42,15 +42,15 @@ final class CollectionPage {
             p.add(label("The game is running. This is its last save; what you catch now appears when it saves again.", TYPE_BODY, GOLD_TEXT));
             gap(p, SPACE_LG);
         }
+        var save = GameView.save(state);
+        p.add(save == null ? empty(save) : storage(save));
+        gap(p, SPACE_XL);
         var top = new JPanel(new GridLayout(1, 2, SPACE_LG, 0));
         top.setOpaque(false);
         top.setAlignmentX(0);
         top.add(encounters(state));
         top.add(onTheirWay(shell));
         p.add(top);
-        gap(p, SPACE_XL);
-        var save = GameView.save(state);
-        p.add(save == null || !save.hasStarter() ? empty(save) : storage(save));
         return p;
     }
 
@@ -117,10 +117,10 @@ final class CollectionPage {
 
     private JPanel empty(Gen3Save save) {
         var c = card();
-        c.add(label(save == null ? "No Pokémon yet." : "Choose your starter.", TYPE_HEADING, TEXT)); gap(c, SPACE_SM);
-        c.add(label(save == null
-            ? "Play the game and choose your starter. Your party and PC boxes appear here as soon as you save."
-            : "Pick your starter in the game and save. It appears here, and studies beside you on Today.", TYPE_BODY, MUTED));
+        var health = GameView.health(shell.tracker().state());
+        c.add(label(health.kind() == GameView.SaveKind.UNREADABLE ? "Your save needs attention" : "No game save yet", TYPE_HEADING, TEXT));
+        gap(c, SPACE_SM);
+        c.add(bodyLabel(health.message()));
         gap(c, SPACE_LG);
         c.add(button("Open the game", () -> shell.show("Game")));
         return c;
@@ -199,7 +199,7 @@ final class CollectionPage {
             details.add(new Portrait(mon)); gap(details, SPACE_MD);
             details.add(label(GameView.name(mon), TYPE_HEADING, mon.shiny() ? GOLD_TEXT : TEXT)); gap(details, SPACE_XS);
             details.add(bodyLabel(GameView.detail(mon)));
-            if (!mon.isEgg()) {
+            if (GameView.readable(mon) && !mon.isEgg()) {
                 gap(details, SPACE_MD);
                 details.add(label(GameView.nature(mon) + " nature", TYPE_BODY, TEXT));
                 if (mon.otName != null && !mon.otName.isBlank())
@@ -289,7 +289,7 @@ final class CollectionPage {
 
         Portrait(Gen3Pokemon mon) {
             setOpaque(false);
-            sprite = mon.isEgg() ? null : GameView.sprite(mon.nationalDex(), mon.shiny());
+            sprite = !GameView.readable(mon) || mon.isEgg() ? null : GameView.sprite(mon.nationalDex(), mon.shiny());
             // Never the dex number: a number where a picture should be reads as
             // the Pokémon's name, and "#252" is not one.
             fallback = mon.isEgg() ? "Egg" : "?";

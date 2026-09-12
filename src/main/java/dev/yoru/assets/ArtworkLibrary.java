@@ -33,21 +33,38 @@ public final class ArtworkLibrary {
         "brendan", "brendan-running", "may", "may-running", "tree", "rock", "grass",
         "route-trainer", "route-cyclist", "team-rocket");
 
-    public static Path root() {
+    private static Path base() {
         return Path.of(System.getProperty("user.home"), ".yoru", "art");
     }
 
-    /** What an import found, or what the library currently holds. */
-    public record Report(int species, int shiny, int sheets, int skipped, int games) {
-        public boolean empty() { return species == 0 && shiny == 0 && sheets == 0; }
+    /** One atomic pointer selects a complete generation; old loose libraries still work. */
+    public static Path root() {
+        Path base = base();
+        try {
+            String generation = Files.readString(base.resolve("current")).strip();
+            if (generation.matches("[a-f0-9-]{36}")) {
+                Path active = base.resolve("generations").resolve(generation);
+                if (Files.isRegularFile(active.resolve("manifest.properties"))) return active;
+            }
+        } catch (IOException ignored) { }
+        return base;
+    }
+
+    public record Report(int species, int shiny, int sheets, int skipped, int games,
+                         int wallpapers, int imported, List<String> warnings) {
+        public Report { warnings = List.copyOf(warnings); }
+        public Report(int species, int shiny, int sheets, int skipped, int games) {
+            this(species, shiny, sheets, skipped, games, 0, 0, List.of());
+        }
+        public boolean empty() { return species == 0 && shiny == 0 && sheets == 0 && wallpapers == 0; }
         public String summary() {
-            if (empty() && games > 0) return games + " game file" + (games == 1 ? "" : "s")
-                + " recognized. No PNG artwork was found; the collection will show dex numbers.";
-            if (empty()) return "No artwork installed — the collection shows dex numbers.";
-            return species + "/" + SPECIES + " species  ·  " + shiny + " shiny  ·  "
-                 + sheets + "/" + SHEETS.size() + " overworld sheets"
-                 + (games > 0 ? "  ·  " + games + " game file" + (games == 1 ? "" : "s") : "")
-                 + (skipped > 0 ? "  ·  " + skipped + " files skipped" : "");
+            String summary = species + "/" + SPECIES + " Pokémon pictures · " + shiny + " shiny · "
+                + wallpapers + "/16 box backgrounds · " + sheets + " scenery sheets";
+            if (imported > 0) summary = imported + " files imported. " + summary;
+            if (empty()) summary = "No artwork installed. Pokémon names, levels and dex numbers remain available.";
+            if (skipped > 0) summary += " · " + skipped + " files skipped";
+            if (!warnings.isEmpty()) summary += "\n" + String.join("\n", warnings);
+            return summary;
         }
     }
 
@@ -64,6 +81,7 @@ public final class ArtworkLibrary {
         if (base.isEmpty()) return null;
 
         if (SHEETS.contains(base)) return base + ".png";
+        if (base.matches("wallpaper-(?:0[0-9]|1[0-5])")) return "pc/" + base + ".png";
 
         // Species files are numbered; tolerate zero padding and a "shiny" folder.
         String digits = base.replaceFirst("^0+(?=\\d)", "");
@@ -77,70 +95,132 @@ public final class ArtworkLibrary {
         return (shiny ? "shiny/" : "") + number + ".png";
     }
 
-    /** Counts what is already installed. */
-    public static Report survey() {
-        Path root = root();
-        if (!Files.isDirectory(root)) return new Report(0, 0, 0, 0, 0);
-        int species = 0, shiny = 0, sheets = 0;
+    /** Counts only decodable files, never filenames that merely look like images. */
+    public static Report survey() { return survey(root()); }
+
+    private static Report survey(Path root) {
+        int species = 0, shiny = 0, sheets = 0, wallpapers = 0;
         for (int i = 1; i <= SPECIES; i++) {
-            if (Files.isRegularFile(root.resolve(i + ".png"))) species++;
-            if (Files.isRegularFile(root.resolve("shiny").resolve(i + ".png"))) shiny++;
+            if (validImage(root.resolve(i + ".png"))) species++;
+            if (validImage(root.resolve("shiny/" + i + ".png"))) shiny++;
         }
-        for (String sheet : SHEETS) if (Files.isRegularFile(root.resolve(sheet + ".png"))) sheets++;
-        int games = 0;
-        Path gameRoot = root.resolve("games");
-        if (Files.isDirectory(gameRoot)) try (var files = Files.list(gameRoot)) {
-            games = (int) files.filter(Files::isRegularFile).count();
-        } catch (IOException ignored) { }
-        return new Report(species, shiny, sheets, 0, games);
+        for (String sheet : SHEETS) if (validImage(root.resolve(sheet + ".png"))) sheets++;
+        for (int i = 0; i < 16; i++)
+            if (validImage(root.resolve(String.format(Locale.ROOT, "pc/wallpaper-%02d.png", i)))) wallpapers++;
+        int games = Files.isRegularFile(root.resolve("games/emerald-national-dex.gba")) ? 1 : 0;
+        return new Report(species, shiny, sheets, 0, games, wallpapers, 0, List.of());
     }
 
-    /** Imports a folder or a .zip. Existing files are replaced. */
-    public static Report install(Path source) throws IOException {
+    /** Stage, validate, then publish. No failed import can replace the active generation. */
+    public static synchronized Report install(Path source) throws IOException {
         if (!Files.exists(source)) throw new IOException("That file or folder no longer exists.");
-        Path root = root();
-        Files.createDirectories(root);
-        Files.createDirectories(root.resolve("shiny"));
-        int[] skipped = {0};
-        int[] games = {0};
-        if (Files.isDirectory(source)) copyTree(source, root, skipped, games);
-        else if (source.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".zip"))
-            unpack(source, root, skipped, games, new Budget(), 0);
-        else if (isGameFile(source.getFileName().toString())) {
-            copyGame(source, root, games);
+        source = source.toAbsolutePath().normalize();
+        if (Files.isDirectory(source) && base().toAbsolutePath().normalize().startsWith(source))
+            throw new IOException("Choose a specific artwork folder outside Yoru's installed library.");
+        Path previous = root();
+        Path generations = base().resolve("generations");
+        Files.createDirectories(generations);
+        String generation = UUID.randomUUID().toString();
+        Path stage = generations.resolve(generation);
+        Files.createDirectories(stage.resolve("shiny"));
+        Files.createDirectories(stage.resolve("pc"));
+        Files.createDirectories(stage.resolve("games"));
+        Budget budget = new Budget();
+        int[] skipped = {0}, games = {0};
+        boolean published = false;
+        Path pointer = base().resolve("current-" + generation);
+        try {
+            copyPrevious(previous, stage);
+            if (Files.isDirectory(source)) copyTree(source, stage, skipped, games, budget);
+            else if (source.toString().toLowerCase(Locale.ROOT).endsWith(".zip"))
+                unpack(source, stage, skipped, games, budget, 0);
+            else if (isGameFile(source.toString())) {
+                budget.add(Files.size(source)); copyGame(source, stage, games, budget);
+            } else if (destinationFor(source.getFileName().toString()) != null)
+                copyImage(source, stage, destinationFor(source.getFileName().toString()), skipped, budget);
+            else throw new IOException("Choose an Emerald game file, a folder, or a zip of artwork.");
+            if (budget.imported == 0) throw new IOException("No usable artwork or supported game was found. Your existing library is unchanged.");
+            var found = survey(stage);
+            Files.writeString(stage.resolve("manifest.properties"), "decoder=2\nspecies=" + found.species()
+                + "\nshiny=" + found.shiny() + "\nwallpapers=" + found.wallpapers() + "\n");
+            try (var files = Files.walk(stage)) {
+                for (var file : files.filter(Files::isRegularFile).toList()) force(file);
+            }
+            Files.writeString(pointer, generation);
+            force(pointer);
+            Files.move(pointer, base().resolve("current"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            published = true;
+            return new Report(found.species(), found.shiny(), found.sheets(), skipped[0], found.games(),
+                found.wallpapers(), budget.imported, budget.warnings);
+        } finally {
+            Files.deleteIfExists(pointer);
+            if (!published) deleteTree(stage);
         }
-        else if (destinationFor(source.getFileName().toString()) != null)
-            copyOne(source, root, skipped);
-        else throw new IOException("Choose an Emerald .gba, a folder, or a .zip of artwork.");
-
-        var found = survey();
-        var report = new Report(found.species(), found.shiny(), found.sheets(), skipped[0],
-            found.games());
-        if (report.empty() && report.games() == 0) throw new IOException(
-            "No usable artwork found. Expected PNGs named 1.png to " + SPECIES + ".png, "
-            + "optionally a shiny folder, and the overworld sheets.");
-        return report;
     }
 
-    private static void copyTree(Path source, Path root, int[] skipped, int[] games) throws IOException {
-        try (var walk = Files.walk(source)) {
-            for (Path file : walk.filter(Files::isRegularFile).toList()) {
-                String relative = source.relativize(file).toString();
+    private static void force(Path file) throws IOException {
+        try (var channel = java.nio.channels.FileChannel.open(file, StandardOpenOption.WRITE)) { channel.force(true); }
+    }
+
+    private static void deleteTree(Path root) throws IOException {
+        if (!Files.exists(root)) return;
+        try (var walk = Files.walk(root)) {
+            for (var file : walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(file);
+        }
+    }
+
+    private static void copyPrevious(Path previous, Path stage) throws IOException {
+        var names = new ArrayList<String>();
+        for (int i=1; i<=SPECIES; i++) { names.add(i+".png"); names.add("shiny/"+i+".png"); }
+        for (String sheet : SHEETS) names.add(sheet+".png");
+        for (int i=0; i<16; i++) names.add(String.format(Locale.ROOT,"pc/wallpaper-%02d.png",i));
+        for (String name : names) if (validImage(previous.resolve(name))) Files.copy(previous.resolve(name),stage.resolve(name));
+        var game = previous.resolve("games/emerald-national-dex.gba");
+        if (Files.isRegularFile(game) && Files.size(game)<=MAX_GAME_BYTES) Files.copy(game,stage.resolve("games/emerald-national-dex.gba"));
+    }
+
+    static boolean validImage(Path file) {
+        try {
+            if (!Files.isRegularFile(file) || Files.size(file)>MAX_IMAGE_BYTES) return false;
+            try (var input=javax.imageio.ImageIO.createImageInputStream(file.toFile())) {
+                var readers=javax.imageio.ImageIO.getImageReaders(input);
+                if (!readers.hasNext()) return false;
+                var reader=readers.next();
+                try {
+                    reader.setInput(input);
+                    return reader.getWidth(0)>0 && reader.getHeight(0)>0
+                        && reader.getWidth(0)<=256 && reader.getHeight(0)<=256 && reader.read(0)!=null;
+                } finally { reader.dispose(); }
+            }
+        } catch (IOException | RuntimeException e) { return false; }
+    }
+
+    private static void copyTree(Path source, Path root, int[] skipped, int[] games, Budget budget) throws IOException {
+        try (var walk=Files.walk(source)) {
+            var iterator=walk.iterator();
+            while(iterator.hasNext()) {
+                Path file=iterator.next();
+                if (++budget.entries>MAX_ENTRIES) throw new IOException("That folder has too many entries.");
+                if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) continue;
+                String relative=source.relativize(file).toString();
                 if (relative.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-                    unpack(file, root, skipped, games, new Budget(), 0); continue;
+                    budget.add(Files.size(file)); unpack(file,root,skipped,games,budget,0);
+                } else if (isGameFile(relative)) {
+                    budget.add(Files.size(file)); copyGame(file,root,games,budget);
+                } else {
+                    String destination=destinationFor(relative);
+                    if(destination==null) { budget.add(Files.size(file)); skipped[0]++; }
+                    else copyImage(file,root,destination,skipped,budget);
                 }
-                if (isGameFile(relative)) { copyGame(file, root, games); continue; }
-                String destination = destinationFor(relative);
-                if (destination == null || Files.size(file) > MAX_IMAGE_BYTES) { skipped[0]++; continue; }
-                Files.copy(file, root.resolve(destination), StandardCopyOption.REPLACE_EXISTING);
             }
         }
     }
 
-    private static void copyOne(Path file, Path root, int[] skipped) throws IOException {
-        if (Files.size(file) > MAX_IMAGE_BYTES) { skipped[0]++; return; }
-        Files.copy(file, root.resolve(destinationFor(file.getFileName().toString())),
-            StandardCopyOption.REPLACE_EXISTING);
+    private static void copyImage(Path source, Path root, String destination, int[] skipped, Budget budget) throws IOException {
+        budget.add(Files.size(source));
+        if (!validImage(source)) { skipped[0]++; return; }
+        Files.copy(source,root.resolve(destination),StandardCopyOption.REPLACE_EXISTING);
+        budget.imported++;
     }
 
     /**
@@ -153,7 +233,7 @@ public final class ArtworkLibrary {
             || lower.endsWith(".nds");
     }
 
-    private static void copyGame(Path file, Path root, int[] games) throws IOException {
+    private static void copyGame(Path file, Path root, int[] games, Budget budget) throws IOException {
         if (Files.size(file) > MAX_GAME_BYTES) return;
         String hash = sha256(file);
         if (!EXPECTED_GAME_SHA256.equalsIgnoreCase(hash))
@@ -161,14 +241,22 @@ public final class ArtworkLibrary {
                 + "Choose your supported Emerald game file or its matching zip.");
         Path gamesRoot = root.resolve("games");
         Files.createDirectories(gamesRoot);
-        EmeraldArtwork.extract(Files.readAllBytes(file), root);
+        budget.warnings.addAll(EmeraldArtwork.extractAvailable(Files.readAllBytes(file), root));
         String name = "emerald-national-dex.gba";
         if (!file.toAbsolutePath().normalize().equals(gamesRoot.resolve(name).toAbsolutePath().normalize()))
             Files.copy(file, gamesRoot.resolve(name), StandardCopyOption.REPLACE_EXISTING);
         games[0]++;
+        budget.imported++;
     }
 
-    private static final class Budget { long bytes; int entries; }
+    private static final class Budget {
+        long bytes; int entries, imported;
+        final List<String> warnings = new ArrayList<>();
+        void add(long size) throws IOException {
+            bytes += size;
+            if (bytes > MAX_TOTAL_BYTES) throw new IOException("That import is too large.");
+        }
+    }
 
     private static void copyBounded(InputStream in, Path target, long limit, Budget budget) throws IOException {
         try (var out = Files.newOutputStream(target)) {
@@ -199,22 +287,23 @@ public final class ArtworkLibrary {
                 }
                 if (isGameFile(entry.getName())) {
                     Path temp = Files.createTempFile("yoru-game-", ".bin");
-                    try { copyBounded(in, temp, MAX_GAME_BYTES, budget); copyGame(temp, root, games); }
+                    try { copyBounded(in, temp, MAX_GAME_BYTES, budget); copyGame(temp, root, games, budget); }
                     finally { Files.deleteIfExists(temp); }
                     continue;
                 }
                 String destination = destinationFor(entry.getName());
-                if (destination == null) { skipped[0]++; continue; }
-                var bytes = in.readNBytes((int) MAX_IMAGE_BYTES + 1);
-                if (bytes.length > MAX_IMAGE_BYTES || bytes.length < 8) { skipped[0]++; continue; }
-                // A PNG signature, so a renamed executable does not land in the library.
-                if (!(bytes[0] == (byte) 0x89 && bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G')) {
-                    skipped[0]++;
-                    continue;
+                if (destination == null) {
+                    byte[] drain=new byte[8192]; int count;
+                    while((count=in.read(drain))!=-1) budget.add(count);
+                    skipped[0]++; continue;
                 }
-                budget.bytes += bytes.length;
-                if (budget.bytes > MAX_TOTAL_BYTES) throw new IOException("That archive is too large.");
-                Files.write(root.resolve(destination), bytes);
+                Path image = Files.createTempFile("yoru-image-", ".png");
+                try {
+                    copyBounded(in,image,MAX_IMAGE_BYTES,budget);
+                    if (!validImage(image)) { skipped[0]++; continue; }
+                    Files.copy(image,root.resolve(destination),StandardCopyOption.REPLACE_EXISTING);
+                    budget.imported++;
+                } finally { Files.deleteIfExists(image); }
             }
         }
         if (entries == 0) throw new IOException("That archive is empty.");

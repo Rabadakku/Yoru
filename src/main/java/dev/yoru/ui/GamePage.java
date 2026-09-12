@@ -64,16 +64,14 @@ final class GamePage {
 
     private void idle(JPanel p) {
         var core = GameFiles.core();
-        if (!LibretroCore.present(core)) { needCore(p, core); return; }
         var rom = GameFiles.rom();
-        if (rom == null) { needRom(p); return; }
         var game = shell.game();
         if (game.problem() != null) { p.add(label(game.problem(), TYPE_BODY, DANGER)); gap(p, SPACE_LG); }
 
         var state = shell.tracker().state();
         var save = GameView.save(state);
         var hero = card();
-        hero.add(sectionHeader("YOUR GAME · " + rom.getFileName())); gap(hero, SPACE_MD);
+        hero.add(sectionHeader("SAVED GAME")); gap(hero, SPACE_MD);
         // 18, not 22: the rule is that a figure earns 22 and a headline does
         // not, and none of these five lines is a number.
         if (state.game() == null) {
@@ -81,7 +79,7 @@ final class GamePage {
             hero.add(bodyLabel("Press Play to begin. Once you choose your starter and save in the game, your vault keeps every save it makes."));
         } else if (save == null) {
             hero.add(label("A save Yoru cannot read", TYPE_HEADING, GOLD_TEXT)); gap(hero, SPACE_SM);
-            hero.add(bodyLabel("The game may still load it. Export it to keep a copy, or import another."));
+            hero.add(bodyLabel(GameView.health(state).message()));
         } else if (!save.hasStarter()) {
             hero.add(label("A new adventure", TYPE_HEADING, TEXT)); gap(hero, SPACE_SM);
             hero.add(bodyLabel("Choose your starter and save in the game. It becomes your study companion."));
@@ -99,6 +97,9 @@ final class GamePage {
         gap(hero, SPACE_LG);
         var play = accentButton("▶  Play", () -> game.play(core, rom));
         play.setName("game.play");
+        play.setEnabled(LibretroCore.present(core) && rom != null);
+        play.setToolTipText(!LibretroCore.present(core) ? "Choose an emulator core below to play"
+            : rom == null ? "Choose a game file below to play" : "Continue from your saved game");
         var export = button("Export save…", this::exportSave);
         export.setEnabled(state.game() != null);
         // Disabled with the reason on it rather than a button that does nothing.
@@ -109,6 +110,8 @@ final class GamePage {
         hero.add(bodyLabel("As on the cartridge, only saves made in the game are kept, so save before you close it."));
         p.add(hero);
 
+        if (!LibretroCore.present(core)) { gap(p, SPACE_LG); needCore(p, core); }
+        if (rom == null) { gap(p, SPACE_LG); needRom(p); }
         if (state.game() == null) found(p, rom);
         gap(p, SPACE_XL);
         p.add(rewards());
@@ -297,7 +300,7 @@ final class GamePage {
         choose.setToolTipText("Yoru looked in " + looked);
         box.add(choose);
         gap(box, SPACE_MD);
-        box.add(label("Looked for: " + looked, TYPE_CAPTION, MUTED));
+        box.add(bodyLabel("Choose the mGBA core installed by RetroArch. Your existing save remains available above."));
         p.add(box);
     }
 
@@ -332,11 +335,28 @@ final class GamePage {
         var trouble = label(" ", TYPE_CAPTION, DANGER);
         trouble.setVisible(false);
         p.add(trouble);
+        var durability = label(" ", TYPE_CAPTION, MUTED);
+        var retrySave = button("Retry save", () -> shell.game().retrySave());
+        retrySave.setVisible(false);
+        p.add(flushRow(durability, retrySave));
+        Runnable refreshSaveStatus = () -> {
+            var status = shell.game().saveStatus();
+            durability.setText(switch (status) {
+                case FAILED -> "Could not save to your vault";
+                case PENDING -> "Saving to your vault…";
+                case SAVED -> shell.tracker().state().game() == null
+                    ? "No in-game save yet" : "Saved in your vault";
+            });
+            durability.setForeground(status == GameController.SaveStatus.FAILED ? DANGER : MUTED);
+            retrySave.setVisible(status == GameController.SaveStatus.FAILED);
+        };
+        refreshSaveStatus.run();
         notices = new Timer(1000, e -> {
             var live = shell.game().session();
             String said = live == null ? null : live.trouble();
             trouble.setText(said == null ? " " : said);
             trouble.setVisible(said != null);
+            refreshSaveStatus.run();
         });
         notices.start();
         gap(p, SPACE_SM);
