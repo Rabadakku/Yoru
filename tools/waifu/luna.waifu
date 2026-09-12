@@ -1,0 +1,71 @@
+name: Luna
+accent: F48FB1
+palette:
+  1 EFE6FA
+  2 DFCFF2
+  3 C7AFE6
+  4 AD8BD4
+  h EBD9FB
+  a C6A3E9
+  d 9C74CF
+  k 5B3A8C
+  s FCEAE7
+  S F1D2CF
+  t D2A2B0
+  T A67287
+  N 8C5871
+  v 8A5AD8
+  l D1588C
+  o E4D2F6
+  O B08BDB
+  p F48FB1
+  b F7B9CE
+grid:
+  221111111111111111111111111111111111111111111122
+  211111111111111111111kaaaak111111111111111111112
+  111111111111111111kaaaaaaaaaak111111111111111111
+  1111111111111111kdaaaaaaaaaaaadk1111111111111111
+  11111111111111kdaaaaaaaaaaaaaaaadk11111111111111
+  1111111111111kdaaaaaaaaaaaaaaaaaadk1111111111111
+  111111111111kdaaaaaaaaaaaaaaaaaaaadk111111111111
+  11111111111kdaaaaaahhhaaaahhhaaaaaadk11111111111
+  11111111111kdaaahhhhhhaaaahhhhhhaaadk11111111111
+  11111111111kdahhhhhhhhaaaahhhhhhhhadk11111111111
+  11111111111kdhhhhhhaaaaaaaaaahhhhhhdk11111111111
+  11111111111kdhhhaaaaaaaaaaaaaaaahhhdk11111111111
+  11111111111kdhaaddaaaaaaaaaaaaddaahdk11111111111
+  11111111111kdaadSSdaaaaaaaaaadSSdaadk11111111111
+  11111111111kdaadSsssddaaaaddsssSdaadk11111111111
+  11111111111kdadSSsssssddddsssssSSdadk11111111111
+  1111111111kdaadSSssssssssssssssSSdaadk1111111111
+  1111111111kdaadSSkkkkksssskkkkkSSdaadk1111111111
+  1111111111kdaadSSk1vvvssssvvv1kSSdaadk1111111111
+  1111111111kdaadSSkvkvvssssvvkvkSSdaadk1111111111
+  1111111111kdaadSSvvvv1ssss1vvvvSSdaadk1111111111
+  1111111111kdaaadbbSSssssssssSSbbdaaadk1111111111
+  1111111111kdaaadbSsssssttsssssSbdaaadk1111111111
+  1111111111kdaaaadSssssssssssssSdaaaadk1111111111
+  1111111111kdaaaadSSsssbllbsssSSdaaaadk1111111111
+  1111111111kdaaaaadSsssSSSSsssSdaaaaadk1111111111
+  111111111kdaaaaaaadSSSSSSSSSSdaaaaaaadk111111111
+  111111111kdaaaaaaaadSSSSSSSSdaaaaaaaadk111111111
+  111111111kdaaaaaaddSSttttttSSddaaaaaadk111111111
+  111111111kdaaaaddSSssssssssssSSddaaaadk111111111
+  111111111kdaaddSttttssssssssttttSddaadk111111111
+  111111111kdatSssSSSSSSssssSSSSSSssStadk111111111
+  111111111kdasSSSSSSSSSssssSSSSSSSSSsadk111111111
+  1111111tSkdaSSSSSSSSSSssssSSSSSSSSSSadkSt1111111
+  111111tSskdaSSSSSSSSSSSSSSSSSSSSSSSSadksSt111111
+  1111tSSsskdaSSSSSSSSSSSttSSSSSSSSSSSadkssSSt1111
+  1111tSSsskdasssssssssSSttSSsssssssssadkssSSt1111
+  1111tSSsskdasssssssssSSttSSsssssssssadkssSSt1111
+  1111tSSsskdassspppppsSSttSSspppppsssadkssSSt1111
+  1111tSSsskdasspooooopSSTTSSpooooopssadkssSSt1111
+  1111tSSsskdaspooooooopSTTSpooooooopsadkssSSt1111
+  1111tSSsskdaspoOOOOOopSTTSpoOOOOOopsadkssSSt1111
+  1111tSSsskdapoOOOOOOOopTTpoOOOOOOOopadkssSSt1111
+  2111tSSsskdapOOOOOOOOOpTTpOOOOOOOOOpadkssSSt1112
+  2211tSSsskdapOOOOOOOOOoppoOOOOOOOOOpadkssSSt1122
+  2211tSSsskdapddddddddddkkddddddddddpadkssSSt1122
+  2221tSSsskdapddddddddddkkddddddddddpadkssSSt1222
+  2222tSSsskdappppppppppppppppppppppppadkssSSt2222

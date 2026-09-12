@@ -1,0 +1,102 @@
+package dev.yoru.assets;
+
+import java.nio.file.*;
+import java.util.Comparator;
+import java.util.zip.*;
+
+/**
+ * Artwork import: filing rules and the zip path.
+ *
+ * The importer accepts whatever shape a user's files arrive in, so the mapping
+ * from a source name to a library slot is where a silent mis-file would happen.
+ */
+public final class ArtworkTest {
+    private static int checks;
+    private static void check(boolean ok,String why) { checks++; if(!ok) throw new AssertionError(why); }
+    private static void maps(String from,String to) {
+        var actual=ArtworkLibrary.destinationFor(from);
+        check(to==null?actual==null:to.equals(actual),from+" -> "+actual+" (expected "+to+")");
+    }
+
+    private static final byte[] PNG={(byte)0x89,'P','N','G','\r','\n',0x1a,'\n',0,0,0,0};
+
+    public static void main(String[] args) throws Exception {
+        maps("1.png","1.png");
+        maps("386.png","386.png");
+        maps("007.png","7.png");                      // zero padding is common in dumps
+        maps("025.PNG","25.png");                     // and so is upper case
+        maps("sprites/emerald/150.png","150.png");    // nesting is ignored
+        maps("shiny/25.png","shiny/25.png");
+        maps("Art/Shiny/0025.png","shiny/25.png");    // the shiny folder can be anywhere, any case
+        maps("brendan.png","brendan.png");
+        maps("may-running.png","may-running.png");
+        maps("tree.png","tree.png");
+
+        maps("readme.txt",null);
+        maps("0.png",null);                           // dex numbers start at one
+        maps("387.png",null);                         // and stop at 386
+        maps("pikachu.png",null);                     // names are not resolved to numbers
+        maps("../escape/1.png",null);                 // an archive path must never climb out
+        maps("shiny/../../1.png",null);
+        maps(".png",null);
+
+        // A zip of mixed content installs only the artwork, and reports the rest as skipped.
+        Path dir=Files.createTempDirectory("yoru-art-test-");
+        Path zip=dir.resolve("art.zip");
+        try(var out=new ZipOutputStream(Files.newOutputStream(zip))) {
+            for(String name:new String[]{"1.png","002.png","shiny/1.png","brendan.png"}) {
+                out.putNextEntry(new ZipEntry(name));
+                out.write(PNG);
+                out.closeEntry();
+            }
+            out.putNextEntry(new ZipEntry("notes.txt"));
+            out.write("not artwork".getBytes());
+            out.closeEntry();
+            // A renamed non-image must not land in the library.
+            out.putNextEntry(new ZipEntry("9.png"));
+            out.write("MZ not really a png".getBytes());
+            out.closeEntry();
+        }
+
+        String home=System.getProperty("user.home");
+        Path sandbox=Files.createTempDirectory("yoru-art-home-");
+        System.setProperty("user.home",sandbox.toString());
+        try {
+            var report=ArtworkLibrary.install(zip);
+            check(report.species()==2,"two numbered sprites installed, got "+report.species());
+            check(report.shiny()==1,"one shiny installed");
+            check(report.sheets()==1,"one overworld sheet installed");
+            check(report.skipped()>=2,"non-artwork and non-PNG entries skipped");
+            check(Files.isRegularFile(ArtworkLibrary.root().resolve("2.png")),"zero padding normalised on disk");
+            check(!Files.exists(ArtworkLibrary.root().resolve("9.png")),"a renamed non-PNG is rejected");
+            check(ArtworkLibrary.survey().species()==2,"survey agrees with the install");
+        } finally {
+            System.setProperty("user.home",home);
+            try(var walk=Files.walk(sandbox)) {
+                for(var p:walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p);
+            }
+        }
+        try(var walk=Files.walk(dir)) {
+            for(var p:walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p);
+        }
+        String supplied = System.getProperty("yoru.test.game-folder");
+        if (supplied != null) {
+            Path gameHome = Files.createTempDirectory("yoru-game-home-");
+            String previousHome = System.getProperty("user.home");
+            System.setProperty("user.home", gameHome.toString());
+            try {
+                var game = ArtworkLibrary.install(Path.of(supplied));
+                check(game.games() == 1, "the supplied Emerald National Dex game is accepted");
+                try (var games = Files.list(ArtworkLibrary.root().resolve("games"))) {
+                    check(games.findAny().isPresent(), "the accepted game is retained in the local library");
+                }
+            } finally {
+                System.setProperty("user.home", previousHome);
+                try(var walk=Files.walk(gameHome)) {
+                    for(var p:walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p);
+                }
+            }
+        }
+        System.out.println("PASS: "+checks+" artwork checks (naming, nesting, path escapes, zip import)");
+    }
+}

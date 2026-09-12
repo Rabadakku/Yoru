@@ -1,0 +1,176 @@
+name: Release installers
+
+# jpackage builds Yoru's three installers (#56) and attaches them to the
+# release for a version tag such as v1.0.0. One runner per installer, because
+# jpackage only builds for the machine it runs on: a .dmg on macOS, a .msi on
+# Windows (WiX does the linking) and a .deb on Linux.
+#
+# Each installer carries its own Java runtime: jpackage runs jlink against the
+# JDK on the runner and copies the result into the app image, so the machine
+# Yoru is installed on needs no JDK. Temurin 22 is that JDK — 22 is the version
+# the plan pins the release to, and the icon exporter is compiled with
+# --release 22.
+#
+# The macOS build is unsigned on purpose. There is no paid Apple Developer
+# certificate behind Yoru, so the bundle carries no signature and macOS refuses
+# to verify who built it on the first open. The user opens it once with
+# Control-click -> Open (or System Settings -> Privacy & Security -> Open
+# Anyway) and it launches normally from then on. The release notes this job
+# writes say the same thing, and the README has it under "Install".
+#
+# Nothing built here is committed: tools/export-logo-icons.sh draws the app
+# icon at build time, and the installers land under build/, which git ignores.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # gh release create and gh release upload
+
+jobs:
+  installers:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # One platform failing should not cancel the other two: the release job
+      # reports what did build.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            label: macOS (.dmg)
+            type: dmg
+          - runner: windows-latest
+            label: Windows (.msi)
+            type: msi
+          - runner: ubuntu-latest
+            label: Linux (.deb)
+            type: deb
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the version from the tag
+        id: version
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          # jpackage takes digits and dots only, so v1.0.0 -> 1.0.0 and a
+          # pre-release like v1.0.0-rc1 -> 1.0.0.
+          version="${TAG#v}"
+          version="${version%%-*}"
+          case "$version" in
+            ''|*[!0-9.]*)
+              echo "::error::$TAG does not give a version jpackage accepts"
+              exit 1
+              ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "packaging Yoru $version from $TAG"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '22'
+
+      - name: Put WiX on the PATH (jpackage links the .msi with it)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # The runner image ships WiX, but jpackage finds it through the PATH
+          # and looks for candle.exe and light.exe there. The image sets WIX to
+          # the install root; the toolset may also sit under either Program
+          # Files folder, so try all of them. Say plainly if none is here.
+          $candidates = @()
+          if ($env:WIX) { $candidates += $env:WIX; $candidates += (Join-Path $env:WIX 'bin') }
+          $candidates += @('C:\Program Files (x86)\WiX Toolset*', 'C:\Program Files\WiX Toolset*') |
+            ForEach-Object { Get-ChildItem $_ -Directory -ErrorAction SilentlyContinue } |
+            ForEach-Object { Join-Path $_.FullName 'bin' }
+          $candle = $candidates |
+            ForEach-Object { Join-Path $_ 'candle.exe' } |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
+          if ($candle) {
+            (Split-Path $candle) | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+            Write-Host "WiX on the PATH: $(Split-Path $candle)"
+          } else {
+            Write-Host '::error::No WiX toolset on this runner; jpackage cannot link the .msi without it'
+            exit 1
+          }
+
+      - name: Draw the icon and build the installer
+        shell: bash
+        run: sh tools/package-installers.sh ${{ matrix.type }} ${{ steps.version.outputs.version }}
+
+      # The whole build/ tree stays out of git; this is the one artifact a
+      # runner keeps, and it is what the release job attaches.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yoru-${{ matrix.type }}
+          path: build/installers/*.${{ matrix.type }}
+          if-no-files-found: error
+
+  release:
+    name: Attach the installers to the release
+    needs: installers
+    runs-on: ubuntu-latest
+    steps:
+      # gh works out which repository it is talking to from the git remote, not
+      # from the workflow's environment, so this job needs a checkout: without
+      # one every gh call here stops at "fatal: not a git repository".
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create the release, then attach every installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          notes="$(mktemp)"
+          # Written here rather than committed, so the first-open explanation
+          # ships with the release that needs it.
+          cat > "$notes" <<'NOTES'
+          ## Install
+
+          Each file below was built by CI with `jpackage` from this tag, and each
+          one carries its own Java runtime — there is nothing else to install.
+
+          - **macOS** — the `.dmg`, for Apple silicon. Open it and drag Yoru
+            into Applications.
+          - **Windows** — the `.msi`. Double-click; no admin rights needed.
+          - **Linux** — the `.deb`, for 64-bit Intel and AMD. Install it with
+            `sudo apt install ./<the file you downloaded>`.
+
+          ## macOS: the first open asks you to confirm
+
+          The macOS build is not signed with a paid Apple Developer certificate,
+          so macOS cannot verify who built it and says so the first time you open
+          it. That is expected, and it does not mean the download is damaged.
+
+          Open it once with **Control-click → Open**, then **Open** again in the
+          dialog — or allow it from **System Settings → Privacy & Security →
+          Open Anyway**. After that it opens like any other app.
+
+          The whole source is in this repository if you would rather build it
+          yourself; an unsigned download is worth a moment's caution, and this
+          note is why the caution is here rather than hidden.
+
+          ## Notes
+
+          Yoru ships no game files, artwork or music: it needs your own legally
+          obtained copy of the game (see `LICENSE` and the legal notice). Study
+          data stays on your machine — the vault lives in your own folder, never
+          in the installed app.
+          NOTES
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "Yoru $TAG" --notes-file "$notes" --verify-tag
+          gh release upload "$TAG" dist/* --clobber
+          echo "attached to $TAG:"
+          ls -l dist

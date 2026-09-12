@@ -1,0 +1,50 @@
+# Legal notice
+
+Yoru is an independent study tracker. Nothing in this repository is connected
+to, sponsored by or approved by the owners of the game it works with.
+
+## Not affiliated
+
+**Yoru is not affiliated with, endorsed by, or connected to Nintendo, Game
+Freak or The Pokémon Company.** "Pokémon", "Pokémon Emerald" and related names
+and marks belong to their respective owners. They are named here only to
+describe what Yoru is compatible with, and no claim to them is made. Yoru uses
+no official logo, typeface or trade dress.
+
+## Nothing from the game ships here
+
+**Yoru ships no game, no BIOS, no artwork and no music.** No ROM, save file,
+BIOS image, sprite, map or audio track is bundled with the application, a
+release or this repository. Every such file stays on the player's own machine,
+outside Git and outside the packaged jar.
+
+**Yoru requires the player's own legally obtained copy of the game.** A GBA
+BIOS is optional — mGBA emulates one when none is present — and one that is
+used must be the player's own too. Yoru does not provide, download, link to or help obtain them, and it does not
+circumvent any copy protection. Whether a particular copy may be used, and
+under what terms, is the player's responsibility under the law where they
+live.
+
+## What Yoru relies on but does not bundle
+
+Yoru drives the player's own installation of these separate projects. None of
+them is included in this repository or in a Yoru release, and each carries its
+own licence and its own authors' credit.
+
+- **RetroArch** — Yoru is its own libretro frontend and never launches or
+  bundles RetroArch, but when an installation is present it reuses that
+  installation's mGBA core, BIOS folder and core options.
+  <https://www.retroarch.com/>
+- **mGBA libretro core** — the emulator core that actually executes the game.
+  <https://mgba.io/>
+- **pokeemerald** — the Pokémon Emerald decompilation, used as the reference
+  for Generation III save format and engine behaviour.
+  <https://github.com/pret/pokeemerald>
+
+The Unlicense below covers Yoru's own code and nothing else. It grants no
+rights to the game, to the projects listed above, or to any trademark.
+
+## Licence
+
+Yoru is released under the **Unlicense**: anyone may use it for anything, with
+no conditions. The full text is in [LICENSE](LICENSE).

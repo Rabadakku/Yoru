@@ -1,0 +1,26 @@
+build/
+/*.jar
+art/
+game-files/
+*.vault
+*.lock
+*.tmp
+.DS_Store
+.claude/
+
+*.local-key
+*.v*.bak
+
+*.bak
+*.gba
+*.local-key
+
+# Personal and third-party material that must never be committed (AGENTS.md)
+.privacy-denylist
+/pokemon-colorscripts/
+/Screenshot*
+*ExportBlock*/
+*.srm
+*.sav
+*.zip
+docs/private/
