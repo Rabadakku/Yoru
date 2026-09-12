@@ -37,6 +37,8 @@ final class GameScreen extends JComponent {
 
     private final GameSession session;
     private final Timer repainter;
+    private final java.util.function.BiConsumer<Integer,Boolean> input;
+    private final java.util.Set<Integer> held=new java.util.HashSet<>();
     /**
      * Shown over the picture until the first key is pressed, then never again.
      *
@@ -47,8 +49,11 @@ final class GameScreen extends JComponent {
      */
     private String hint;
 
-    GameScreen(GameSession session) {
+    GameScreen(GameSession session) { this(session,session::press); }
+
+    GameScreen(GameSession session, java.util.function.BiConsumer<Integer,Boolean> input) {
         this.session = session;
+        this.input = input;
         setOpaque(true);
         setFocusable(true);
         setPreferredSize(new Dimension(240 * 3, 160 * 3));
@@ -64,6 +69,9 @@ final class GameScreen extends JComponent {
             @Override public void mousePressed(MouseEvent e) { requestFocusInWindow(); }
         });
 
+        addFocusListener(new FocusAdapter() {
+            @Override public void focusLost(FocusEvent event) { releaseKeys(); }
+        });
         repainter = new Timer(16, e -> repaint());
         repainter.start();
     }
@@ -74,7 +82,8 @@ final class GameScreen extends JComponent {
             // A key that reaches the game is the reminder's last useful
             // moment; anything else (a modifier, a tab key) leaves it up.
             if (down && hint != null) { hint = null; repaint(); }
-            session.press(button, down);
+            if(down)held.add(button);else held.remove(button);
+            input.accept(button, down);
             e.consume();
         }
     }
@@ -91,7 +100,13 @@ final class GameScreen extends JComponent {
         return new Rectangle((boxW - w) / 2, (boxH - h) / 2, w, h);
     }
 
-    void stop() { repainter.stop(); }
+    private void releaseKeys() {
+        for(int button:held) input.accept(button,false);
+        held.clear();
+    }
+    void stop() { repainter.stop();releaseKeys(); }
+    @Override public void removeNotify() { stop();super.removeNotify(); }
+    @Override public void addNotify() { super.addNotify();repainter.start(); }
 
     /**
      * The keyboard reminder, drawn over the picture until the first key press.
