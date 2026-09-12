@@ -19,7 +19,7 @@ import java.util.List;
  */
 final class WaifuPanel extends JPanel {
     /** One image stays up for a few seconds: long enough to read, short enough to notice. */
-    private static final int INTERVAL_MS = 6000;
+    private static final int INTERVAL_MS = 60000;
     /** Eight grid steps tall at most: bounded so the page never reflows around it. */
     private static final int MAX_ART_HEIGHT = Theme.SPACE_XXL * 8;
     /** What the panel says when no waifu is chosen, in every empty case. */
@@ -44,21 +44,30 @@ final class WaifuPanel extends JPanel {
         cycle.setRepeats(true);
 
         var card = Theme.card();
-        card.add(Theme.sectionHeader("WAIFU"));
+        card.add(Theme.sectionHeader("YOUR COMPANION"));
         Theme.gap(card, Theme.SPACE_MD);
         if (images.isEmpty()) {
             var hint = Theme.label(HINT, Theme.TYPE_BODY, Theme.MUTED);
             hint.setName(HINT_NAME);
             card.add(hint);
         } else {
+            card.setBorder(BorderFactory.createEmptyBorder());
+            card.removeAll();
             card.add(art);
             // Only a choice with somewhere to go offers the click, so the
             // cursor never promises a change that cannot happen.
             if (images.size() > 1) {
                 setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
                 setToolTipText("Click for the next image");
-                addMouseListener(new MouseAdapter() {
+                var next = new MouseAdapter() {
                     @Override public void mouseClicked(MouseEvent event) { advance(); }
+                };
+                addMouseListener(next);
+                art.addMouseListener(next);
+                setFocusable(true);
+                getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke("SPACE"), "next");
+                getActionMap().put("next", new AbstractAction() {
+                    public void actionPerformed(java.awt.event.ActionEvent e) { advance(); }
                 });
             }
         }
@@ -76,7 +85,7 @@ final class WaifuPanel extends JPanel {
 
     @Override public void addNotify() {
         super.addNotify();
-        if (!images.isEmpty()) cycle.start();
+        if (images.size()>1) cycle.start();
     }
 
     @Override public void removeNotify() {
@@ -114,17 +123,11 @@ final class WaifuPanel extends JPanel {
         }
 
         @Override public Dimension getPreferredSize() {
-            if (image == null) return new Dimension(0, 0);
-            int width = image.getWidth(), height = image.getHeight();
-            if (height > MAX_ART_HEIGHT) {
-                width = width * MAX_ART_HEIGHT / height;
-                height = MAX_ART_HEIGHT;
-            }
-            return new Dimension(Math.max(1, width), Math.max(1, height));
+            return image == null ? new Dimension(0, 0) : new Dimension(360, 440);
         }
 
         @Override public Dimension getMaximumSize() {
-            return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+            return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
         }
 
         @Override protected void paintComponent(Graphics graphics) {
@@ -132,17 +135,26 @@ final class WaifuPanel extends JPanel {
             if (image == null || getWidth() <= 0 || getHeight() <= 0) return;
             var g = (Graphics2D) graphics.create();
             try {
-                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                    RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-                double scale = Math.min(1.0, Math.min(getWidth() / (double) image.getWidth(),
-                    getHeight() / (double) image.getHeight()));
-                int width = Math.max(1, (int) Math.round(image.getWidth() * scale));
-                int height = Math.max(1, (int) Math.round(image.getHeight() * scale));
-                int x = (getWidth() - width) / 2, y = (getHeight() - height) / 2;
-                g.drawImage(image, x, y, width, height, null);
-                g.setColor(Theme.LINE);
-                g.setStroke(new BasicStroke(Theme.HAIRLINE));
-                g.drawRect(x, y, width - 1, height - 1);
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.clip(new java.awt.geom.RoundRectangle2D.Double(0,0,getWidth(),getHeight(),20,20));
+                g.setColor(Theme.PANEL); g.fillRect(0,0,getWidth(),getHeight());
+                boolean illustrated=image.getWidth()>256;
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, illustrated
+                    ? RenderingHints.VALUE_INTERPOLATION_BICUBIC : RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                double scale=illustrated ? Math.max(getWidth()/(double)image.getWidth(),getHeight()/(double)image.getHeight())
+                    : Math.min(getWidth()*.65/image.getWidth(),getHeight()*.65/image.getHeight());
+                int width=(int)Math.ceil(image.getWidth()*scale),height=(int)Math.ceil(image.getHeight()*scale);
+                int x=(getWidth()-width)/2,y=illustrated?(int)((getHeight()-height)*.18):(getHeight()-height)/2;
+                g.drawImage(image,x,y,width,height,null);
+                g.setPaint(new GradientPaint(0,getHeight()*.52f,new Color(0,0,0,0),0,getHeight(),new Color(0,0,0,220)));
+                g.fillRect(0,getHeight()/2,getWidth(),getHeight());
+                g.setColor(Color.WHITE);
+                g.setFont(Theme.sans(Theme.TYPE_CAPTION));g.drawString("Y O U R   Q U I E T   H O U R",24,getHeight()-66);
+                g.setFont(Theme.sans(Theme.TYPE_FIGURE));g.drawString(illustrated?"Your next chapter.":"Here for your next chapter.",24,getHeight()-30);
+                if(isFocusOwner()) {
+                    g.setColor(Theme.CYAN);g.setStroke(new BasicStroke(3));
+                    g.drawRoundRect(2,2,getWidth()-5,getHeight()-5,20,20);
+                }
             } finally {
                 g.dispose();
             }

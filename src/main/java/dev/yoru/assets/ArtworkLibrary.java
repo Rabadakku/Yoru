@@ -115,7 +115,7 @@ public final class ArtworkLibrary {
 
         var found = survey();
         var report = new Report(found.species(), found.shiny(), found.sheets(), skipped[0],
-            Math.max(found.games(), games[0]));
+            found.games());
         if (report.empty() && report.games() == 0) throw new IOException(
             "No usable artwork found. Expected PNGs named 1.png to " + SPECIES + ".png, "
             + "optionally a shiny folder, and the overworld sheets.");
