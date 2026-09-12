@@ -43,6 +43,8 @@ final class GameController {
     private Phase phase = Phase.IDLE;
     private boolean closeWhenStarted;
     private String problem;
+    /** A dispatched save is not durable until the vault accepts it. Keep it for retry. */
+    private byte[] pendingSave;
     private List<GameDelivery.Outcome> outcomes = List.of();
 
     GameController(Tracker tracker) {
@@ -111,9 +113,11 @@ final class GameController {
     }
 
     /** An in-game save, kept in the vault as it happens. */
-    private void saved(byte[] bytes) {
+    void saved(byte[] bytes) {
+        pendingSave=bytes.clone();
         try {
-            tracker.gameSaved(bytes);
+            tracker.gameSaved(pendingSave);
+            pendingSave=null;
             listener.saveChanged();
         } catch (IOException | RuntimeException e) {
             problem = "The game saved, but Yoru could not keep the save in your vault: " + e.getMessage();
@@ -145,8 +149,11 @@ final class GameController {
             // Queued after the final save the shutdown passed on, so the vault
             // already holds it by the time rewards go in.
             SwingUtilities.invokeLater(() -> {
-                phase = released ? Phase.IDLE : Phase.STUCK;
-                if (released) sync();
+                // The event queue has now processed the core's final save. A failed
+                // vault write must keep Close/switch blocked, even after the core stops.
+                if (released && pendingSave!=null) saved(pendingSave);
+                phase = released && pendingSave==null ? Phase.IDLE : Phase.STUCK;
+                if (phase==Phase.IDLE) { problem=null;sync(); }
                 listener.phaseChanged();
                 finishClosing();
             });

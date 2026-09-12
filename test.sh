@@ -33,6 +33,7 @@ java -ea -cp build/classes dev.yoru.game.LearnsetTest
 java -ea -cp build/classes dev.yoru.game.StudyGiftTest
 java -ea -cp build/classes dev.yoru.game.StatsTest
 java -ea -cp build/classes dev.yoru.game.EncounterTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.GameSaveFailureTest
 java -ea -cp build/classes dev.yoru.game.GameDeliveryTest
 java -ea -cp build/classes dev.yoru.game.StorageEditTest
 java -ea -cp build/classes dev.yoru.SaveEditTest
