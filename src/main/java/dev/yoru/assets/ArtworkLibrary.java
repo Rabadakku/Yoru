@@ -105,17 +105,17 @@ public final class ArtworkLibrary {
         int[] games = {0};
         if (Files.isDirectory(source)) copyTree(source, root, skipped, games);
         else if (source.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".zip"))
-            unpack(source, root, skipped, games);
+            unpack(source, root, skipped, games, new Budget(), 0);
         else if (isGameFile(source.getFileName().toString())) {
             copyGame(source, root, games);
         }
         else if (destinationFor(source.getFileName().toString()) != null)
             copyOne(source, root, skipped);
-        else throw new IOException("Choose a folder or a .zip of PNG artwork.");
+        else throw new IOException("Choose an Emerald .gba, a folder, or a .zip of artwork.");
 
         var found = survey();
         var report = new Report(found.species(), found.shiny(), found.sheets(), skipped[0],
-            Math.max(found.games(), games[0]));
+            found.games());
         if (report.empty() && report.games() == 0) throw new IOException(
             "No usable artwork found. Expected PNGs named 1.png to " + SPECIES + ".png, "
             + "optionally a shiny folder, and the overworld sheets.");
@@ -127,7 +127,7 @@ public final class ArtworkLibrary {
             for (Path file : walk.filter(Files::isRegularFile).toList()) {
                 String relative = source.relativize(file).toString();
                 if (relative.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-                    unpack(file, root, skipped, games); continue;
+                    unpack(file, root, skipped, games, new Budget(), 0); continue;
                 }
                 if (isGameFile(relative)) { copyGame(file, root, games); continue; }
                 String destination = destinationFor(relative);
@@ -158,31 +158,48 @@ public final class ArtworkLibrary {
         String hash = sha256(file);
         if (!EXPECTED_GAME_SHA256.equalsIgnoreCase(hash))
             throw new IOException("That game file is not the supported Emerald Hoenn + National Dex Edition.\n"
-                + "Choose the supplied emerald-national-dex.gba or its matching zip.");
+                + "Choose your supported Emerald game file or its matching zip.");
         Path gamesRoot = root.resolve("games");
         Files.createDirectories(gamesRoot);
-        String name = file.getFileName().toString().replaceAll("[^A-Za-z0-9._-]", "_");
-        Files.copy(file, gamesRoot.resolve(name), StandardCopyOption.REPLACE_EXISTING);
+        EmeraldArtwork.extract(Files.readAllBytes(file), root);
+        String name = "emerald-national-dex.gba";
+        if (!file.toAbsolutePath().normalize().equals(gamesRoot.resolve(name).toAbsolutePath().normalize()))
+            Files.copy(file, gamesRoot.resolve(name), StandardCopyOption.REPLACE_EXISTING);
         games[0]++;
     }
 
-    private static void unpack(Path zip, Path root, int[] skipped, int[] games) throws IOException {
-        long written = 0;
+    private static final class Budget { long bytes; int entries; }
+
+    private static void copyBounded(InputStream in, Path target, long limit, Budget budget) throws IOException {
+        try (var out = Files.newOutputStream(target)) {
+            byte[] buffer = new byte[8192]; long count = 0; int read;
+            while ((read = in.read(buffer)) != -1) {
+                count += read; budget.bytes += read;
+                if (count > limit || budget.bytes > MAX_TOTAL_BYTES)
+                    throw new IOException("That archive is too large.");
+                out.write(buffer, 0, read);
+            }
+        }
+    }
+
+    private static void unpack(Path zip, Path root, int[] skipped, int[] games, Budget budget, int depth) throws IOException {
+        if (depth > 4) throw new IOException("That archive contains too many nested archives.");
         int entries = 0;
         try (var in = new ZipInputStream(new BufferedInputStream(Files.newInputStream(zip)))) {
             ZipEntry entry;
             while ((entry = in.getNextEntry()) != null) {
-                if (++entries > MAX_ENTRIES) throw new IOException("That archive has too many files.");
+                entries++;
+                if (++budget.entries > MAX_ENTRIES) throw new IOException("That archive has too many files.");
                 if (entry.isDirectory()) continue;
                 if (entry.getName().toLowerCase(Locale.ROOT).endsWith(".zip")) {
                     Path nested = Files.createTempFile("yoru-art-", ".zip");
-                    try { Files.copy(in, nested, StandardCopyOption.REPLACE_EXISTING); unpack(nested, root, skipped, games); }
+                    try { copyBounded(in, nested, MAX_TOTAL_BYTES, budget); unpack(nested, root, skipped, games, budget, depth + 1); }
                     finally { Files.deleteIfExists(nested); }
                     continue;
                 }
                 if (isGameFile(entry.getName())) {
                     Path temp = Files.createTempFile("yoru-game-", ".bin");
-                    try { Files.copy(in, temp, StandardCopyOption.REPLACE_EXISTING); copyGame(temp, root, games); }
+                    try { copyBounded(in, temp, MAX_GAME_BYTES, budget); copyGame(temp, root, games); }
                     finally { Files.deleteIfExists(temp); }
                     continue;
                 }
@@ -195,8 +212,8 @@ public final class ArtworkLibrary {
                     skipped[0]++;
                     continue;
                 }
-                written += bytes.length;
-                if (written > MAX_TOTAL_BYTES) throw new IOException("That archive is too large.");
+                budget.bytes += bytes.length;
+                if (budget.bytes > MAX_TOTAL_BYTES) throw new IOException("That archive is too large.");
                 Files.write(root.resolve(destination), bytes);
             }
         }

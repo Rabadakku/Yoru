@@ -34,7 +34,12 @@ final class GameFiles {
     }
 
     /** The game file, or null until one is chosen. */
-    static Path rom() { return path("rom"); }
+    static Path rom() {
+        Path chosen = path("rom");
+        if (chosen != null) return chosen;
+        Path imported = dev.yoru.assets.ArtworkLibrary.root().resolve("games/emerald-national-dex.gba");
+        return Files.isRegularFile(imported) ? imported : null;
+    }
 
     static void rememberCore(Path file) { PREFERENCES.put("core", file.toAbsolutePath().toString()); }
 
