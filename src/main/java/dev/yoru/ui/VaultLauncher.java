@@ -256,25 +256,28 @@ final class VaultLauncher {
 
         var pass = new JPasswordField(24);
         var repeat = new JPasswordField(24);
-        var protect = new JCheckBox("Require a password", true);
+        // Off by default: a password is optional, and the vault you make with
+        // one keystroke is the password-free one. Tick the box to require one.
+        var protect = new JCheckBox("Require a password", false);
         protect.setOpaque(false);
         protect.setForeground(TEXT);
         var form = stack();
         form.add(label(name, 20, CYAN)); gap(form, 12);
         form.add(protect);
-        form.add(label("Optional. Untick this and the vault opens without asking for anything —", 11, MUTED));
-        form.add(label("which also means anyone who can read your files can open it.", 11, MUTED));
-        form.add(label("Yoru keeps the unlock key beside it, and keeps both together.", 11, MUTED));
+        form.add(label("A password is optional. Without one, anyone who can read your files", 11, MUTED));
+        form.add(label("can open this vault. Yoru keeps the unlock key beside it, together.", 11, MUTED));
         gap(form, 12);
         form.add(label("Password · 12 or more characters", 12, TEXT)); form.add(pass);
         form.add(label("Repeat password", 12, TEXT)); form.add(repeat);
-        // Emptied as well as disabled: a password typed before the box was
-        // unticked is not the password of the vault that gets made, and leaving
-        // it on screen says that it is.
+        // Emptied as well as disabled, and focused the moment it is asked for: a
+        // password typed before the box was unticked is not the password of the
+        // vault that gets made, and leaving it on screen says that it is.
         Runnable wanted = () -> {
-            pass.setEnabled(protect.isSelected());
-            repeat.setEnabled(protect.isSelected());
-            if (!protect.isSelected()) { pass.setText(""); repeat.setText(""); }
+            boolean on = protect.isSelected();
+            pass.setEnabled(on);
+            repeat.setEnabled(on);
+            if (!on) { pass.setText(""); repeat.setText(""); }
+            else pass.requestFocusInWindow();
         };
         protect.addActionListener(e -> wanted.run());
         wanted.run();

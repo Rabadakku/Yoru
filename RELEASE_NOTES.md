@@ -1,7 +1,6 @@
-# Yoru 1.0.1
+# Yoru 1.0.0
 
-A day-one patch for a single bug that made vaults very hard to use, and one
-thing 1.0 could not do.
+The first public release.
 
 ## Typing into a dialog now works
 
@@ -23,13 +22,13 @@ has changed, and no vault needs to be remade.
 
 ## A password is optional, and says so
 
-The **Require a password** tick box is where it always was, but the note beside
-it now says what unticking it does, and unticking it clears the two password
-boxes instead of leaving a password on screen that the vault would not use.
+A new vault now defaults to **no password**: the **Require a password** box is
+unticked to start, so the vault you make with one keystroke opens without one.
+Tick the box to require a password.
 
 ## Remove the password from a vault that has one
 
-New in this patch. A vault whose password you no longer want can be opened
+A vault whose password you no longer want can be opened
 without one:
 
 - **Welcome screen** — *Rename or delete…* → pick the vault → **Remove password**
@@ -41,9 +40,7 @@ your files can then open the vault. Everything in the vault is kept and stays
 encrypted on disk. If any part of it fails, the key is taken back and the vault
 still opens with the password it had.
 
-# Yoru 1.0.0
-
-The first public release. Yoru is a local-first desktop study workspace: timers,
+Yoru is a local-first desktop study workspace: timers,
 tasks, a week planner and habits in one window, plus a **Game** tab that plays
 the copy of the game you already own. Studying is what earns you the encounters,
 so the time you put in is the time you get back.
