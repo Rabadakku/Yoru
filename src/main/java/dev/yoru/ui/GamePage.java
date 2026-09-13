@@ -117,6 +117,7 @@ final class GamePage {
         gap(hero, SPACE_MD);
         hero.add(bodyLabel("As on the cartridge, only saves made in the game are kept, so save before you close it."));
         p.add(hero);
+        legacyGifts(p, read);
 
         if (!LibretroCore.present(core)) { gap(p, SPACE_LG); needCore(p, core); }
         if (rom == null) { gap(p, SPACE_LG); needRom(p); }
@@ -125,6 +126,65 @@ final class GamePage {
         p.add(rewards());
         gap(p, SPACE_XL);
         p.add(whenYouPlay());
+    }
+
+    /**
+     * Study gifts an older Yoru wrote in the wrong order (#11). Shown only when
+     * there is something to say; the repair goes through the same verified,
+     * backed-up edit as the Collection page, and only while the game is closed.
+     */
+    private void legacyGifts(JPanel p, GameView.SaveRead read) {
+        if (read.kind() != GameView.SaveKind.READABLE) return;
+        var state = shell.tracker().state();
+        var assessment = dev.yoru.game.LegacyGifts.assess(read.game().bytes(), state.rewards());
+        var fixable = assessment.repairable();
+        var left = assessment.leftAlone();
+        if (fixable.isEmpty() && left.isEmpty()) return;
+        gap(p, SPACE_LG);
+        var c = card();
+        c.setName("game.legacyGifts");
+        c.add(sectionHeader("STUDY GIFTS FROM AN OLDER YORU", GOLD_TEXT)); gap(c, SPACE_MD);
+        if (!fixable.isEmpty()) {
+            c.add(bodyLabel(Theme.plural(fixable.size(), "study gift") + " went into your game in a layout it reads "
+                + "wrongly, so the game shows the wrong Pokémon. Yoru can rewrite "
+                + (fixable.size() == 1 ? "it" : "them") + " exactly as it writes gifts now. Your vault is backed up first."));
+            gap(c, SPACE_SM);
+            for (var f : fixable)
+                c.add(label(SpeciesNames.of(f.reward().nationalDex()) + "  ·  Lv " + f.reward().level()
+                    + "  ·  " + f.where().getFirst().describe(), TYPE_BODY, TEXT));
+            gap(c, SPACE_MD);
+            var repair = accentButton("Repair " + Theme.plural(fixable.size(), "study gift"), this::repairLegacyGifts);
+            repair.setName("game.repairGifts");
+            String blocked = read.editBlock(shell.game().running());
+            repair.setEnabled(blocked == null);
+            if (blocked != null) repair.setToolTipText(blocked);
+            c.add(flushRow(repair));
+            if (blocked != null) { gap(c, SPACE_SM); c.add(bodyLabel(blocked)); }
+        }
+        if (!left.isEmpty()) {
+            if (!fixable.isEmpty()) gap(c, SPACE_MD);
+            var note = bodyLabel(Theme.plural(left.size(), "other gift") + " may have been written the same way but "
+                + (left.size() == 1 ? "has" : "have") + " changed in the game since, so Yoru cannot prove what "
+                + (left.size() == 1 ? "it was and has left it" : "they were and has left them") + " exactly as the game has "
+                + (left.size() == 1 ? "it." : "them."));
+            note.setName("game.legacyLeftAlone");
+            c.add(note);
+        }
+        p.add(c);
+    }
+
+    private void repairLegacyGifts() {
+        if (!Dialogs.confirm(shell.owner(), "Rewrite these study gifts in the order the game reads?\n\n"
+                + "Only gifts Yoru can prove are untouched are changed. Your vault is backed up first.",
+                "Repair study gifts", "Repair"))
+            return;
+        shell.perform(() -> {
+            if (shell.game().running())
+                throw new IllegalStateException("Close the game first. While it runs it keeps its own copy of the save.");
+            var state = shell.tracker().state();
+            var before = state.game().bytes();
+            shell.tracker().editSave(before, dev.yoru.game.LegacyGifts.repair(before, state.rewards()));
+        });
     }
 
     /**

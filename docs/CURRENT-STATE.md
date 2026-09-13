@@ -1,5 +1,47 @@
 # Development handoff
 
+## Legacy study gifts — September 13, 2026, #11
+
+Branch `claude/legacy-gifts`. The plan this work followed is
+`docs/superpowers/plans/2026-09-13-legacy-gift-repair.md`.
+
+Builds from the first delivery (predecessor `e1839ff`, 2026-09-11) until 1.0.3
+wrote every gift with a high-bit personality in the signed substructure order.
+The checksum still passes, so the corrected reader shows another Pokémon.
+`game.LegacyGifts` repairs only what it can prove.
+
+- **Proof.** For each delivered reward, `GameDelivery.companionFor` rebuilds
+  today's gift; the builder has not changed what it chooses since delivery
+  began. `signedLayout` moves its substructures to the signed order, with flag
+  byte 0x02 or 0x00, and a party record gets the tail `toParty` wrote with the
+  signed nature. A record is REPAIRABLE only when it is the one record carrying
+  the reward's personality and equals one of those byte for byte.
+- **Left alone.** CHANGED (anything the game touched since), AMBIGUOUS (a
+  personality held twice) and NOT_FOUND. High-bit CHANGED or AMBIGUOUS gifts
+  delivered before 1.0.3 are named on the Game page as left alone.
+- **Repair.** Each gift is rewritten in place from today's builder, through
+  `Tracker.editSave`, which backs up the vault first. A save `whyNotEditable`
+  refuses is refused. `verify` compares the save section by section: only the
+  repaired slots may differ, every repaired gift must now assess CORRECT, and
+  every other verdict must be unchanged. A second run returns the save as it
+  was, so no schema field records the repair.
+
+The 32-bit nature multiplier change (`d313777`) needs no variant. It only
+differs for a pre-nature stat above 595, and a gift has no EVs.
+
+Watch out: never count test reward ids in their low bits. `personalityFor`
+folds the two halves of the UUID, so sequential ids keep one sign bit for about
+two billion steps and share a personality. The first run of `LegacyGiftsTest`
+failed as "ambiguous" for exactly that reason. `Gen3Fixture.highBitRewardId`
+hashes a name instead. `Gen3RecordOracle` builds either order without
+`Gen3Pokemon`.
+
+No player save or real reward ledger was examined. A player whose save holds
+such gifts sees the offer on the Game page.
+
+Next: the remaining #6 artwork repair options, #9 visual system, #8 Collection
+redesign, #3 companion placement, #7 native acceptance, #12 cleanup.
+
 ## 1.0.4 released, and updating from Settings — September 13, 2026
 
 1.0.4 is published from PR #16 (save health, #5) with all three installers. Its
