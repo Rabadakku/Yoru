@@ -27,6 +27,13 @@ F6 party/box switching, party selection, keyboard pickup and placement,
 reachable empty slots, cross-box moves and Escape cancellation through the
 existing move callbacks (#8). Larger layout and missing-art work remain open.
 
+Save health checkpoint on `claude/save-read-model` (#5): unreadable saves carry
+a reason; pages read the vault's save once per render into `SaveRead`, with no
+static cache; Collection says when the vault last saved, offers Retry when a
+save failed, and shows one card with Export a copy and Open Game setup when the
+save cannot be read. Codex has stopped; the remaining audit issues are owned by
+Claude on `claude/…` branches.
+
 The historical plan below is retained as context, not evidence that the current
 release is complete. The fresh repository's audit issues are **#4–#12**.
 Read [the repair/design handoff](design/AUDIT-2026-09.md) and
