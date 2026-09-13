@@ -68,6 +68,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.FocusMixTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.StorageTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SaveStatusUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.UpdatesUiTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.LegacyGiftUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PackagedArtworkTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ActivityUiTest
 
