@@ -37,6 +37,7 @@ java -ea -cp build/classes dev.yoru.assets.EmeraldArtworkTest
 java -ea -cp build/classes dev.yoru.assets.ArtworkTest
 java -ea -cp build/classes dev.yoru.assets.MusicTest
 java -ea -cp build/classes dev.yoru.game.UnsignedPokemonTest
+java -ea -cp build/classes dev.yoru.game.Gen3RecordOracleTest
 java -ea -cp build/classes dev.yoru.game.Gen3FormatTest
 java -ea -cp build/classes dev.yoru.game.Gen3SaveTest
 java -ea -cp build/classes dev.yoru.game.Gen3SaveReasonsTest
@@ -51,6 +52,7 @@ java -ea -cp build/classes dev.yoru.game.EncounterTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.GameInputTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.GameSaveFailureTest
 java -ea -cp build/classes dev.yoru.game.GameDeliveryTest
+java -ea -cp build/classes dev.yoru.game.LegacyGiftsTest
 java -ea -cp build/classes dev.yoru.game.StorageEditTest
 java -ea -cp build/classes dev.yoru.SaveEditTest
 java -ea -cp build/classes dev.yoru.RewardTest
@@ -66,6 +68,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.FocusMixTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.StorageTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SaveStatusUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.UpdatesUiTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.LegacyGiftUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PackagedArtworkTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ActivityUiTest
 
