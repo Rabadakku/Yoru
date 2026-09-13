@@ -18,7 +18,11 @@ public final class ArtworkTest {
         check(to==null?actual==null:to.equals(actual),from+" -> "+actual+" (expected "+to+")");
     }
 
-    private static final byte[] PNG={(byte)0x89,'P','N','G','\r','\n',0x1a,'\n',0,0,0,0};
+    private static byte[] image() throws Exception {
+        var out=new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(16,16,2),"png",out);
+        return out.toByteArray();
+    }
 
     public static void main(String[] args) throws Exception {
         maps("1.png","1.png");
@@ -46,7 +50,7 @@ public final class ArtworkTest {
         try(var out=new ZipOutputStream(Files.newOutputStream(zip))) {
             for(String name:new String[]{"1.png","002.png","shiny/1.png","brendan.png"}) {
                 out.putNextEntry(new ZipEntry(name));
-                out.write(PNG);
+                out.write(image());
                 out.closeEntry();
             }
             out.putNextEntry(new ZipEntry("notes.txt"));
@@ -70,6 +74,25 @@ public final class ArtworkTest {
             check(Files.isRegularFile(ArtworkLibrary.root().resolve("2.png")),"zero padding normalised on disk");
             check(!Files.exists(ArtworkLibrary.root().resolve("9.png")),"a renamed non-PNG is rejected");
             check(ArtworkLibrary.survey().species()==2,"survey agrees with the install");
+            Path active=ArtworkLibrary.root();
+            byte[] original=Files.readAllBytes(active.resolve("1.png"));
+            Path broken=dir.resolve("broken.zip");
+            try(var out=new ZipOutputStream(Files.newOutputStream(broken))) {
+                out.putNextEntry(new ZipEntry("3.png"));
+                out.write(image());out.closeEntry();
+                out.putNextEntry(new ZipEntry("unsupported.gba"));
+                out.write(new byte[32]);out.closeEntry();
+            }
+            try { ArtworkLibrary.install(broken);throw new AssertionError("invalid game accepted"); }
+            catch(java.io.IOException expected) { }
+            check(ArtworkLibrary.root().equals(active),"failure after a staged image preserves the active generation");
+            check(java.util.Arrays.equals(original,Files.readAllBytes(active.resolve("1.png"))),"previous artwork survives byte for byte");
+            check(!Files.exists(active.resolve("3.png")),"a failed import publishes no partial files");
+            Path extra=dir.resolve("4.png");Files.write(extra,image());
+            ArtworkLibrary.install(extra);
+            check(!ArtworkLibrary.root().equals(active),"successful import publishes a new generation");
+            check(ArtworkLibrary.survey().species()==3,"incremental import preserves existing images");
+            check(Files.exists(active.resolve("1.png")),"previous generation remains recoverable");
         } finally {
             System.setProperty("user.home",home);
             try(var walk=Files.walk(sandbox)) {

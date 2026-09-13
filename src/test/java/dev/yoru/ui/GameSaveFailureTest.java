@@ -39,6 +39,27 @@ public final class GameSaveFailureTest {
             if(game.phase()!=GameController.Phase.IDLE)throw new AssertionError("retry did not finish");
             if(!Arrays.equals(save,tracker.state().game().bytes()))throw new AssertionError("latest save not recovered");
         });
+        var acknowledged=new java.util.concurrent.atomic.AtomicInteger();
+        repo.fail=true;
+        SwingUtilities.invokeAndWait(()->game.enqueueSave(0,save,acknowledged::incrementAndGet));
+        SwingUtilities.invokeAndWait(()-> { });
+        // Use changed bytes so Tracker cannot satisfy the request idempotently.
+        byte[] newer=Gen3Fixture.save(2,4);
+        SwingUtilities.invokeAndWait(()->game.enqueueSave(0,newer,acknowledged::incrementAndGet));
+        SwingUtilities.invokeAndWait(()-> {
+            if(game.saveStatus()!=GameController.SaveStatus.FAILED)throw new AssertionError("failed write looks saved");
+        });
+        int before=acknowledged.get();
+        repo.fail=false;
+        SwingUtilities.invokeAndWait(game::retrySave);
+        SwingUtilities.invokeAndWait(()-> {
+            if(acknowledged.get()!=before+1)throw new AssertionError("durable save was not acknowledged once");
+            if(!Arrays.equals(newer,tracker.state().game().bytes()))throw new AssertionError("retry persisted stale bytes");
+            game.enqueueSave(-1,save,()-> {throw new AssertionError("stale session acknowledged");});
+        });
+        SwingUtilities.invokeAndWait(()-> {
+            if(!Arrays.equals(newer,tracker.state().game().bytes()))throw new AssertionError("stale session crossed vault boundary");
+        });
         System.out.println("PASS: failed game saves survive Close and retry after the vault recovers");
     }
 }

@@ -10,6 +10,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The game running inside Yoru, from Play to Close (#42, #43).
@@ -45,10 +48,48 @@ final class GameController {
     private String problem;
     /** A dispatched save is not durable until the vault accepts it. Keep it for retry. */
     private byte[] pendingSave;
+    private Runnable pendingAcknowledgement = () -> { };
+    private String saveProblem;
+    private int retryDelay = 1000;
+    private final Timer retry = new Timer(1000, e -> retrySave());
+    private final AtomicReference<Snapshot> incoming = new AtomicReference<>();
+    private final AtomicBoolean queued = new AtomicBoolean();
+    private long sessionGeneration;
+    private record Snapshot(long session, byte[] bytes, Runnable acknowledged) { }
+    enum SaveStatus { SAVED, PENDING, FAILED }
+
+    SaveStatus saveStatus() {
+        return saveProblem != null ? SaveStatus.FAILED
+            : pendingSave != null || incoming.get() != null ? SaveStatus.PENDING : SaveStatus.SAVED;
+    }
+
+    void retrySave() {
+        if (pendingSave != null) saved(pendingSave);
+    }
+
+    /** At most one EDT callback and the newest snapshot wait behind a slow disk. */
+    void enqueueSave(long generation, byte[] bytes, Runnable acknowledged) {
+        incoming.set(new Snapshot(generation, bytes.clone(), acknowledged));
+        scheduleDrain();
+    }
+
+    private void scheduleDrain() {
+        if (!queued.compareAndSet(false, true)) return;
+        SwingUtilities.invokeLater(() -> {
+            try {
+                Snapshot snapshot = incoming.getAndSet(null);
+                if (snapshot != null && snapshot.session() == sessionGeneration) accept(snapshot);
+            } finally {
+                queued.set(false);
+                if (incoming.get() != null) scheduleDrain();
+            }
+        });
+    }
     private List<GameDelivery.Outcome> outcomes = List.of();
 
     GameController(Tracker tracker) {
         this.tracker = tracker;
+        retry.setRepeats(false);
     }
 
     /** Who hears about changes: the window showing the game, replaced when the window is rebuilt. */
@@ -56,7 +97,7 @@ final class GameController {
 
     Phase phase() { return phase; }
     /** The last thing that went wrong, or null. */
-    String problem() { return problem; }
+    String problem() { return saveProblem != null ? saveProblem : problem; }
     /** What happened to each reward the last time any were sent into the game. */
     List<GameDelivery.Outcome> outcomes() { return outcomes; }
     GameSession session() { return (GameSession) sessions.session(); }
@@ -88,12 +129,13 @@ final class GameController {
         problem = null;
         sync();
         byte[] save = tracker.state().game() == null ? null : tracker.state().game().bytes();
+        long generation = ++sessionGeneration;
         phase = Phase.STARTING;
         listener.phaseChanged();
         worker("yoru-game-start", () -> {
             try {
                 var session = GameSession.start(core, rom, save,
-                    bytes -> SwingUtilities.invokeLater(() -> saved(bytes)), GameFiles.workDirectory());
+                    (bytes, acknowledged) -> enqueueSave(generation, bytes, acknowledged), GameFiles.workDirectory());
                 sessions.adopt(session);
                 SwingUtilities.invokeLater(() -> {
                     phase = Phase.RUNNING;
@@ -113,14 +155,28 @@ final class GameController {
     }
 
     /** An in-game save, kept in the vault as it happens. */
+    private void accept(Snapshot snapshot) {
+        pendingAcknowledgement = snapshot.acknowledged();
+        saved(snapshot.bytes());
+    }
+
     void saved(byte[] bytes) {
         pendingSave=bytes.clone();
         try {
             tracker.gameSaved(pendingSave);
+            pendingAcknowledgement.run();
+            pendingAcknowledgement = () -> { };
             pendingSave=null;
+            saveProblem=null;
+            retry.stop();
+            retryDelay=1000;
             listener.saveChanged();
+            if (phase == Phase.STUCK && session() != null && session().readyToFinishClosing()) stop();
         } catch (IOException | RuntimeException e) {
-            problem = "The game saved, but Yoru could not keep the save in your vault: " + e.getMessage();
+            saveProblem = "Could not save to your vault. Yoru is keeping the latest save and will retry.";
+            retry.setInitialDelay(retryDelay);
+            retry.restart();
+            retryDelay=Math.min(30_000,retryDelay*2);
             listener.phaseChanged();
         }
     }
@@ -151,8 +207,14 @@ final class GameController {
             SwingUtilities.invokeLater(() -> {
                 // The event queue has now processed the core's final save. A failed
                 // vault write must keep Close/switch blocked, even after the core stops.
-                if (released && pendingSave!=null) saved(pendingSave);
+                Snapshot finalSnapshot = incoming.getAndSet(null);
+                if (finalSnapshot != null && finalSnapshot.session() == sessionGeneration) accept(finalSnapshot);
+                if (released && pendingSave!=null) retrySave();
                 phase = released && pendingSave==null ? Phase.IDLE : Phase.STUCK;
+                if (!released && session() != null && session().readyToFinishClosing()) {
+                    stop();
+                    return;
+                }
                 if (phase==Phase.IDLE) { problem=null;sync(); }
                 listener.phaseChanged();
                 finishClosing();

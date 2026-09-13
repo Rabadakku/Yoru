@@ -2,6 +2,14 @@
 set -eu
 cd "$(dirname "$0")"
 ./build.sh
+# Every JVM gets an empty home and in-memory preferences. macOS ignores the
+# filesystem preferences-root property, so a factory is required there too.
+yoru_test_home=$(mktemp -d)
+trap 'rm -rf "$yoru_test_home"' EXIT HUP INT TERM
+java() {
+    command java "-Duser.home=$yoru_test_home" \
+        -Djava.util.prefs.PreferencesFactory=dev.yoru.ui.TestPreferencesFactory "$@"
+}
 find src/test/java -name '*.java' > build/tests.txt
 javac --release 22 -encoding UTF-8 -cp build/classes -d build/classes @build/tests.txt
 java -ea -cp build/classes dev.yoru.CoreTest
@@ -24,11 +32,13 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.VaultUiTest
 java -ea -cp build/classes dev.yoru.assets.EmeraldArtworkTest
 java -ea -cp build/classes dev.yoru.assets.ArtworkTest
 java -ea -cp build/classes dev.yoru.assets.MusicTest
+java -ea -cp build/classes dev.yoru.game.UnsignedPokemonTest
 java -ea -cp build/classes dev.yoru.game.Gen3FormatTest
 java -ea -cp build/classes dev.yoru.game.Gen3SaveTest
 java -ea -cp build/classes dev.yoru.game.ExperienceTest
 java -ea -cp build/classes dev.yoru.game.EmulationLoopTest
 java -ea -cp build/classes dev.yoru.game.SessionHandleTest
+java -ea -cp build/classes dev.yoru.game.SaveTransferTest
 java -ea -cp build/classes dev.yoru.game.LearnsetTest
 java -ea -cp build/classes dev.yoru.game.StudyGiftTest
 java -ea -cp build/classes dev.yoru.game.StatsTest

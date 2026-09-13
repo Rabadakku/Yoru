@@ -1,5 +1,37 @@
 # Development handoff
 
+## Release candidate 1.0.3 — September 13, 2026
+
+The current repair branch adds per-snapshot durability receipts. Shutdown
+retains the session until the latest receipt is acknowledged; the controller
+acknowledges after the vault write, retains failed snapshots and automatically
+finishes closing after recovery. SaveTransferTest covers delayed/stale receipts
+and rejected dispatch, and GameSaveFailureTest covers vault failure and stale
+session callbacks.
+
+UI changes include larger sans-serif body and control labels, plain page
+titles, wrapping instructions, compact storage and initial party-lead details.
+See `RELEASE-1.0.3.md` for the release scope and remaining work. Older notes
+below describe previous checkpoints.
+
+## Audit recovery — September 12, 2026
+
+Current work is on `codex/audit-recovery`. Read `docs/design/AUDIT-2026-09.md`
+for current defects, recovered product decisions and the implementation order.
+The predecessor's issue bodies and key campaign/storage discussions have been
+reviewed. Its completion labels do not supersede the current audit findings.
+
+The unsigned Pokémon codec correction restores decoding of genuine high-bit
+records without rewriting saves. Artwork imports now publish a validated
+generation atomically and retain the previous generation on failure. Wallpapers
+use both palettes. Game setup no longer hides the saved campaign or its export.
+Collection now places storage before rewards and labels unreadable records.
+Save retries retain and coalesce snapshots, but the authoritative session
+acknowledgement protocol in current issue #7 is still outstanding.
+
+The full Collection redesign, visual system, legacy gift assessment and final
+codebase decomposition remain open. No release completion is claimed here.
+
 ## Functional repairs — September 12, 2026
 
 Branch `codex/theme-artwork-repair`, release target v1.0.2. The importer now

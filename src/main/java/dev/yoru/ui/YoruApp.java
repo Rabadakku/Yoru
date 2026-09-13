@@ -93,7 +93,7 @@ public final class YoruApp extends JPanel implements Shell {
      * names itself and a subtitle and gets the same header as every other page.
      */
     static JPanel pageHeaderFor(String nav,String subtitle) {
-        return pageHeader(rowFor(nav).title(),subtitle);
+        return pageHeader(rowFor(nav).nav(),subtitle);
     }
 
     public YoruApp(Tracker tracker,Repository vault) { this(tracker,vault,null,null,null); }

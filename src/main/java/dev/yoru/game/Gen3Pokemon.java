@@ -64,6 +64,9 @@ public final class Gen3Pokemon {
 
     // ---- the decoded fields ----------------------------------------------
 
+    private boolean checksumValid = true;
+    public boolean checksumValid() { return checksumValid; }
+
     public int personality;
     public int otId;
     public String nickname = "";
@@ -111,6 +114,7 @@ public final class Gen3Pokemon {
         p.markings = buffer.get(0x1B) & 0xFF;
 
         var data = decrypt(bytes, at + 0x20, p.personality, p.otId);
+        p.checksumValid = (buffer.getShort(0x1C) & 0xffff) == checksum(data);
         p.readSubstructures(data);
         return p;
     }
@@ -208,9 +212,9 @@ public final class Gen3Pokemon {
         return sum & 0xFFFF;
     }
 
-    /** Where a given substructure sits, for this personality. */
+    /** The cartridge treats personality as u32, including when Java stores a negative int. */
     static int offsetOf(int personality, int substructure) {
-        int[] order = ORDERS[Math.floorMod(personality, ORDERS.length)];
+        int[] order = ORDERS[Integer.remainderUnsigned(personality, ORDERS.length)];
         for (int slot = 0; slot < order.length; slot++)
             if (order[slot] == substructure) return slot * SUBSTRUCTURE;
         throw new IllegalArgumentException("No such substructure " + substructure);
@@ -384,5 +388,5 @@ public final class Gen3Pokemon {
     }
 
     /** Nature is the personality modulo 25 — it is not stored separately. */
-    public int nature() { return Math.floorMod(personality, 25); }
+    public int nature() { return Integer.remainderUnsigned(personality, 25); }
 }
