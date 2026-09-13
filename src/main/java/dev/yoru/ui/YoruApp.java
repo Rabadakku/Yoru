@@ -1825,7 +1825,7 @@ public final class YoruApp extends JPanel implements Shell {
         var waifu=card();
         waifu.add(sectionHeader("WAIFU"));
         gap(waifu,SPACE_SM);
-        waifu.add(bodyLabel("Companion artwork belongs to Moonlight. It appears beside your timer and across its pages; your Pokémon and study tools remain available. Other themes keep this choice saved but hide the artwork."));
+        waifu.add(bodyLabel("Companion artwork belongs to the Waifu theme. It appears beside your timer and across its pages; your Pokémon and study tools remain available. Moonlight and the other themes keep this choice saved but hide the artwork."));
         gap(waifu,SPACE_MD);
         // One picker for every choice, so there is nothing to remember: the
         // combo shows what is set now and writes what is picked next.

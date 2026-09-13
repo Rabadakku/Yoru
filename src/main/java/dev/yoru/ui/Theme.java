@@ -157,8 +157,17 @@ final class Theme {
         new Color[]{new Color(0x302637),new Color(0x644973),new Color(0x895B97),
                     new Color(0xB47AAA),new Color(0xD695C5),new Color(0xF2BDD9)});
 
+    /** Rose neon and deep wine, reserved for the illustrated theme. */
+    private static final Palette WAIFU = new Palette(true,
+        new Color(0x190F1B), new Color(0x281B2B), new Color(0x50374D), new Color(0xFFF1F7),
+        new Color(0xC5ACC3), new Color(0xFFACD2), new Color(0xFFACD2), new Color(0xF2CD98),
+        new Color(0xF2CD98), new Color(0xCEB4FF), new Color(0xFFABB7), new Color(0xCEBDCF),
+        new Color(0x39293D),
+        new Color[]{new Color(0x39293D),new Color(0x754B72),new Color(0xA45C8B),
+                    new Color(0xCD79AB),new Color(0xE8A0C9),new Color(0xFFD0E8)});
+
     static Palette palette(ThemeId id) {
-        return switch (id) { case MIDNIGHT -> MIDNIGHT; case EMBER -> EMBER; case SAKURA -> SAKURA; case LINEN -> LINEN; case MOONLIGHT -> MOONLIGHT; };
+        return switch (id) { case MIDNIGHT -> MIDNIGHT; case EMBER -> EMBER; case SAKURA -> SAKURA; case LINEN -> LINEN; case MOONLIGHT -> MOONLIGHT; case WAIFU -> WAIFU; };
     }
     /**
      * What a theme is, in one short line.
@@ -174,7 +183,8 @@ final class Theme {
             case EMBER -> "Warm amber dark, after Gruvbox.";
             case SAKURA -> "Blossom pink light, after Rosé Pine Dawn.";
             case LINEN -> "Warm paper light, low chroma, quiet.";
-            case MOONLIGHT -> "The illustrated companion theme. Violet nights, rose accents, all your Pokémon features.";
+            case MOONLIGHT -> "Violet nights and soft rose accents.";
+            case WAIFU -> "Original illustrated companions, rose neon, and all your Pokémon features.";
         };
     }
 

@@ -1,5 +1,22 @@
 # Yoru roadmap
 
+## Dedicated Waifu theme and following audit
+
+Version 1.0.8 is published with habit rename/delete, scene-artwork recovery and
+the first illustrated gallery. The next release separates illustrations into
+a new **Waifu** theme; Moonlight keeps its own violet palette without portraits.
+Existing companion choices remain saved across theme switches. Issue #23 tracks
+the larger original adult illustration roster and visual selection experience.
+
+After that release, review the entire project: UI and editing, study tracking,
+campaign/save integration, artwork loading, persistence and recovery, installers,
+updates, accessibility, tests and maintainability. Review existing open and old
+repository issues first. Each verified finding needs evidence or reproduction,
+impact and priority, root cause, the recommended solution with tradeoffs,
+file-level implementation guidance, migration/recovery considerations where
+relevant, and explicit acceptance checks. Update overlapping issues instead of
+creating duplicates. This audit is pending, not completed.
+
 ## Released 1.0.3 — September 13, 2026
 
 [Version 1.0.3](https://github.com/Rabadakku/Yoru/releases/tag/v1.0.3) is
