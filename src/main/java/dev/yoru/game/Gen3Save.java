@@ -121,6 +121,19 @@ public final class Gen3Save {
         }
     }
 
+    /** Why the game would not load a save, in terms a page can explain. */
+    public enum Unreadable { WRONG_SIZE, NEVER_SAVED, DAMAGED, INCOMPLETE_SLOT }
+
+    /**
+     * A refusal from {@link #read}. Still an IllegalArgumentException, so every
+     * caller that already catches one is unchanged; the reason is for pages.
+     */
+    public static final class UnreadableSave extends IllegalArgumentException {
+        private final Unreadable reason;
+        UnreadableSave(Unreadable reason, String message) { super(message); this.reason = reason; }
+        public Unreadable reason() { return reason; }
+    }
+
     /**
      * Reads a save and selects the slot the game would load.
      *
@@ -129,19 +142,19 @@ public final class Gen3Save {
      */
     public static Gen3Save read(byte[] raw) {
         if (raw.length != SIZE)
-            throw new IllegalArgumentException("A Gen 3 save is " + SIZE + " bytes, got " + raw.length);
+            throw new UnreadableSave(Unreadable.WRONG_SIZE, "A Gen 3 save is " + SIZE + " bytes, got " + raw.length);
         Scan first = scan(raw, 0), second = scan(raw, 1);
         long chosen;
         if (first.status() == Status.OK && second.status() == Status.OK) chosen = newer(first.counter(), second.counter());
         else if (first.status() == Status.OK) chosen = first.counter();
         else if (second.status() == Status.OK) chosen = second.counter();
-        else throw new IllegalArgumentException(first.status() == Status.EMPTY && second.status() == Status.EMPTY
-            ? "This save is empty: the game has never saved to it."
-            : "Neither save slot holds a complete, checksummed save.");
+        else if (first.status() == Status.EMPTY && second.status() == Status.EMPTY)
+            throw new UnreadableSave(Unreadable.NEVER_SAVED, "This save is empty: the game has never saved to it.");
+        else throw new UnreadableSave(Unreadable.DAMAGED, "Neither save slot holds a complete, checksummed save.");
         int slot = (int) (chosen % 2);
         Scan loaded = slot == 0 ? first : second;
         if (loaded.status() != Status.OK)
-            throw new IllegalArgumentException("The game would load save slot " + (slot + 1)
+            throw new UnreadableSave(Unreadable.INCOMPLETE_SLOT, "The game would load save slot " + (slot + 1)
                 + ", which is not a complete save, so it cannot be read reliably.");
         return new Gen3Save(raw, slot, chosen, loaded.consistent(), loaded.counter() == chosen,
             slot == 0 ? second.status() : first.status());
@@ -413,6 +426,16 @@ public final class Gen3Save {
     public Gen3Pokemon boxed(byte[] storage, int box, int index) {
         int at = slotOffset(box, index);
         return empty(storage, at) ? null : Gen3Pokemon.decode(storage, at);
+    }
+
+    /** How many PC slots hold a Pokémon, across every box. */
+    public int boxedCount() {
+        var storage = storage();
+        int count = 0;
+        for (int box = 0; box < BOXES; box++)
+            for (int index = 0; index < PER_BOX; index++)
+                if (!empty(storage, slotOffset(box, index))) count++;
+        return count;
     }
 
     /** An all-zero entry is an empty slot; the game writes nothing else there. */

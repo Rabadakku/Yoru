@@ -1,5 +1,41 @@
 # Development handoff
 
+## Save health — September 13, 2026, #5
+
+Branch `claude/save-read-model`. Codex has stopped; Claude owns the remaining
+audit issues and releases, on `claude/…` branches. The plan this work followed
+is `docs/superpowers/plans/2026-09-13-save-read-model.md`.
+
+`Gen3Save.read` now refuses with `UnreadableSave` — still an
+`IllegalArgumentException`, so delivery, storage edits and import are unchanged —
+carrying why: wrong size, never saved, damaged, or a counter pointing at an
+incomplete slot. `GameView.read(State)` turns the vault's save into a `SaveRead`
+once per render: kind, reason, party and PC counts, durable time, and why editing
+is blocked. Pages pass it down. There is deliberately no cache — #12 flags static
+caches, and a per-render read cannot show one vault's Pokémon in another.
+
+Collection leads with "Saved in your vault · 5 minutes ago" (`Ago`), or "Saving
+to your vault…" / "Could not save to your vault" with Retry. No save and an
+unreadable save each get one card; an unreadable save offers Export a copy and
+Open Game setup. The status line is left off those two states because, rendered,
+it only repeated the card. The Game page names the trainer rather than "a new
+adventure" whenever the party holds Pokémon, whatever the starter flag says.
+Export lives in `SaveExport`; `flushRow` moved into `Theme`.
+
+Watch out: a UI test that constructs `YoruApp` must end the process itself. The
+ticker keeps the JVM alive, so a failed check hangs the suite instead of failing
+it. `SaveStatusUiTest.main` shows the pattern.
+
+Reviewed as renders in all five themes at 900×640, including no save, a
+wrong-size save and an erased cartridge. Left for #8: the "On their way" card
+clips its sentence at 900 wide, and party slots and the portrait still show dex
+numbers and "?" when artwork is missing. Left for #9: the unavailable card
+reserves a second body line when its sentence fits on one.
+
+Next: #11 (gifts delivered with a high-bit personality before 1.0.3 are still in
+the old layout in players' saves), then the remaining #6 artwork repair UX, the
+#9/#8/#3 design work, #7 native acceptance and #12 cleanup.
+
 ## Released 1.0.3 — September 13, 2026
 
 PR #13 is merged and v1.0.3 is published with all three installers. Both

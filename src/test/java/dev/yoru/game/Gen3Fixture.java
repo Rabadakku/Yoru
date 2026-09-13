@@ -88,6 +88,19 @@ public final class Gen3Fixture {
         return Gen3Pokemon.toParty(StudyGift.build(id, national, level, trainer, null, 0).encode(), 0);
     }
 
+    /**
+     * The same save as a write interrupted part-way leaves it: the first sector
+     * of the loaded slot carries the next counter while the rest still carry
+     * this one. The counter sits outside the checksummed data, so the game
+     * still loads the slot, and Yoru should refuse to edit it.
+     */
+    public static byte[] interrupted(byte[] raw) {
+        var out = raw.clone();
+        var save = Gen3Save.read(out);
+        Gen3Save.putU32(out, save.loadedSlot() * Gen3Save.SLOT + Gen3Save.COUNTER_AT, save.counter() + 1);
+        return out;
+    }
+
     /** Sets one of the game's event flags, in the slot the game loads. */
     public static byte[] withFlag(byte[] raw, int flagId) {
         var out = raw.clone();
