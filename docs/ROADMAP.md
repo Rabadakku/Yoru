@@ -16,6 +16,13 @@ checkpoint notes below are retained with their original scope.
 
 ## Current audit overrides — September 2026
 
+Latest review starts from v1.0.7: save read models, legacy gift assessment and
+the updater are retained. Missing walking characters were traced to absent
+locally imported trainer sheets, not removed animation code. Today now offers
+an explicit scene-artwork recovery route, and artwork status counts installed
+wallpapers correctly. Moonlight will be the only illustrated companion theme;
+other themes retain saved portrait preferences without displaying the art.
+
 Post-release checkpoint on `codex/audit-recovery`: reject stale session
 producers before queue coalescing so they cannot displace a current save (#7).
 An exact-byte regression covers a valid save immediately followed by an old

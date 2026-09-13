@@ -15,6 +15,7 @@ public final class RouteTest {
     }
     public static void main(String[] args)throws Exception{
         SwingUtilities.invokeAndWait(()->{
+            check(!new TrainerScene("missing-test-trainer").hasTrainerArtwork(),"Missing trainer is detected for recovery UI");
             for(var theme:dev.yoru.domain.Model.ThemeId.values()){
                 Theme.apply(theme);var scene=new TrainerScene("brendan",java.time.Clock.fixed(
                     java.time.Instant.parse("2026-09-09T12:00:00Z"),java.time.ZoneOffset.UTC));scene.setSize(480,TrainerScene.HEIGHT);

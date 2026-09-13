@@ -47,6 +47,9 @@ final class TrainerScene extends JPanel {
     }
     static int trainerX(int width){return (width-FRAME_W*SCALE)/2;}
     long distance(){return travel;}
+    boolean hasTrainerArtwork() {
+        return walkSheet != null && walkSheet.getWidth() >= FRAME_W * 9 && walkSheet.getHeight() >= FRAME_H;
+    }
 
     private static int variation(long cell,int salt,int bound){
         long bits=(cell+salt)*0x9E3779B97F4A7C15L;

@@ -456,6 +456,11 @@ public final class YoruApp extends JPanel implements Shell {
         // The trainer sits with the clock, since the clock is what drives it.
         trainerScene=new TrainerScene(tracker.state().settings().trainer()==TrainerId.MAY?"may":"brendan");
         focus.add(trainerScene);
+        if (!trainerScene.hasTrainerArtwork()) {
+            gap(focus,SPACE_SM);
+            focus.add(bodyLabel("Trainer artwork is missing. Import your existing scene artwork in Settings to restore walking and running."));
+            focus.add(button("Restore scene artwork", () -> showPage("Settings")));
+        }
         gap(focus,SPACE_LG);
         var controls=row();
         controls.add(accentButton(active==null?"▶  Clock in":"■  Clock out",()-> {
