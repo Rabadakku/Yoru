@@ -206,6 +206,33 @@ public final class YoruApp extends JPanel implements Shell {
     }
 
     /**
+     * Quits to install an update: the game and the vault close exactly as they do
+     * for the close button, then the installer's step runs and the process ends,
+     * so nothing this copy started can keep it alive while an update waits for it.
+     * A game that will not stop is not overridden here, unlike an ordinary quit.
+     */
+    private void closeForUpdate(Runnable afterVaultClosed) {
+        if(closed)return;
+        game.close(()->{
+            if(game.phase()==GameController.Phase.STUCK) {
+                Dialogs.info(this,"The game has not finished closing, so Yoru will not update now. Try again once it has closed.");
+                return;
+            }
+            try {
+                vault.close();
+                forgetSecret();
+            }
+            catch(Exception e) {
+                error(e);
+                return;
+            }
+            quit();
+            afterVaultClosed.run();
+            System.exit(0);
+        });
+    }
+
+    /**
      * Leaves the window, with the vault already closed — quitting, or deleting
      * the vault that was open (#41), after which there is nothing to show.
      */
@@ -1596,10 +1623,21 @@ public final class YoruApp extends JPanel implements Shell {
         });
     }
 
+    /** Kept for the window's life, so a check or a download survives the page rebuilding around it. */
+    private UpdatesCard updates;
+
     private JPanel settings() {
         var settings=tracker.state().settings();
         var p=stack();
         p.add(pageHeaderFor("Settings","APPEARANCE · TRACKING · DATA"));
+        if(updates==null)updates=new UpdatesCard(dev.yoru.update.Version.running(),dev.yoru.update.Updates.current(),
+            ()->new dev.yoru.update.ReleaseFeed().latest(),new UpdatesCard.Host() {
+                public boolean gameRunning() { return game.running(); }
+                public void quitThen(Runnable afterVaultClosed) { closeForUpdate(afterVaultClosed); }
+                public java.awt.Component owner() { return YoruApp.this; }
+            });
+        p.add(updates);
+        gap(p,SPACE_XL);
 
         var appearance=card();
         appearance.add(sectionHeader("APPEARANCE"));
