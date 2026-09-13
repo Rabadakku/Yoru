@@ -16,6 +16,11 @@ checkpoint notes below are retained with their original scope.
 
 ## Current audit overrides — September 2026
 
+Post-release checkpoint on `codex/audit-recovery`: reject stale session
+producers before queue coalescing so they cannot displace a current save (#7).
+An exact-byte regression covers a valid save immediately followed by an old
+session callback before the event queue drains.
+
 The historical plan below is retained as context, not evidence that the current
 release is complete. The fresh repository's audit issues are **#4–#12**.
 Read [the repair/design handoff](design/AUDIT-2026-09.md) and
