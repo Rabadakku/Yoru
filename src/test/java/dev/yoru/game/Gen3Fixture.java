@@ -111,6 +111,29 @@ public final class Gen3Fixture {
         return stamp(out, slot);
     }
 
+    /**
+     * A reward id whose study gift has a high-bit personality: the gifts the signed
+     * encoder wrote wrong (#11). Hashed from a name, because ids counted in their
+     * low bits keep one sign bit for billions of steps and would share a personality.
+     */
+    public static UUID highBitRewardId(int start) {
+        for (int i = start; ; i++) {
+            var id = UUID.nameUUIDFromBytes(("legacy-gift-fixture-" + i).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            if (StudyGift.personalityFor(id) < 0) return id;
+        }
+    }
+
+    /** A study gift placed in a PC slot exactly as a build before 1.0.3 wrote it: in the signed substructure order. */
+    public static byte[] withLegacyGift(byte[] raw, dev.yoru.domain.Model.Reward reward, int box, int slot) {
+        var save = Gen3Save.read(raw);
+        var mon = GameDelivery.companionFor(reward, save.trainer());
+        var record = Gen3RecordOracle.box(mon, Gen3RecordOracle.signedOrder(mon.personality), 0x02);
+        var storage = save.storage();
+        System.arraycopy(record, 0, storage, Gen3Save.slotOffset(box, slot), Gen3Pokemon.BOX_SIZE);
+        save.storage(storage);
+        return save.bytes();
+    }
+
     /** Recomputes every section checksum in a slot, so a fixture edited in place stays valid. */
     public static byte[] stamp(byte[] raw, int slot) {
         for (int position = 0; position < Gen3Save.SECTIONS; position++) {
