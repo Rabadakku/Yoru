@@ -1,6 +1,10 @@
 # Development handoff
 
-## Release candidate 1.0.3 — September 13, 2026
+## Released 1.0.3 — September 13, 2026
+
+PR #13 is merged and v1.0.3 is published with all three installers. Both
+GitHub test runs passed before merge; all platform packaging jobs passed.
+The release notes document upgrade steps and remaining acceptance limits.
 
 The current repair branch adds per-snapshot durability receipts. Shutdown
 retains the session until the latest receipt is acknowledged; the controller
