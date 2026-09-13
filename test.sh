@@ -18,6 +18,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ExpansionTest
 
 java -ea -cp build/classes dev.yoru.HabitsTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.InputTest
+java -ea -cp build/classes dev.yoru.ui.AgoTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.LogoTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ContrastTest
 java -ea -cp build/classes dev.yoru.SchemaTest
