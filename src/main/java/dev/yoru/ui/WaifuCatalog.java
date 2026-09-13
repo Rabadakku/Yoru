@@ -23,17 +23,19 @@ final class WaifuCatalog {
 
     private static final List<Waifu> ALL = List.of(
         new Waifu("nightfall", "Nightfall · illustrated"),
-        new Waifu("hikari",  "Hikari"),
-        new Waifu("yuki",    "Yuki"),
-        new Waifu("ember",   "Ember"),
-        new Waifu("noir",    "Noir"),
-        new Waifu("rin",     "Rin"),
-        new Waifu("scarlet", "Scarlet"),
-        new Waifu("luna",    "Luna"),
-        new Waifu("mai",     "Mai"));
+        new Waifu("amberglow", "Amberglow · illustrated"));
+    private static final java.util.Set<String> RETIRED = java.util.Set.of(
+        "hikari","yuki","ember","noir","rin","scarlet","luna","mai");
 
     /** The roster in display order, for the Settings picker. */
     static List<Waifu> all() { return ALL; }
+
+    /** Portrait preferences survive theme switches, but art belongs only to Moonlight. */
+    static String forTheme(dev.yoru.domain.Model.Settings settings) {
+        if (settings.theme() != dev.yoru.domain.Model.ThemeId.MOONLIGHT) return null;
+        String choice = settings.waifu() == null ? "nightfall" : settings.waifu();
+        return imagesFor(choice).isEmpty() ? null : choice;
+    }
 
     /** The portrait for a stored id, or null if it is not one of the roster. */
     private static final java.util.Map<String, BufferedImage> CACHE = new java.util.HashMap<>();
@@ -56,6 +58,7 @@ final class WaifuCatalog {
     /** The pictures a stored choice selects: none, one, or the whole roster. */
     static List<BufferedImage> imagesFor(String choice) {
         if (choice == null) return List.of();
+        if (RETIRED.contains(choice)) return List.of(load("nightfall"));
         if (ROTATE.equals(choice))
             return ALL.stream().map(w -> load(w.id())).filter(Objects::nonNull).toList();
         var one = load(choice);

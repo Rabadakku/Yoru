@@ -45,13 +45,14 @@ public final class DistributionTest {
 
         var offenders=new ArrayList<String>();
         var classes=new HashSet<String>();
-        long bytes=0;
+        long bytes=0,portraitBytes=0;
         try(var file=new JarFile(jar.toFile())) {
             for(var entries=file.entries();entries.hasMoreElements();) {
                 var entry=entries.nextElement();
                 String name=entry.getName();
                 if(entry.isDirectory()) continue;
-                bytes+=Math.max(0,entry.getSize());
+                if(bundledWaifu(name))portraitBytes+=Math.max(0,entry.getSize());
+                else bytes+=Math.max(0,entry.getSize());
                 if(name.endsWith(".class")) classes.add(name);
                 if(bundledWaifu(name)) continue;   // the app's own art is a feature, not a leak
                 String lower=name.toLowerCase(Locale.ROOT);
@@ -89,6 +90,7 @@ public final class DistributionTest {
         // Sized like code. A jar carrying 386 sprites would be several megabytes,
         // so this catches a bundling accident even if it dodges the name checks.
         check(bytes<4_000_000,"The jar is code-sized, not asset-sized — uncompressed "+bytes+" bytes");
+        check(portraitBytes<8_000_000,"Original companion art stays within its separate package budget");
 
         // And it degrades honestly with no artwork at all, which is how it ships.
         var report=new dev.yoru.assets.ArtworkLibrary.Report(0,0,0,0,0);

@@ -297,6 +297,14 @@ public final class YoruApp extends JPanel implements Shell {
             default->today();
         }
         ;
+        String galleryChoice=WaifuCatalog.forTheme(tracker.state().settings());
+        if (galleryChoice!=null && !page.equals("Today")) {
+            var illustrated=stack();
+            illustrated.add(new MoonlightGallery(galleryChoice));
+            gap(illustrated,SPACE_LG);
+            illustrated.add(view);
+            view=illustrated;
+        }
         var scroll=new JScrollPane(view);
         scroll.setBorder(null);
         scroll.getViewport().setBackground(BG);
@@ -380,7 +388,7 @@ public final class YoruApp extends JPanel implements Shell {
         // Two columns while there is room for both, stacked when there is not:
         // the companion card used to be a fixed 315 px in an EAST slot, which
         // broke the page below about 900 px rather than reflowing.
-        String portrait=tracker.state().settings().waifu();
+        String portrait=WaifuCatalog.forTheme(tracker.state().settings());
         if (portrait!=null && !WaifuCatalog.imagesFor(portrait).isEmpty()) {
             p.add(new Hero(focusCard(),new WaifuPanel(portrait)));
             gap(p,SPACE_LG);
@@ -1817,12 +1825,12 @@ public final class YoruApp extends JPanel implements Shell {
         var waifu=card();
         waifu.add(sectionHeader("WAIFU"));
         gap(waifu,SPACE_SM);
-        waifu.add(bodyLabel("Full-size artwork beside your focus timer. Nightfall is the new illustrated companion; the pixel classics are still available."));
+        waifu.add(bodyLabel("Companion artwork belongs to Moonlight. It appears beside your timer and across its pages; your Pokémon and study tools remain available. Other themes keep this choice saved but hide the artwork."));
         gap(waifu,SPACE_MD);
         // One picker for every choice, so there is nothing to remember: the
         // combo shows what is set now and writes what is picked next.
         var waifuPick=plainCombo(new JComboBox<String>());
-        waifuPick.addItem("Off");
+        waifuPick.addItem("Theme default · Nightfall");
         for(var w:WaifuCatalog.all())waifuPick.addItem(w.name());
         waifuPick.addItem("Rotate");
         waifuPick.setSelectedIndex(waifuIndex(settings.waifu()));
