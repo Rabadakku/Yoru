@@ -1,5 +1,15 @@
 # Development handoff
 
+## Release candidate 1.0.8
+
+Based on v1.0.7, retaining the other contributor's save read model, legacy gift
+repair and updater. Adds individual habit rename/delete with backup and
+failure preservation, Moonlight-only companion art, original Amberglow, and
+retirement of bundled pixel portraits. Missing local trainer sheets caused
+the reported walking disappearance; importing existing scene artwork restored
+the live route. The code now exposes recovery guidance and correct wallpaper
+counts. See RELEASE-1.0.8.md. Remaining editing and updater work is in #20–#21.
+
 ## Companion placement — September 13, 2026, #3
 
 Branch `claude/companion-settings`, released as 1.0.7. Legacy gift repair (#11)

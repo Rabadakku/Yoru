@@ -22,6 +22,15 @@ locally imported trainer sheets, not removed animation code. Today now offers
 an explicit scene-artwork recovery route, and artwork status counts installed
 wallpapers correctly. Moonlight will be the only illustrated companion theme;
 other themes retain saved portrait preferences without displaying the art.
+Moonlight now includes original Amberglow artwork alongside Nightfall, with
+a portrait gallery on its other pages. This supersedes the earlier policy
+allowing companion art across every theme. Tests exercise all theme switches,
+retained selections and the default illustration without a vault migration.
+Release scope is now 1.0.8: route recovery, Moonlight-only illustrations,
+retirement of bundled pixel portraits, and individual habit rename/delete.
+Habit edits preserve identity and history; deletion targets one id, makes a
+vault backup, and leaves all other study data intact. Remaining editing audit,
+updater timeout correction, and larger redesign work are ticketed separately.
 
 Post-release checkpoint on `codex/audit-recovery`: reject stale session
 producers before queue coalescing so they cannot displace a current save (#7).
