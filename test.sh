@@ -35,6 +35,7 @@ java -ea -cp build/classes dev.yoru.assets.MusicTest
 java -ea -cp build/classes dev.yoru.game.UnsignedPokemonTest
 java -ea -cp build/classes dev.yoru.game.Gen3FormatTest
 java -ea -cp build/classes dev.yoru.game.Gen3SaveTest
+java -ea -cp build/classes dev.yoru.game.Gen3SaveReasonsTest
 java -ea -cp build/classes dev.yoru.game.ExperienceTest
 java -ea -cp build/classes dev.yoru.game.EmulationLoopTest
 java -ea -cp build/classes dev.yoru.game.SessionHandleTest
