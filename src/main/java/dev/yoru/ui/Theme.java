@@ -174,7 +174,7 @@ final class Theme {
             case EMBER -> "Warm amber dark, after Gruvbox.";
             case SAKURA -> "Blossom pink light, after Rosé Pine Dawn.";
             case LINEN -> "Warm paper light, low chroma, quiet.";
-            case MOONLIGHT -> "Violet nights, rose accents, anime companion.";
+            case MOONLIGHT -> "The illustrated companion theme. Violet nights, rose accents, all your Pokémon features.";
         };
     }
 
