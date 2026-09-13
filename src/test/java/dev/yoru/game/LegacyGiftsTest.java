@@ -138,6 +138,58 @@ public final class LegacyGiftsTest {
         var late = new Reward(changed.id(), 255, 5, BEFORE_FIX, Instant.parse("2026-09-14T00:00:00Z"));
         check(LegacyGifts.assess(save, List.of(late)).leftAlone().isEmpty(), "a change to a gift delivered after 1.0.3 is not reported");
 
-        System.out.println("PASS: " + checks + " legacy gift assessment checks (repairable, correct, changed, missing, ambiguous, party, flag 0x00)");
+        // Repair rewrites exactly the provable gifts, as today's delivery would have written them.
+        var repaired = LegacyGifts.repair(save, rewards);
+        var repairedSave = Gen3Save.read(repaired);
+        var after = LegacyGifts.assess(repaired, rewards);
+        check(verdictOf(after, old) == LegacyGifts.Verdict.CORRECT, "the repaired gift now assesses as correct");
+        var expected = GameDelivery.companionFor(old, repairedSave.trainer());
+        int firstSlot = Gen3Save.slotOffset(0, 0);
+        byte[] repairedRecord = Arrays.copyOfRange(repairedSave.storage(), firstSlot, firstSlot + Gen3Pokemon.BOX_SIZE);
+        check(Arrays.equals(Gen3RecordOracle.box(expected, Gen3RecordOracle.unsignedOrder(expected.personality), 0x02), repairedRecord),
+            "and the oracle, in the game's own order, agrees with it byte for byte");
+        var fixed = Gen3Pokemon.decode(repairedRecord, 0);
+        check(fixed.nationalDex() == 258 && fixed.personality == StudyGift.personalityFor(old.id()),
+            "it is the Pokémon the reward promised, with its identity kept");
+        check(verdictOf(after, changed) == LegacyGifts.Verdict.CHANGED, "the changed gift is still left alone");
+        int changedSlot = Gen3Save.slotOffset(3, 7), wildSlot = Gen3Save.slotOffset(5, 5);
+        check(Arrays.equals(Arrays.copyOfRange(repairedSave.storage(), changedSlot, changedSlot + Gen3Pokemon.BOX_SIZE), edited),
+            "byte for byte");
+        check(Arrays.equals(Arrays.copyOfRange(repairedSave.storage(), wildSlot, wildSlot + Gen3Pokemon.BOX_SIZE), wild),
+            "and a record no reward owns is untouched");
+        check(Arrays.equals(LegacyGifts.repair(repaired, rewards), repaired), "a second run changes nothing");
+
+        var partyFixed = Gen3Save.read(LegacyGifts.repair(partySave, List.of(old)));
+        check(Arrays.equals(partyFixed.partyRecord(1),
+            Gen3Pokemon.toParty(GameDelivery.companionFor(old, partyFixed.trainer()).encode(), 0)),
+            "a repaired party gift carries the stats its real nature gives");
+        check(Arrays.equals(partyFixed.partyRecord(0), Gen3Save.read(partySave).partyRecord(0)),
+            "and its party neighbour is untouched");
+
+        // Refusals: a save the game might not load a change into, and a result that changed something else.
+        try {
+            LegacyGifts.repair(Gen3Fixture.interrupted(save), rewards);
+            check(false, "an interrupted save is refused");
+        } catch (IllegalStateException expectedRefusal) { }
+        var tampered = withBoxed(repaired, 9, 9, wild);
+        try {
+            LegacyGifts.verify(save, tampered, rewards);
+            check(false, "a result that changed another slot is refused");
+        } catch (IllegalStateException expectedRefusal) { }
+
+        // A full PC does not matter: a repair never needs a free slot.
+        var full = Gen3Save.read(save);
+        var fullStorage = full.storage();
+        for (int box = 0; box < Gen3Save.BOXES; box++)
+            for (int slot = 0; slot < Gen3Save.PER_BOX; slot++) {
+                int at = Gen3Save.slotOffset(box, slot);
+                if (Gen3Save.empty(fullStorage, at)) System.arraycopy(wild, 0, fullStorage, at, Gen3Pokemon.BOX_SIZE);
+            }
+        full.storage(fullStorage);
+        var fullSave = full.bytes();
+        check(verdictOf(LegacyGifts.assess(LegacyGifts.repair(fullSave, List.of(old)), List.of(old)), old)
+            == LegacyGifts.Verdict.CORRECT, "a gift in a full PC is repaired in place");
+
+        System.out.println("PASS: " + checks + " legacy gift checks (assessment, in-place repair, party stats, refusals, full PC, idempotence)");
     }
 }

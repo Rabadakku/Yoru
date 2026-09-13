@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -79,6 +80,83 @@ public final class LegacyGifts {
             else findings.add(new Finding(reward, verdict(held.getFirst(), reward, trainer), where));
         }
         return new Assessment(List.copyOf(findings));
+    }
+
+    /**
+     * Rewrites every repairable gift as a current delivery would have written it,
+     * in place, and proves nothing else changed. Returns {@code before} itself when
+     * there is nothing to repair, so a second run is visibly a no-op. Refuses a
+     * save the game might not load a change into.
+     */
+    public static byte[] repair(byte[] before, List<Reward> rewards) {
+        var fixes = assess(before, rewards).repairable();
+        if (fixes.isEmpty()) return before;
+        var save = Gen3Save.read(before);
+        String refusal = save.whyNotEditable();
+        if (refusal != null) throw new IllegalStateException(refusal);
+        var trainer = save.trainer();
+        var storage = save.storage();
+        var party = new ArrayList<>(save.partyRecords());
+        for (var fix : fixes) {
+            byte[] correct = GameDelivery.companionFor(fix.reward(), trainer).encode();
+            var where = fix.where().getFirst();
+            if (where.inParty()) party.set(where.slot(), Gen3Pokemon.toParty(correct, 0));
+            else System.arraycopy(correct, 0, storage, Gen3Save.slotOffset(where.box(), where.slot()), Gen3Pokemon.BOX_SIZE);
+        }
+        save.party(party);
+        save.storage(storage);
+        byte[] after = save.bytes();
+        verify(before, after, rewards);
+        return after;
+    }
+
+    /**
+     * Proves a repair changed only the repaired gifts. Outside the party records
+     * and the PC every checksummed byte matches; inside them only the slots of
+     * gifts that were repairable may differ; each of those now assesses CORRECT;
+     * and every other delivered reward's verdict is what it was.
+     */
+    static void verify(byte[] before, byte[] after, List<Reward> rewards) {
+        var was = assess(before, rewards);
+        var now = assess(after, rewards);
+        var a = Gen3Save.read(before);
+        var b = Gen3Save.read(after);
+        var allowedStorage = new HashSet<Integer>();
+        var allowedParty = new HashSet<Integer>();
+        for (var fix : was.repairable()) {
+            var where = fix.where().getFirst();
+            if (where.inParty()) allowedParty.add(where.slot());
+            else allowedStorage.add(Gen3Save.slotOffset(where.box(), where.slot()));
+        }
+        for (int id = 0; id < Gen3Save.SECTIONS; id++) {
+            if (id >= Gen3Save.STORAGE_FIRST && id <= Gen3Save.STORAGE_LAST) continue;
+            byte[] sa = a.section(id), sb = b.section(id);
+            for (int i = 0; i < Gen3Save.CHECKSUMMED[id]; i++) {
+                if (sa[i] == sb[i]) continue;
+                boolean inRepairedMember = id == 1 && i >= Gen3Save.PARTY_AT
+                    && i < Gen3Save.PARTY_AT + Gen3Save.PARTY_LIMIT * Gen3Pokemon.PARTY_SIZE
+                    && allowedParty.contains((i - Gen3Save.PARTY_AT) / Gen3Pokemon.PARTY_SIZE);
+                if (!inRepairedMember)
+                    throw new IllegalStateException("Section " + id + " changed at byte " + i + ", which this repair never touches.");
+            }
+        }
+        byte[] storageA = a.storage(), storageB = b.storage();
+        int slotsStart = Gen3Save.slotOffset(0, 0);
+        int slotsEnd = Gen3Save.slotOffset(Gen3Save.BOXES - 1, Gen3Save.PER_BOX - 1) + Gen3Pokemon.BOX_SIZE;
+        for (int i = 0; i < storageA.length; i++) {
+            if (storageA[i] == storageB[i]) continue;
+            boolean inRepairedSlot = i >= slotsStart && i < slotsEnd
+                && allowedStorage.contains(i - (i - slotsStart) % Gen3Pokemon.BOX_SIZE);
+            if (!inRepairedSlot)
+                throw new IllegalStateException("Storage changed at byte " + i + ", which this repair never touches.");
+        }
+        for (int i = 0; i < was.findings().size(); i++) {
+            var earlier = was.findings().get(i).verdict();
+            var expected = earlier == Verdict.REPAIRABLE ? Verdict.CORRECT : earlier;
+            var actual = now.findings().get(i).verdict();
+            if (actual != expected)
+                throw new IllegalStateException("A gift assessed " + earlier + " reads as " + actual + " after the repair.");
+        }
     }
 
     private static Verdict verdict(Held held, Reward reward, Gen3Save.Trainer trainer) {
