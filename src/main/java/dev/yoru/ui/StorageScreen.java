@@ -36,7 +36,7 @@ final class StorageScreen extends JComponent {
      * The original's own measurements, scaled. A wallpaper is 160x144; the
      * thirty squares are 24px cells from (8, 24), below the band across the top.
      */
-    static final int PAPER_WIDTH = 160, PAPER_HEIGHT = 144, SCALE = 3;
+    static final int PAPER_WIDTH = 160, PAPER_HEIGHT = 144, SCALE = 2;
     static final int CELL = 24 * SCALE, GRID_X = 8 * SCALE, GRID_Y = 24 * SCALE;
     static final int PAD = 14, HEADER = 40, PARTY_GAP = 24;
     static final int COLUMNS = 6, ROWS = 5;
@@ -108,6 +108,14 @@ final class StorageScreen extends JComponent {
 
     int box() { return box; }
     Gen3Pokemon selected() { return selected; }
+
+    void showPartyLead() {
+        if (party.isEmpty()) return;
+        selected = party.getFirst();
+        onSelect.accept(selected);
+        announce();
+        repaint();
+    }
 
     /** The slot the keyboard cursor stands on in the open box, or -1. */
     int cursor() { return cursor; }
@@ -412,14 +420,14 @@ final class StorageScreen extends JComponent {
             g.fillOval(x + CELL / 2 - 12, y + CELL / 2 - 16, 24, 32);
             return;
         }
-        var sprite = GameView.sprite(mon.nationalDex(), mon.shiny());
+        var sprite = GameView.readable(mon) ? GameView.sprite(mon.nationalDex(), mon.shiny()) : null;
         if (sprite != null) {
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
             g.drawImage(sprite, x + inset, y + inset, size, size, null);
         } else {
             g.setColor(Theme.MUTED);
             g.setFont(getFont().deriveFont(10f));
-            g.drawString(mon.nationalDex() > 0 ? "#" + mon.nationalDex() : "?", x + inset, y + CELL / 2);
+            g.drawString(GameView.readable(mon) ? "#" + mon.nationalDex() : "!", x + inset, y + CELL / 2);
         }
     }
 

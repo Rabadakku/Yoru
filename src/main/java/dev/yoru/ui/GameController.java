@@ -48,13 +48,14 @@ final class GameController {
     private String problem;
     /** A dispatched save is not durable until the vault accepts it. Keep it for retry. */
     private byte[] pendingSave;
+    private Runnable pendingAcknowledgement = () -> { };
     private String saveProblem;
     private int retryDelay = 1000;
     private final Timer retry = new Timer(1000, e -> retrySave());
     private final AtomicReference<Snapshot> incoming = new AtomicReference<>();
     private final AtomicBoolean queued = new AtomicBoolean();
     private long sessionGeneration;
-    private record Snapshot(long session, byte[] bytes) { }
+    private record Snapshot(long session, byte[] bytes, Runnable acknowledged) { }
     enum SaveStatus { SAVED, PENDING, FAILED }
 
     SaveStatus saveStatus() {
@@ -67,8 +68,8 @@ final class GameController {
     }
 
     /** At most one EDT callback and the newest snapshot wait behind a slow disk. */
-    private void enqueueSave(long generation, byte[] bytes) {
-        incoming.set(new Snapshot(generation, bytes.clone()));
+    void enqueueSave(long generation, byte[] bytes, Runnable acknowledged) {
+        incoming.set(new Snapshot(generation, bytes.clone(), acknowledged));
         scheduleDrain();
     }
 
@@ -77,7 +78,7 @@ final class GameController {
         SwingUtilities.invokeLater(() -> {
             try {
                 Snapshot snapshot = incoming.getAndSet(null);
-                if (snapshot != null && snapshot.session() == sessionGeneration) saved(snapshot.bytes());
+                if (snapshot != null && snapshot.session() == sessionGeneration) accept(snapshot);
             } finally {
                 queued.set(false);
                 if (incoming.get() != null) scheduleDrain();
@@ -134,7 +135,7 @@ final class GameController {
         worker("yoru-game-start", () -> {
             try {
                 var session = GameSession.start(core, rom, save,
-                    bytes -> enqueueSave(generation, bytes), GameFiles.workDirectory());
+                    (bytes, acknowledged) -> enqueueSave(generation, bytes, acknowledged), GameFiles.workDirectory());
                 sessions.adopt(session);
                 SwingUtilities.invokeLater(() -> {
                     phase = Phase.RUNNING;
@@ -154,15 +155,23 @@ final class GameController {
     }
 
     /** An in-game save, kept in the vault as it happens. */
+    private void accept(Snapshot snapshot) {
+        pendingAcknowledgement = snapshot.acknowledged();
+        saved(snapshot.bytes());
+    }
+
     void saved(byte[] bytes) {
         pendingSave=bytes.clone();
         try {
             tracker.gameSaved(pendingSave);
+            pendingAcknowledgement.run();
+            pendingAcknowledgement = () -> { };
             pendingSave=null;
             saveProblem=null;
             retry.stop();
             retryDelay=1000;
             listener.saveChanged();
+            if (phase == Phase.STUCK && session() != null && session().readyToFinishClosing()) stop();
         } catch (IOException | RuntimeException e) {
             saveProblem = "Could not save to your vault. Yoru is keeping the latest save and will retry.";
             retry.setInitialDelay(retryDelay);
@@ -199,9 +208,13 @@ final class GameController {
                 // The event queue has now processed the core's final save. A failed
                 // vault write must keep Close/switch blocked, even after the core stops.
                 Snapshot finalSnapshot = incoming.getAndSet(null);
-                if (finalSnapshot != null && finalSnapshot.session() == sessionGeneration) saved(finalSnapshot.bytes());
+                if (finalSnapshot != null && finalSnapshot.session() == sessionGeneration) accept(finalSnapshot);
                 if (released && pendingSave!=null) retrySave();
                 phase = released && pendingSave==null ? Phase.IDLE : Phase.STUCK;
+                if (!released && session() != null && session().readyToFinishClosing()) {
+                    stop();
+                    return;
+                }
                 if (phase==Phase.IDLE) { problem=null;sync(); }
                 listener.phaseChanged();
                 finishClosing();

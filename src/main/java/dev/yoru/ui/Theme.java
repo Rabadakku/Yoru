@@ -39,9 +39,9 @@ final class Theme {
     /** A card's section header, uppercase: a signpost inside a card. */
     static final int TYPE_SECTION = 12;
     /** Body copy, metadata and table text: what a card is actually saying. */
-    static final int TYPE_BODY = 12;
+    static final int TYPE_BODY = 14;
     /** Page subtitle, caption and unit. The floor: below this the mono face stops being legible. */
-    static final int TYPE_CAPTION = 11;
+    static final int TYPE_CAPTION = 12;
 
     // --------------------------------------------------------------- spacing
     /** The half step: an inset inside a border, where a full 8 reads as a gap. */
@@ -210,14 +210,14 @@ final class Theme {
     // Role fonts. A page asks for the role; the size lives in one place so the
     // whole app moves together if a role ever has to change.
     static Font timerFont() { return mono(TYPE_TIMER); }
-    static Font titleFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_TITLE):mono(TYPE_TITLE); }
+    static Font titleFont() { return sans(TYPE_TITLE); }
     static Font figureFont() { return mono(TYPE_FIGURE); }
-    static Font headingFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_HEADING):mono(TYPE_HEADING); }
+    static Font headingFont() { return sans(TYPE_HEADING); }
     static Font proseFont() { return sans(TYPE_PROSE); }
-    static Font labelFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_LABEL):mono(TYPE_LABEL); }
-    static Font sectionFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_SECTION):mono(TYPE_SECTION); }
-    static Font bodyFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_BODY):mono(TYPE_BODY); }
-    static Font captionFont() { return currentId==ThemeId.MOONLIGHT?sans(TYPE_CAPTION):mono(TYPE_CAPTION); }
+    static Font labelFont() { return sans(TYPE_LABEL); }
+    static Font sectionFont() { return sans(TYPE_SECTION); }
+    static Font bodyFont() { return sans(TYPE_BODY); }
+    static Font captionFont() { return sans(TYPE_CAPTION); }
 
     static void install() {
         // Aqua ignores nearly every UIManager colour key and all setBackground on
@@ -898,7 +898,7 @@ final class Theme {
         var l=new JLabel(s);
         l.putClientProperty("html.disable",true);
         l.setAlignmentX(0);
-        l.setFont(currentId==ThemeId.MOONLIGHT && size!=TYPE_TIMER ? sans(size) : mono(size));
+        l.setFont(size == TYPE_TIMER || size == TYPE_FIGURE ? mono(size) : sans(size));
         l.setForeground(color);
         return l;
     }
@@ -924,7 +924,13 @@ final class Theme {
         return label(text, TYPE_SECTION, GOLD.equals(colour) ? GOLD_TEXT : colour);
     }
     /** Copy inside a card. */
-    static JLabel bodyLabel(String text) { return label(text, TYPE_BODY, MUTED); }
+    static JLabel bodyLabel(String text) {
+        var label = new WrappingLabel(text);
+        label.setFont(bodyFont());
+        label.setForeground(MUTED);
+        label.setAlignmentX(0);
+        return label;
+    }
 
     /**
      * The one page header.

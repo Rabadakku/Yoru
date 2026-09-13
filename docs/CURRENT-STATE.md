@@ -1,5 +1,19 @@
 # Development handoff
 
+## Release candidate 1.0.3 — September 13, 2026
+
+The current repair branch adds per-snapshot durability receipts. Shutdown
+retains the session until the latest receipt is acknowledged; the controller
+acknowledges after the vault write, retains failed snapshots and automatically
+finishes closing after recovery. SaveTransferTest covers delayed/stale receipts
+and rejected dispatch, and GameSaveFailureTest covers vault failure and stale
+session callbacks.
+
+UI changes include larger sans-serif body and control labels, plain page
+titles, wrapping instructions, compact storage and initial party-lead details.
+See `RELEASE-1.0.3.md` for the release scope and remaining work. Older notes
+below describe previous checkpoints.
+
 ## Audit recovery — September 12, 2026
 
 Current work is on `codex/audit-recovery`. Read `docs/design/AUDIT-2026-09.md`
