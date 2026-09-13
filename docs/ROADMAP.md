@@ -43,6 +43,12 @@ Claude on `claude/…` branches.
 - on Windows, the `.msi` runs after Yoru quits
 - on Linux, Yoru verifies the `.deb` and names the `apt` command
 
+1.0.5 shipped the updater. Legacy study gifts (#11) are on
+`claude/legacy-gifts`. A gift the signed encoder wrote is repaired in place from
+the Game page, only when it is byte-exact to a reconstructed legacy encoding and
+after a vault backup. Anything the game has changed since is left alone and
+reported.
+
 The historical plan below is retained as context, not evidence that the current
 release is complete. The fresh repository's audit issues are **#4–#12**.
 Read [the repair/design handoff](design/AUDIT-2026-09.md) and
