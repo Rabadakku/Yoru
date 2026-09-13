@@ -1,6 +1,11 @@
 # Yoru roadmap
 
-## Release candidate 1.0.3
+## Released 1.0.3 — September 13, 2026
+
+[Version 1.0.3](https://github.com/Rabadakku/Yoru/releases/tag/v1.0.3) is
+published from PR #13. Branch and pull-request checks passed, and GitHub built
+and attached the macOS, Windows and Linux installers. Installer compilation
+does not replace clean-machine or native campaign acceptance.
 
 See [release notes](RELEASE-1.0.3.md). The repair branch now includes save
 durability receipts and failed-write retries, unsigned record decoding,
@@ -11,6 +16,13 @@ checkpoint notes below are retained with their original scope.
 
 ## Current audit overrides — September 2026
 
+Post-release checkpoint on `codex/audit-recovery`: reject stale session
+producers before queue coalescing so they cannot displace a current save (#7).
+An exact-byte regression covers a valid save immediately followed by an old
+session callback before the event queue drains.
+Save notification failures are also separated from repository failures: once
+the vault commits, the save remains acknowledged and no false retry is armed.
+
 The historical plan below is retained as context, not evidence that the current
 release is complete. The fresh repository's audit issues are **#4–#12**.
 Read [the repair/design handoff](design/AUDIT-2026-09.md) and
@@ -19,11 +31,12 @@ Read [the repair/design handoff](design/AUDIT-2026-09.md) and
 - **Implemented on `codex/audit-recovery`:** unsigned Pokémon decoding/encoding
   and nature (#4), independent wire-format regression, and test home/preferences
   isolation (part of #10). Existing genuine saves need no rewrite.
-- **Additional repairs on that branch:** two-bank wallpaper decoding, staged
+- **Additional repairs shipped in 1.0.3:** two-bank wallpaper decoding, staged
   artwork publication with rollback tests, saved-game access without emulator
   setup, occupied-record read warnings, storage before reward cards, and bounded
   save-queue retries with visible vault-save status. These are partial delivery
-  of #5–#8; authoritative session acknowledgements and full layout work remain.
+  of #5–#8. Authoritative session acknowledgements are also implemented;
+  native lifecycle acceptance and full layout work remain.
 - **Open:** save-health UX (#5), staged artwork and wallpaper repair (#6), durable
   acknowledgement/retry (#7), Collection redesign (#8), visual-system work (#9),
   remaining test coverage (#10), conservative legacy gift assessment (#11).
