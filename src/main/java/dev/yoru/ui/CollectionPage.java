@@ -35,15 +35,17 @@ final class CollectionPage {
 
     JPanel view() {
         var state = shell.tracker().state();
+        var read = GameView.read(state);
         var p = stack();
         p.add(YoruApp.pageHeaderFor("Collection",
             "YOUR GAME'S POKÉMON · ONE ENCOUNTER FOR EVERY 30 MINUTES RECORDED"));
+        var status = saveStatus(read);
+        if (status != null) { p.add(status); gap(p, SPACE_LG); }
         if (shell.game().running()) {
             p.add(label("The game is running. This is its last save; what you catch now appears when it saves again.", TYPE_BODY, GOLD_TEXT));
             gap(p, SPACE_LG);
         }
-        var save = GameView.save(state);
-        p.add(save == null ? empty(save) : storage(save));
+        p.add(read.kind() == GameView.SaveKind.READABLE ? storage(read.save()) : unavailable(read));
         gap(p, SPACE_XL);
         var top = new JPanel(new GridLayout(1, 2, SPACE_LG, 0));
         top.setOpaque(false);
@@ -115,14 +117,51 @@ final class CollectionPage {
         return c;
     }
 
-    private JPanel empty(Gen3Save save) {
+    /**
+     * One line saying whether the Pokémon below are what the vault durably
+     * holds, or null when there are none to vouch for: with no save, or one
+     * that cannot be read, the card below already says so, and a line above it
+     * only repeated the card. Saving and failed saves always show.
+     */
+    private JComponent saveStatus(GameView.SaveRead read) {
+        var status = shell.game().saveStatus();
+        JLabel line;
+        if (status == GameController.SaveStatus.FAILED) {
+            line = label("Could not save to your vault", TYPE_CAPTION, DANGER);
+        } else if (status == GameController.SaveStatus.PENDING) {
+            line = label("Saving to your vault…", TYPE_CAPTION, MUTED);
+        } else if (read.kind() == GameView.SaveKind.READABLE) {
+            line = label("Saved in your vault · " + Ago.describe(read.savedAt(), java.time.Instant.now(),
+                java.time.ZoneId.systemDefault()), TYPE_CAPTION, MUTED);
+        } else {
+            return null;
+        }
+        line.setName("collection.saveStatus");
+        if (status != GameController.SaveStatus.FAILED) return flushRow(line);
+        var retry = button("Retry save", () -> { shell.game().retrySave(); shell.show("Collection"); });
+        retry.setName("collection.retrySave");
+        return flushRow(line, retry);
+    }
+
+    /** No save, or one Yoru cannot read: say which, and keep the way out in reach. */
+    private JPanel unavailable(GameView.SaveRead read) {
         var c = card();
-        var health = GameView.health(shell.tracker().state());
-        c.add(label(health.kind() == GameView.SaveKind.UNREADABLE ? "Your save needs attention" : "No game save yet", TYPE_HEADING, TEXT));
+        c.setName("collection.unavailable");
+        c.add(label(read.headline(), TYPE_HEADING, TEXT));
         gap(c, SPACE_SM);
-        c.add(bodyLabel(health.message()));
+        c.add(bodyLabel(read.detail()));
         gap(c, SPACE_LG);
-        c.add(button("Open the game", () -> shell.show("Game")));
+        if (read.kind() == GameView.SaveKind.UNREADABLE) {
+            var export = accentButton("Export a copy", () -> SaveExport.export(shell));
+            export.setName("collection.export");
+            var setup = button("Open Game setup", () -> shell.show("Game"));
+            setup.setName("collection.setup");
+            c.add(flushRow(export, setup));
+        } else {
+            var game = accentButton("Open the game", () -> shell.show("Game"));
+            game.setName("collection.openGame");
+            c.add(flushRow(game));
+        }
         return c;
     }
 
