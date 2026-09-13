@@ -22,6 +22,10 @@ An exact-byte regression covers a valid save immediately followed by an old
 session callback before the event queue drains.
 Save notification failures are also separated from repository failures: once
 the vault commits, the save remains acknowledged and no false retry is armed.
+Both save fixes are merged in PR #14. The next Collection checkpoint adds
+F6 party/box switching, party selection, keyboard pickup and placement,
+reachable empty slots, cross-box moves and Escape cancellation through the
+existing move callbacks (#8). Larger layout and missing-art work remain open.
 
 The historical plan below is retained as context, not evidence that the current
 release is complete. The fresh repository's audit issues are **#4–#12**.
