@@ -60,6 +60,16 @@ public final class GameSaveFailureTest {
         SwingUtilities.invokeAndWait(()-> {
             if(!Arrays.equals(newer,tracker.state().game().bytes()))throw new AssertionError("stale session crossed vault boundary");
         });
+        byte[] newest=Gen3Fixture.save(3,5);
+        int acknowledgedBefore=acknowledged.get();
+        SwingUtilities.invokeAndWait(()-> {
+            game.enqueueSave(0,newest,acknowledged::incrementAndGet);
+            game.enqueueSave(-1,save,()-> {throw new AssertionError("stale producer acknowledged");});
+        });
+        SwingUtilities.invokeAndWait(()-> {
+            if(!Arrays.equals(newest,tracker.state().game().bytes()))throw new AssertionError("stale producer displaced current save");
+            if(acknowledged.get()!=acknowledgedBefore+1)throw new AssertionError("current save receipt lost");
+        });
         System.out.println("PASS: failed game saves survive Close and retry after the vault recovers");
     }
 }

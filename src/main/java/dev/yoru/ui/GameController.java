@@ -54,7 +54,7 @@ final class GameController {
     private final Timer retry = new Timer(1000, e -> retrySave());
     private final AtomicReference<Snapshot> incoming = new AtomicReference<>();
     private final AtomicBoolean queued = new AtomicBoolean();
-    private long sessionGeneration;
+    private volatile long sessionGeneration;
     private record Snapshot(long session, byte[] bytes, Runnable acknowledged) { }
     enum SaveStatus { SAVED, PENDING, FAILED }
 
@@ -69,7 +69,9 @@ final class GameController {
 
     /** At most one EDT callback and the newest snapshot wait behind a slow disk. */
     void enqueueSave(long generation, byte[] bytes, Runnable acknowledged) {
-        incoming.set(new Snapshot(generation, bytes.clone(), acknowledged));
+        if (generation != sessionGeneration) return;
+        var next = new Snapshot(generation, bytes.clone(), acknowledged);
+        incoming.updateAndGet(current -> generation == sessionGeneration ? next : current);
         scheduleDrain();
     }
 
