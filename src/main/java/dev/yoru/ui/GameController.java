@@ -166,20 +166,27 @@ final class GameController {
         pendingSave=bytes.clone();
         try {
             tracker.gameSaved(pendingSave);
-            pendingAcknowledgement.run();
-            pendingAcknowledgement = () -> { };
-            pendingSave=null;
-            saveProblem=null;
-            retry.stop();
-            retryDelay=1000;
-            listener.saveChanged();
-            if (phase == Phase.STUCK && session() != null && session().readyToFinishClosing()) stop();
         } catch (IOException | RuntimeException e) {
             saveProblem = "Could not save to your vault. Yoru is keeping the latest save and will retry.";
             retry.setInitialDelay(retryDelay);
             retry.restart();
             retryDelay=Math.min(30_000,retryDelay*2);
             listener.phaseChanged();
+            return;
+        }
+        // A notification failure cannot turn an already committed save into a
+        // failed write or leave its retry armed.
+        Runnable acknowledged = pendingAcknowledgement;
+        pendingAcknowledgement = () -> { };
+        pendingSave=null;
+        saveProblem=null;
+        retry.stop();
+        retryDelay=1000;
+        try {
+            acknowledged.run();
+            listener.saveChanged();
+        } finally {
+            if (phase == Phase.STUCK && session() != null && session().readyToFinishClosing()) stop();
         }
     }
 
