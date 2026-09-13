@@ -34,6 +34,15 @@ save failed, and shows one card with Export a copy and Open Game setup when the
 save cannot be read. Codex has stopped; the remaining audit issues are owned by
 Claude on `claude/…` branches.
 
+1.0.4 shipped that save-health work. Updating from Settings (predecessor #69) is on
+`claude/updater` for 1.0.5:
+
+- it checks GitHub only when asked
+- installers are kept only when the SHA-256 GitHub publishes matches
+- on a Mac, the bundles are swapped after the game and vault close
+- on Windows, the `.msi` runs after Yoru quits
+- on Linux, Yoru verifies the `.deb` and names the `apt` command
+
 The historical plan below is retained as context, not evidence that the current
 release is complete. The fresh repository's audit issues are **#4–#12**.
 Read [the repair/design handoff](design/AUDIT-2026-09.md) and
