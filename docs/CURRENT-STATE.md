@@ -1,6 +1,9 @@
 # Development handoff
 
-## Release candidate 1.0.8
+## Released 1.0.8
+
+Published from PR #22. GitHub tests passed and all three platform installers
+were uploaded successfully. The next Moonlight expansion is separate work.
 
 Based on v1.0.7, retaining the other contributor's save read model, legacy gift
 repair and updater. Adds individual habit rename/delete with backup and

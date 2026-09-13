@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The waifus Yoru ships: a small fixed roster of original pixel portraits.
+ * The waifus Yoru ships: a fixed roster of original adult illustrations.
  *
  * The art is bundled on the classpath under {@code /dev/yoru/waifu/} and shown
  * on the Today page as decoration. Settings stores an id — or the "rotate"
@@ -30,9 +30,9 @@ final class WaifuCatalog {
     /** The roster in display order, for the Settings picker. */
     static List<Waifu> all() { return ALL; }
 
-    /** Portrait preferences survive theme switches, but art belongs only to Moonlight. */
+    /** Portrait preferences survive theme switches, but art belongs only to Waifu. */
     static String forTheme(dev.yoru.domain.Model.Settings settings) {
-        if (settings.theme() != dev.yoru.domain.Model.ThemeId.MOONLIGHT) return null;
+        if (settings.theme() != dev.yoru.domain.Model.ThemeId.WAIFU) return null;
         String choice = settings.waifu() == null ? "nightfall" : settings.waifu();
         return imagesFor(choice).isEmpty() ? null : choice;
     }

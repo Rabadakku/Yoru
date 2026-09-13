@@ -48,7 +48,7 @@ public final class WaifuUiTest {
     }
 
     private static Settings settings(String waifu) {
-        return new Settings(ThemeId.MOONLIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY,waifu);
+        return new Settings(ThemeId.WAIFU,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY,waifu);
     }
 
     private static Component find(Container root,String name) {
@@ -124,24 +124,24 @@ public final class WaifuUiTest {
         check(!hasText(app,"Try Moonlight"),"and recommends none");
         check(find(app,"waifu.art")==null,"no choice means no image");
 
-        // Moonlight supplies default artwork without changing the saved preference.
+        // Waifu supplies default artwork without changing the saved preference.
         onEdt(()->((JButton)find(app,"Settings")).doClick());
-        var moonlight=(JButton)find(app,"settings.theme.MOONLIGHT");
+        var moonlight=(JButton)find(app,"settings.theme.WAIFU");
         check(moonlight!=null,"each theme card's button is named for its theme");
         onEdt(moonlight::doClick);
-        check(tracker.state().settings().theme()==ThemeId.MOONLIGHT,"the Moonlight card chooses the theme");
+        check(tracker.state().settings().theme()==ThemeId.WAIFU,"the Waifu card chooses the theme");
         check(tracker.state().settings().waifu()==null,"without overwriting the portrait preference");
         onEdt(WaifuUiTest::openToday);
-        check(find(app,"waifu.art")!=null,"Moonlight has a default illustration");
+        check(find(app,"waifu.art")!=null,"Waifu has a default illustration");
         for(var theme:ThemeId.values()) {
             onEdt(()-> {
                 tracker.settings(new Settings(theme,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY,"amberglow"));
                 openToday();
             });
-            check((find(app,"waifu.art")!=null)==(theme==ThemeId.MOONLIGHT),"portrait art is exclusive to Moonlight: "+theme);
+            check((find(app,"waifu.art")!=null)==(theme==ThemeId.WAIFU),"portrait art is exclusive to Waifu: "+theme);
             check("amberglow".equals(tracker.state().settings().waifu()),"theme switch retains saved selection");
             onEdt(()->((JButton)find(app,"Tasks")).doClick());
-            check((find(app,"moonlight.gallery")!=null)==(theme==ThemeId.MOONLIGHT),"gallery is exclusive to Moonlight: "+theme);
+            check((find(app,"moonlight.gallery")!=null)==(theme==ThemeId.WAIFU),"gallery is exclusive to Waifu: "+theme);
         }
 
         // A value that is not in the roster reads as Off, not a crash.
