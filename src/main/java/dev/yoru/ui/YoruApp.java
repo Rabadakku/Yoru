@@ -386,12 +386,9 @@ public final class YoruApp extends JPanel implements Shell {
             gap(p,SPACE_LG);
             p.add(companionColumn());
         } else {
+            // No companion chosen: Today is the timer and the partner. Choosing
+            // one, and any recommendation of one, lives in Settings (#3).
             p.add(new Hero(focusCard(),companionColumn()));
-            gap(p,SPACE_LG);
-            var invitation=new WaifuPanel(null);
-            invitation.add(button("Try Moonlight",()->applySettings(s->new Settings(ThemeId.MOONLIGHT,
-                s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),"nightfall"))),BorderLayout.EAST);
-            p.add(invitation);
         }
         gap(p,SPACE_XL);
 
@@ -1552,7 +1549,10 @@ public final class YoruApp extends JPanel implements Shell {
         // disabled one, so the chosen theme is the most prominent thing here.
         var pick=chosen
             ?accentButton("Active",()->{})
-            :button("Use this",()->applySettings(s->new Settings(id,s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),id==ThemeId.MOONLIGHT && s.waifu()==null?"nightfall":s.waifu())));
+            // A theme is only a theme: choosing Moonlight used to switch on the
+            // Nightfall companion as well, which is a choice Settings asks for (#3).
+            :button("Use this",()->applySettings(s->new Settings(id,s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),s.waifu())));
+        pick.setName("settings.theme."+id.name());
         if(chosen)pick.setToolTipText("This theme is already in use");
         box.add(pick);
         return box;

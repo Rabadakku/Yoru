@@ -1,5 +1,30 @@
 # Development handoff
 
+## Companion placement — September 13, 2026, #3
+
+Branch `claude/companion-settings`, released as 1.0.7. Legacy gift repair (#11)
+shipped in 1.0.6.
+
+- Today shows no companion panel, hint or recommendation unless a companion in
+  the roster is chosen. The "Try Moonlight" invitation is gone.
+- Choosing a theme keeps `Settings.waifu` as it was; the Moonlight card no longer
+  switches on Nightfall. Theme card buttons are named `settings.theme.<ID>`, so a
+  test can press a specific one.
+- `WaifuUiTest` now ends the process on failure, the same `YoruApp` ticker trap as
+  the other UI tests.
+
+Not done from #3: its art-direction section asks for new portraits with
+minimal, revealing, fan-service clothing. That part was deliberately not taken
+on. The bundled portraits are unchanged, and #3 stays open for the owner to
+decide.
+
+Left for #12: `WaifuPanel`'s no-choice hint branch (`HINT`, `HINT_NAME`) no
+longer has a caller in the application.
+
+This is a stopping point. Remaining audit work: #6 artwork repair options, #7
+native save-acknowledgement acceptance, #8 Collection redesign, #9 visual
+system, #12 cleanup.
+
 ## Legacy study gifts — September 13, 2026, #11
 
 Branch `claude/legacy-gifts`. The plan this work followed is

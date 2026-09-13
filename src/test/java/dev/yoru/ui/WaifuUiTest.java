@@ -92,23 +92,50 @@ public final class WaifuUiTest {
             System.currentTimeMillis(),0,5,5,1,false,MouseEvent.BUTTON1));
     }
 
-    public static void main(String[] args)throws Exception {
+    private static boolean hasText(Container root,String text) {
+        for(Component c:root.getComponents()) {
+            if(c instanceof AbstractButton b && text.equals(b.getText()))return true;
+            if(c instanceof Container child && hasText(child,text))return true;
+        }
+        return false;
+    }
+
+    /** YoruApp's ticker keeps the JVM alive, so every outcome ends the process explicitly. */
+    public static void main(String[] args) {
+        try {
+            run();
+        } catch(Throwable failure) {
+            failure.printStackTrace();
+            System.exit(1);
+        }
+        System.exit(0);
+    }
+
+    private static void run()throws Exception {
         var repo=new Memory();
         var tracker=new Tracker(repo,Clock.systemUTC());
         tracker.addActivity("Study",0);
         onEdt(()->{ app=new YoruApp(tracker,repo); app.setSize(1280,900); openToday(); });
 
-        // Nothing chosen: the panel is still there, and it says what to do.
-        var hint=(JLabel)find(app,"waifu.hint");
-        check(hint!=null,"the Today page carries the waifu panel with no waifu set");
-        check(WaifuPanel.HINT.equals(hint.getText()),"and it says how to pick one");
-        check(Theme.MUTED.equals(hint.getForeground()),"the hint is muted, not body text");
-        check(find(app,"waifu.art")==null,"no choice means no image on the card");
+        // Nothing chosen: Today is about the timer and the partner. Choosing a
+        // companion, and any recommendation of one, lives in Settings (#3).
+        check(find(app,"waifu.panel")==null&&find(app,"waifu.hint")==null,
+            "Today shows no companion panel or hint when none is chosen");
+        check(!hasText(app,"Try Moonlight"),"and recommends none");
+        check(find(app,"waifu.art")==null,"no choice means no image");
+
+        // Choosing a theme is not choosing a companion.
+        onEdt(()->((JButton)find(app,"Settings")).doClick());
+        var moonlight=(JButton)find(app,"settings.theme.MOONLIGHT");
+        check(moonlight!=null,"each theme card's button is named for its theme");
+        onEdt(moonlight::doClick);
+        check(tracker.state().settings().theme()==ThemeId.MOONLIGHT,"the Moonlight card chooses the theme");
+        check(tracker.state().settings().waifu()==null,"without switching on a companion");
 
         // A value that is not in the roster reads as Off, not a crash.
         onEdt(()->{ tracker.settings(settings("not-a-waifu")); openToday(); });
-        check(find(app,"waifu.hint")!=null,"an unknown id falls back to the hint");
-        check(find(app,"waifu.art")==null,"an unknown id draws no image");
+        check(find(app,"waifu.panel")==null&&find(app,"waifu.hint")==null,"an unknown id shows no companion on Today");
+        check(find(app,"waifu.art")==null,"and draws no image");
 
         // One bundled portrait is put on the card at its own size.
         onEdt(()->{

@@ -49,6 +49,10 @@ the Game page, only when it is byte-exact to a reconstructed legacy encoding and
 after a vault backup. Anything the game has changed since is left alone and
 reported.
 
+1.0.6 shipped that repair. 1.0.7 keeps companion choice in Settings only. That
+covers the placement part of #3; its art-direction request was not taken on, and
+#3 stays open.
+
 The historical plan below is retained as context, not evidence that the current
 release is complete. The fresh repository's audit issues are **#4–#12**.
 Read [the repair/design handoff](design/AUDIT-2026-09.md) and
