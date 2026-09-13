@@ -60,6 +60,34 @@ public final class GameSaveFailureTest {
         SwingUtilities.invokeAndWait(()-> {
             if(!Arrays.equals(newer,tracker.state().game().bytes()))throw new AssertionError("stale session crossed vault boundary");
         });
-        System.out.println("PASS: failed game saves survive Close and retry after the vault recovers");
+        byte[] newest=Gen3Fixture.save(3,5);
+        int acknowledgedBefore=acknowledged.get();
+        SwingUtilities.invokeAndWait(()-> {
+            game.enqueueSave(0,newest,acknowledged::incrementAndGet);
+            game.enqueueSave(-1,save,()-> {throw new AssertionError("stale producer acknowledged");});
+        });
+        SwingUtilities.invokeAndWait(()-> {
+            if(!Arrays.equals(newest,tracker.state().game().bytes()))throw new AssertionError("stale producer displaced current save");
+            if(acknowledged.get()!=acknowledgedBefore+1)throw new AssertionError("current save receipt lost");
+        });
+        byte[] finalSave=Gen3Fixture.save(4,6);
+        SwingUtilities.invokeAndWait(()-> {
+            var refreshFailure=new IllegalStateException("test refresh failed");
+            game.listen(new GameController.Listener() {
+                @Override public void saveChanged() { throw refreshFailure; }
+            });
+            try {
+                game.saved(finalSave);
+                throw new AssertionError("refresh failure was swallowed");
+            } catch (IllegalStateException e) {
+                if(e!=refreshFailure)throw e;
+            }
+            if(game.saveStatus()!=GameController.SaveStatus.SAVED)throw new AssertionError("refresh error marked durable save failed");
+            if(game.problem()!=null)throw new AssertionError("refresh error left a false save warning");
+            if(!Arrays.equals(finalSave,repo.state.game().bytes()))throw new AssertionError("final save not durable");
+            game.retrySave(); // No pending bytes: must not notify the failing listener again.
+            game.listen(null);
+        });
+        System.out.println("PASS: failed game saves survive Close, stale producers and notification failures");
     }
 }
