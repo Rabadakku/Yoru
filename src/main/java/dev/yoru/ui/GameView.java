@@ -1,5 +1,6 @@
 package dev.yoru.ui;
 
+import dev.yoru.domain.Model.GameSave;
 import dev.yoru.domain.Model.State;
 import dev.yoru.game.Gen3Pokemon;
 import dev.yoru.game.Gen3Save;
@@ -11,40 +12,71 @@ import dev.yoru.game.StudyGift;
 import dev.yoru.game.WildEncounters;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * The vault's game save, read for the pages that show it.
  *
- * Pages ask freely: a save is read once and kept until the vault holds a
- * different one. A save that cannot be read shows as no save rather than
- * breaking a page.
+ * A page reads it once per render with {@link #read} and passes the result
+ * down. Nothing is cached here: a static cache kept another vault's records
+ * alive after a switch, and a Gen3Save is a working copy with setters, not
+ * something pages should share.
  */
 final class GameView {
 
     enum SaveKind { ABSENT, UNREADABLE, READABLE }
-    record SaveHealth(SaveKind kind, String message, java.time.Instant savedAt) { }
+
+    /** One reading of the vault's save (#5). The bytes stay in the vault's GameSave, untouched. */
+    record SaveRead(SaveKind kind, GameSave game, Gen3Save save, Gen3Save.Unreadable problem,
+                    int partyCount, int boxedCount) {
+
+        Instant savedAt() { return game == null ? null : game.updatedAt(); }
+
+        String headline() {
+            return switch (kind) {
+                case ABSENT -> "No game save yet";
+                case UNREADABLE -> "Your save is here, but Yoru cannot read it.";
+                case READABLE -> "Saved in your vault";
+            };
+        }
+
+        String detail() {
+            if (kind == SaveKind.ABSENT) return "Save once inside the game to show your party here.";
+            if (kind == SaveKind.READABLE) return "";
+            return switch (problem) {
+                case WRONG_SIZE -> "It is not the size of a Pokémon Emerald save. Export a copy before trying anything else.";
+                case NEVER_SAVED -> "The game has never written to it. Open the game and save once.";
+                case DAMAGED -> "Neither of its save slots is complete. Export a copy before trying anything else.";
+                case INCOMPLETE_SLOT -> "The slot the game would load is incomplete. Export a copy before trying anything else.";
+            };
+        }
+
+        /** Why this save cannot be changed from Yoru right now, or null when it can. */
+        String editBlock(boolean gameRunning) {
+            if (kind == SaveKind.ABSENT) return "There is no save in this vault yet.";
+            if (kind == SaveKind.UNREADABLE) return "Yoru cannot read this save, so it will not change it.";
+            if (gameRunning) return "Close the game first. While it runs it keeps its own copy of the save.";
+            return save.whyNotEditable();
+        }
+    }
 
     private GameView() { }
 
-    // Decode a fresh read model per request: callers cannot mutate a global
-    // cached save, and changing vaults never exposes another vault's records.
-    static Gen3Save save(State state) {
-        if (state.game() == null) return null;
-        try { return Gen3Save.read(state.game().bytes()); }
-        catch (IllegalArgumentException e) { return null; }
+    static SaveRead read(State state) {
+        var game = state.game();
+        if (game == null) return new SaveRead(SaveKind.ABSENT, null, null, null, 0, 0);
+        try {
+            var save = Gen3Save.read(game.bytes());
+            return new SaveRead(SaveKind.READABLE, game, save, null, save.partyCount(), save.boxedCount());
+        } catch (Gen3Save.UnreadableSave e) {
+            return new SaveRead(SaveKind.UNREADABLE, game, null, e.reason(), 0, 0);
+        }
     }
 
-    static SaveHealth health(State state) {
-        if (state.game() == null) return new SaveHealth(SaveKind.ABSENT,
-            "Save once inside the game to show your party here.", null);
-        var save = save(state);
-        if (save == null) return new SaveHealth(SaveKind.UNREADABLE,
-            "Your save is here, but Yoru cannot read it. Export a copy before making changes.", state.game().updatedAt());
-        return new SaveHealth(SaveKind.READABLE,
-            "Saved in your vault", state.game().updatedAt());
-    }
+    /** The decoded save, or null when there is none or it cannot be read. */
+    static Gen3Save save(State state) { return read(state).save(); }
 
     static boolean readable(Gen3Pokemon mon) {
         return mon != null && mon.checksumValid() && (mon.flags & 1) == 0
