@@ -37,6 +37,7 @@ java -ea -cp build/classes dev.yoru.assets.EmeraldArtworkTest
 java -ea -cp build/classes dev.yoru.assets.ArtworkTest
 java -ea -cp build/classes dev.yoru.assets.MusicTest
 java -ea -cp build/classes dev.yoru.game.UnsignedPokemonTest
+java -ea -cp build/classes dev.yoru.game.Gen3RecordOracleTest
 java -ea -cp build/classes dev.yoru.game.Gen3FormatTest
 java -ea -cp build/classes dev.yoru.game.Gen3SaveTest
 java -ea -cp build/classes dev.yoru.game.Gen3SaveReasonsTest
