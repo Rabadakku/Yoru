@@ -20,6 +20,8 @@ Post-release checkpoint on `codex/audit-recovery`: reject stale session
 producers before queue coalescing so they cannot displace a current save (#7).
 An exact-byte regression covers a valid save immediately followed by an old
 session callback before the event queue drains.
+Save notification failures are also separated from repository failures: once
+the vault commits, the save remains acknowledged and no false retry is armed.
 
 The historical plan below is retained as context, not evidence that the current
 release is complete. The fresh repository's audit issues are **#4–#12**.
