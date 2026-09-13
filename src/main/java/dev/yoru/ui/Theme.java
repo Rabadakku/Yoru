@@ -999,6 +999,26 @@ final class Theme {
         return p;
     }
 
+    /**
+     * A row of controls whose first one starts on the column's left edge.
+     *
+     * {@link #row()} and {@link #tightRow()} are FlowLayouts that leave their
+     * gap before the first control as well as between them, so a row under a
+     * heading began inside the text above it and the page's left margin
+     * zigzagged. This row keeps the {@code SPACE_MD} gap between neighbours and
+     * none before the first, so every left edge on a page is one vertical line.
+     */
+    static JPanel flushRow(JComponent... controls) {
+        var p = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, SPACE_XS));
+        p.setAlignmentX(0);
+        p.setOpaque(false);
+        for (var control : controls) {
+            if (p.getComponentCount() > 0) p.add(Box.createHorizontalStrut(SPACE_MD));
+            p.add(control);
+        }
+        return p;
+    }
+
     static final class VerticalPanel extends JPanel implements Scrollable {
         protected void addImpl(Component c,Object constraints,int index) {
             if(c instanceof JComponent j)j.setAlignmentX(0);
