@@ -54,6 +54,13 @@ public final class SaveReadTest {
         check(unreadable.editBlock(false) != null, "an unreadable save is never edited");
         check(tracker.state().game().holds(wrongSize), "reading it changed nothing");
 
+        // Interrupted part-way through writing: the game still loads it, so it
+        // reads, but an edit could land where the game will not look.
+        tracker.replaceGameSave(Gen3Fixture.interrupted(Gen3Fixture.save(2, 0)));
+        var halfWritten = GameView.read(tracker.state());
+        check(halfWritten.kind() == GameView.SaveKind.READABLE, "a save interrupted part-way still reads, as the game loads it");
+        check(halfWritten.editBlock(false) != null, "but Yoru refuses to edit it until the game saves once more");
+
         var raw = Gen3Fixture.withTrainer(Gen3Fixture.save(2, 0), "TESTER", 0, 12345, 54321);
         raw = Gen3Fixture.withParty(raw, List.of(Gen3Fixture.member(raw, 258, 5, 1), Gen3Fixture.member(raw, 25, 7, 2)));
         tracker.replaceGameSave(raw);
