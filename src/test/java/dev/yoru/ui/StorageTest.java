@@ -357,11 +357,13 @@ public final class StorageTest {
         press(screen, "storage.previousBox");
         check(screen.box() == BOX, "Page Up turns back");
 
-        // The keyboard never moves a Pokémon: arranging keeps its mouse rules.
+        // The keyboard shares the mouse pickup rules.
         screen.setArranging(true);
         shown = picked.size();
         press(screen, "storage.activate");
-        check(picked.size() == shown && screen.picked() == null, "Enter picks nothing up while arranging");
+        check(picked.size() == shown && screen.picked() != null, "Enter picks up without changing the details selection");
+        press(screen, "storage.cancel");
+        check(screen.picked() == null, "Escape cancels keyboard pickup");
 
         // A click and the keyboard agree: the cursor stands where the click
         // landed, so the arrows carry on from the Pokémon just shown.
@@ -372,6 +374,40 @@ public final class StorageTest {
         for (var listener : screen.getFocusListeners())
             listener.focusGained(new java.awt.event.FocusEvent(screen, java.awt.event.FocusEvent.FOCUS_GAINED));
         check(screen.cursor() == SLOT, "and taking the keyboard puts the cursor on it, got " + screen.cursor());
+    }
+
+    private static void keyboardArrangesPartyAndEmptyBoxes() {
+        var moves = new ArrayList<dev.yoru.game.StorageEdit.Place>();
+        var shown = new ArrayList<Gen3Pokemon>();
+        var screen = new StorageScreen(save(), BOX, shown::add, box -> { }, (from, to) -> {
+            moves.add(from); moves.add(to);
+        });
+        check(bound(screen, "F6"), "F6 switches between party and box");
+        press(screen, "storage.switchArea");
+        press(screen, "storage.down");
+        press(screen, "storage.activate");
+        check(shown.getLast().nationalDex() == 25, "keyboard selects the second party member");
+        check(screen.getAccessibleContext().getAccessibleDescription().contains("Party, slot 2"), "party cursor announced");
+        screen.setArranging(true);
+        press(screen, "storage.activate");
+        check(screen.picked() != null, "keyboard picks up a party member");
+        press(screen, "storage.nextBox");
+        press(screen, "storage.right");
+        int destination = screen.cursor();
+        press(screen, "storage.activate");
+        check(moves.size() == 2, "one keyboard move submitted");
+        check(moves.get(0).party() && moves.get(0).slot() == 1, "move starts in second party slot");
+        check(!moves.get(1).party() && moves.get(1).box() == BOX + 1 && moves.get(1).slot() == destination,
+            "move reaches an empty square in another box");
+        check(screen.picked() == null, "placement clears pickup");
+        press(screen, "storage.switchArea");
+        press(screen, "storage.activate");
+        press(screen, "storage.down");
+        press(screen, "storage.down");
+        press(screen, "storage.activate");
+        check(moves.size() == 4 && moves.get(3).party() && moves.get(3).slot() == 2,
+            "empty party destinations are keyboard reachable");
+        check(screen.getAccessibleContext().getAccessibleDescription().contains("empty"), "empty party destination announced");
     }
 
     /** The cursor is drawn where it stands, from the first frame, and follows the arrows. */
@@ -481,6 +517,7 @@ public final class StorageTest {
         aMoveEditsTheSave();
         arrangingStateIsVisible();
         keyboardWalksTheBox();
+        keyboardArrangesPartyAndEmptyBoxes();
         theCursorIsDrawn();
         thePageMovesThroughItsOwnWiring();
         System.out.println("StorageTest ok (" + checks + " checks)");
