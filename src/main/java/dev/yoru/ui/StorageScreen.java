@@ -51,6 +51,7 @@ final class StorageScreen extends JComponent {
     private Gen3Pokemon selected;
     /** The slot the keyboard cursor stands on in the open box, or -1 for an empty box. */
     private int cursor = -1;
+    private int partyCursor = -1;
     private boolean arranging;
     private Gen3Pokemon picked;
     private StorageEdit.Place pickedPlace;
@@ -94,6 +95,13 @@ final class StorageScreen extends JComponent {
         bind("DOWN", "storage.down", () -> moveCursor(0, 1));
         bind("ENTER", "storage.activate", this::activate);
         bind("SPACE", "storage.activate", this::activate);
+        bind("F6", "storage.switchArea", () -> {
+            partyCursor = partyCursor < 0 ? 0 : -1;
+            if (partyCursor < 0) seedCursor();
+            announce();
+            repaint();
+        });
+        setToolTipText("Arrow keys: move · Enter: select or place · F6: party/box · Page Up/Down: boxes · Escape: cancel");
         // The corner arrows turn boxes for the mouse; the keyboard turns them
         // through the same turn(), so both paths keep the same wrapping.
         bind("PAGE_UP", "storage.previousBox", () -> turn(-1));
@@ -112,7 +120,8 @@ final class StorageScreen extends JComponent {
     void showPartyLead() {
         if (party.isEmpty()) return;
         selected = party.getFirst();
-        onSelect.accept(selected);
+        partyCursor = 0;
+        if (onSelect != null) onSelect.accept(selected);
         announce();
         repaint();
     }
@@ -124,6 +133,8 @@ final class StorageScreen extends JComponent {
         arranging = on;
         picked = null;
         pickedPlace = null;
+        seedCursor();
+        announce();
         repaint();
     }
 
@@ -179,13 +190,16 @@ final class StorageScreen extends JComponent {
      * row or column ahead is empty, so the cursor never leaves the grid.
      */
     private void moveCursor(int dCol, int dRow) {
-        if (cursor < 0) {
+        if (partyCursor >= 0) {
+            int limit = arranging ? Gen3Save.PARTY_LIMIT : Math.max(1, party.size());
+            partyCursor = Math.max(0, Math.min(limit - 1, partyCursor + dRow));
+        } else if (cursor < 0) {
             seedCursor();
         } else {
             for (int col = cursor % COLUMNS + dCol, row = cursor / COLUMNS + dRow;
                  col >= 0 && col < COLUMNS && row >= 0 && row < ROWS; col += dCol, row += dRow) {
                 int slot = row * COLUMNS + col;
-                if (save.boxed(storage, box, slot) != null) { cursor = slot; break; }
+                if (arranging || save.boxed(storage, box, slot) != null) { cursor = slot; break; }
             }
         }
         announce();
@@ -196,14 +210,20 @@ final class StorageScreen extends JComponent {
      * Enter or Space: the operation a click on the cursor's square performs,
      * which is to show the Pokémon there and tell the page.
      *
-     * In arranging mode the keyboard is deliberately read-only. A keyed pickup
-     * would have to reproduce the mouse's pick, place and cancel rules, and a
-     * half-copy of them is worse than leaving the moves to the mouse until it
-     * can be done properly.
+     * Arranging uses the same pickup, placement and cancellation path as mouse
+     * input; the page remains responsible for validating and committing moves.
      */
     private void activate() {
-        if (arranging || cursor < 0) return;
-        var mon = save.boxed(storage, box, cursor);
+        if (partyCursor < 0 && cursor < 0) return;
+        if (arranging) {
+            int x = partyCursor >= 0 ? PAD + boxWidth() + PARTY_GAP + 1 : gridX() + cursor % COLUMNS * CELL + 1;
+            int y = partyCursor >= 0 ? partyY() + partyCursor * CELL + 1 : gridY() + cursor / COLUMNS * CELL + 1;
+            arrangeAt(x, y);
+            announce();
+            return;
+        }
+        var mon = partyCursor >= 0 ? (partyCursor < party.size() ? party.get(partyCursor) : null)
+            : save.boxed(storage, box, cursor);
         if (mon == null) return;
         selected = mon;
         repaint();
@@ -212,6 +232,8 @@ final class StorageScreen extends JComponent {
 
     /** Puts the cursor on the Pokémon already being shown, or the first the box holds. */
     private void seedCursor() {
+        if (partyCursor >= 0) return;
+        if (arranging) { if (cursor < 0) cursor = 0; return; }
         cursor = slotOf(selected);
         for (int slot = 0; cursor < 0 && slot < Gen3Save.PER_BOX; slot++)
             if (save.boxed(storage, box, slot) != null) cursor = slot;
@@ -243,6 +265,10 @@ final class StorageScreen extends JComponent {
 
     /** The focused square written out: the box, the slot, and who is on it. */
     private String readout() {
+        if (partyCursor >= 0) {
+            String where = "Party, slot " + (partyCursor + 1) + " of " + Gen3Save.PARTY_LIMIT;
+            return where + (partyCursor < party.size() ? ": " + GameView.name(party.get(partyCursor)) : ": empty");
+        }
         if (cursor < 0) return boxTitle() + ": no Pokémon";
         var mon = save.boxed(storage, box, cursor);
         String where = boxTitle() + ", slot " + (cursor + 1) + " of " + Gen3Save.PER_BOX;
@@ -259,6 +285,10 @@ final class StorageScreen extends JComponent {
     private void click(int x, int y) {
         if (previousArrow().contains(x, y)) { turn(-1); return; }
         if (nextArrow().contains(x, y)) { turn(1); return; }
+        int hitSlot = slotAt(x, y), hitParty = partyAt(x, y);
+        if (hitSlot >= 0) { cursor = hitSlot; partyCursor = -1; }
+        else if (hitParty >= 0) partyCursor = hitParty;
+        announce();
         if (arranging) { arrangeAt(x, y); return; }
         Gen3Pokemon found = null;
         int slot = slotAt(x, y);
@@ -308,6 +338,7 @@ final class StorageScreen extends JComponent {
 
     private void turn(int by) {
         box = Math.floorMod(box + by, Gen3Save.BOXES);
+        partyCursor = -1;
         seedCursor();                 // the new box's squares, not the last box's slot number
         announce();
         repaint();
@@ -372,7 +403,7 @@ final class StorageScreen extends JComponent {
         // over the squares and in the accent the rest of the app uses for "the
         // keyboard is here". Drawn whenever the cursor stands somewhere, so the
         // cue is there when the grid takes the keyboard, not after the first key.
-        if (cursor >= 0) {
+        if (cursor >= 0 && partyCursor < 0) {
             var ring = (Graphics2D) g.create();
             ring.setColor(Theme.CYAN);
             ring.setStroke(new java.awt.BasicStroke(Theme.RING));
@@ -390,6 +421,11 @@ final class StorageScreen extends JComponent {
             g.setColor(Theme.LINE);
             g.drawRoundRect(px, cy, CELL, CELL, Theme.RADIUS, Theme.RADIUS);
             if (i < party.size()) drawMon(g, party.get(i), px, cy);
+        }
+        if (partyCursor >= 0) {
+            g.setColor(Theme.CYAN);
+            g.setStroke(new java.awt.BasicStroke(Theme.RING));
+            g.drawRoundRect(px, partyY() + partyCursor * CELL, CELL - 1, CELL - 1, Theme.RADIUS, Theme.RADIUS);
         }
         g.dispose();
     }
