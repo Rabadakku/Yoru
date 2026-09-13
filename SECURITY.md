@@ -7,8 +7,13 @@ Password-free mode uses the same encrypted format with a random secret stored be
 
 Schema 3 includes tasks, collection and habit history. Schema 1 and 2 are read and upgraded on save, preserving the original encrypted file as `.v1.bak` or `.v2.bak`. Never overwrite a conflicting backup automatically. Old app versions cannot open newer schemas.
 
+## Updates
+Settings → Updates reaches the network only when **Check for updates** is pressed. It sends one request to `https://api.github.com/repos/Rabadakku/Yoru/releases/latest`, carrying a User-Agent and nothing about the person or their vault. Installers are downloaded only from `https://github.com/Rabadakku/Yoru/releases/download/`, written to a temporary file, and kept only when their size and SHA-256 match the digest GitHub publishes for that release; a missing or mismatched checksum deletes the file. A copy built from source is never replaced.
+
+On macOS the verified disk image is mounted read-only, the app is copied out and checked to be `dev.yoru` at the expected version, and after Yoru closes its game and vault a shell script swaps the bundles, restoring the old one if the new one cannot be moved in. On Windows the verified `.msi` runs after Yoru quits. On Linux Yoru only verifies the `.deb`; installing it needs an administrator and is left to the person. Releases are not code-signed, so the checksum proves the file is the one published on GitHub, not who built it.
+
 ## Optional AI
-Core tracking works offline. Only an explicit class-file extraction action calls `https://api.openai.com/v1/responses`. No telemetry or local HTTP listener. The user sees the selected filename and size and approves uploading its entire contents. API keys are entered per request and never persisted by Yoru. Request buffers can exist temporarily in process memory.
+Core tracking works offline. Besides **Check for updates**, only an explicit class-file extraction action uses the network, calling `https://api.openai.com/v1/responses`. No telemetry or local HTTP listener. The user sees the selected filename and size and approves uploading its entire contents. API keys are entered per request and never persisted by Yoru. Request buffers can exist temporarily in process memory.
 
 Requests use `store:false`, which is not a promise of zero provider retention. See [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data). Requests are size/time bounded, reject redirects, use strict structured output and expose no tools. File instructions are treated as untrusted data. Results must pass validation and user review before a transactional task import. No AI response automatically alters existing tasks or habit records.
 

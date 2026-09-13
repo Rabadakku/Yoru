@@ -200,6 +200,16 @@ and it does not mean the download is damaged. Open it once with
 like any other app. The whole source is right here if you would rather build it
 yourself.
 
+### Updating
+
+From 1.0.5, **Settings → Updates → Check for updates** asks GitHub for the newest
+release, only when you press it. On a Mac, Yoru downloads the `.dmg`, checks it
+against the release's SHA-256, then closes your game and vault, replaces itself
+and reopens. On Windows it runs the verified `.msi` after closing. On Linux it
+verifies the `.deb` and gives you the one `sudo apt install` command to run.
+Earlier versions have no updater, so install 1.0.5 by hand once. Your workspace
+stays as it is.
+
 ### Run from source
 
 **Requires JDK 22 or later.** Swing and the JDK only — no runtime dependencies,
