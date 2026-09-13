@@ -349,6 +349,19 @@ public final class Tracker {
         var dates = new HashSet<>(h.checkIns()); if(done) dates.add(date); else dates.remove(date);
         replaceHabit(new Habit(h.id(),h.name(),h.kind(),h.zone(),dates,h.starts()));
     }
+    public void renameHabit(UUID id, String name) throws IOException {
+        var h=habit(id);
+        var renamed=new Habit(h.id(),name,h.kind(),h.zone(),h.checkIns(),h.starts());
+        if(renamed.equals(h))return;
+        repository.backup();
+        replaceHabit(renamed);
+    }
+    public void deleteHabit(UUID id) throws IOException {
+        habit(id); // Refuse stale controls before backing up or writing.
+        var remaining=state.habits().stream().filter(h->!h.id().equals(id)).toList();
+        repository.backup();
+        commit(state.withHabits(remaining));
+    }
     public void restartHabit(UUID id) throws IOException {
         var h=habit(id);
         if(h.kind()!=HabitKind.TIME_SINCE) throw new IllegalArgumentException("Choose a time-since tracker.");

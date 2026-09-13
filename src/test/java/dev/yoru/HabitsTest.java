@@ -30,6 +30,28 @@ public final class HabitsTest {
         try{t.checkIn(id,today,true);throw new AssertionError();}catch(java.io.IOException expected){checks++;}
         check(t.state().equals(before));memory.fail=false;
         t.addActivity("Study",0);check(t.state().habits().equals(before.habits()));
+        var daily=t.state().habits().getFirst();
+        var periods=t.state().habits().getLast().starts();
+        t.renameHabit(id,"  Evening chores  ");
+        check(t.state().habits().getFirst().name().equals("Evening chores"));
+        check(t.state().habits().getFirst().checkIns().equals(daily.checkIns()));
+        check(t.state().habits().getFirst().id().equals(id));
+        t.renameHabit(quit,"New name");
+        check(t.state().habits().getLast().starts().equals(periods));
+        var unchanged=t.state();
+        try{t.renameHabit(id,"  ");throw new AssertionError();}catch(IllegalArgumentException expected){checks++;}
+        check(t.state().equals(unchanged));
+        memory.fail=true;
+        try{t.renameHabit(id,"Failed rename");throw new AssertionError();}catch(java.io.IOException expected){checks++;}
+        check(t.state().equals(unchanged));
+        try{t.deleteHabit(id);throw new AssertionError();}catch(java.io.IOException expected){checks++;}
+        check(t.state().equals(unchanged));memory.fail=false;
+        t.deleteHabit(id);
+        check(t.state().habits().size()==1&&t.state().habits().getFirst().id().equals(quit));
+        check(t.state().activities().equals(unchanged.activities()));
+        check(t.state().sessions().equals(unchanged.sessions()));
+        check(t.state().habits().getFirst().starts().equals(periods));
+        try{t.deleteHabit(id);throw new AssertionError();}catch(IllegalArgumentException expected){checks++;}
         var dir=Files.createTempDirectory("yoru-habits-");var path=dir.resolve("test.vault");
         try(var vault=new EncryptedVault(path,LocalAccess.create(path))){vault.save(t.state());}
         check(LocalAccess.enabled(path));

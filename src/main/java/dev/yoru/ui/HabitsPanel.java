@@ -45,6 +45,27 @@ final class HabitsPanel {
     private static JPanel habitCard(Tracker tracker,Runnable refresh,Habit habit) {
         var card=card();
         card.add(label(habit.name(),TYPE_HEADING,TEXT));
+        var manage=row();
+        var rename=button("Rename",()-> {
+            var input=new JTextField(habit.name(),24);
+            input.getAccessibleContext().setAccessibleName("Habit name");
+            while(Dialogs.confirm(card,input,"Rename habit","Save")) {
+                try {tracker.renameHabit(habit.id(),input.getText());refresh.run();break;}
+                catch(Exception error){Dialogs.error(card,error.getMessage());}
+            }
+        });
+        rename.setName("habit.rename."+habit.id());
+        rename.getAccessibleContext().setAccessibleName("Rename "+habit.name());
+        manage.add(rename);
+        var delete=button("Delete",()-> {
+            if(Dialogs.confirm(card,"Delete this habit and its history? Other habits and study records stay unchanged. A vault backup is kept first.",
+                "Delete "+habit.name(),"Delete habit"))
+                act(card,refresh,()->tracker.deleteHabit(habit.id()));
+        });
+        delete.setName("habit.delete."+habit.id());
+        delete.getAccessibleContext().setAccessibleName("Delete "+habit.name());
+        manage.add(delete);
+        card.add(manage);
         gap(card,SPACE_SM);
         if(habit.kind()==HabitKind.DAILY) daily(tracker,refresh,habit,card);
         else since(tracker,refresh,habit,card);

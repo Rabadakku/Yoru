@@ -33,6 +33,8 @@ public final class PackagedArtworkTest {
             ImageIO.write(normal,"png",art.getParent().resolve("1.png").toFile());
             normal.setRGB(8,8,0xff0000ff);
             ImageIO.write(normal,"png",art.resolve("1.png").toFile());
+            Path papers=Files.createDirectories(art.getParent().resolve("pc"));
+            ImageIO.write(normal,"png",papers.resolve("wallpaper-00.png").toFile());
             for(String relative:new String[]{"Yoru.jar","build/yoru.jar","Yoru.app/Contents/Resources/Yoru.jar"}) {
                 Path jar=sandbox.resolve(relative);
                 Files.createDirectories(jar.getParent());
@@ -46,6 +48,11 @@ public final class PackagedArtworkTest {
                         throw new AssertionError("Missing normal artwork: "+relative);
                     if(shiny==null || shiny.getRGB(8,8)!=0xff0000ff)
                         throw new AssertionError("Missing shiny artwork: "+relative);
+                    var survey=loader.loadClass("dev.yoru.ui.SpriteAssets").getDeclaredMethod("survey");
+                    survey.setAccessible(true);
+                    Object report=survey.invoke(null);
+                    if(!report.getClass().getMethod("wallpapers").invoke(report).equals(1))
+                        throw new AssertionError("Installed wallpaper is missing from artwork status");
                 }
             }
             System.out.println("PASS: normal and shiny artwork from standalone jar, build folder and macOS bundle");
