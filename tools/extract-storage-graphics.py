@@ -103,15 +103,22 @@ def render(rom, entry):
         raise SystemExit(f"tilemap at 0x{map_at:X} is {len(tmap)} bytes, expected "
                          f"{TILES_WIDE * TILES_HIGH * 2}")
     palette = []
-    for i in range(16):
+    for i in range(32):
         v = struct.unpack_from("<H", rom, pal_at + i * 2)[0]
         r, g, b = v & 31, (v >> 5) & 31, (v >> 10) & 31
-        palette.append((r * 255 // 31, g * 255 // 31, b * 255 // 31))
+        palette.append((r * 255 // 31, g * 255 // 31, b * 255 // 31, 255))
 
     width, height = TILES_WIDE * 8, TILES_HIGH * 8
-    pixels = [[0] * width for _ in range(height)]
+    pixels = [[-1] * width for _ in range(height)]
     for i in range(TILES_WIDE * TILES_HIGH):
         cell = struct.unpack_from("<H", tmap, i * 2)[0]
+        bank = cell >> 12
+        # Game loads two palettes at banks 4/5 and adds 3 to map bank IDs.
+        # Bank 0 is the surrounding UI and stays transparent in this asset.
+        if bank == 0:
+            continue
+        if bank > 2:
+            raise ValueError("Unsupported wallpaper palette bank")
         index, hflip, vflip = cell & 0x3FF, cell & 0x400, cell & 0x800
         tx, ty = (i % TILES_WIDE) * 8, (i // TILES_WIDE) * 8
         for y in range(8):
@@ -120,9 +127,9 @@ def render(rom, entry):
                 sx = 7 - x if hflip else x
                 at = index * 32 + sy * 4 + sx // 2
                 if at >= len(tiles):
-                    continue
+                    raise ValueError("Invalid wallpaper tile")
                 byte = tiles[at]
-                pixels[ty + y][tx + x] = (byte >> 4) if (sx & 1) else (byte & 0xF)
+                pixels[ty + y][tx + x] = ((byte >> 4) if (sx & 1) else (byte & 0xF)) + (bank - 1) * 16
     return width, height, pixels, palette
 
 
@@ -131,7 +138,7 @@ def write_png(path, width, height, pixels, palette):
     for y in range(height):
         raw.append(0)
         for x in range(width):
-            raw += bytes(palette[pixels[y][x]])
+            raw += bytes(palette[pixels[y][x]]) if pixels[y][x] >= 0 else bytes(4)
 
     def chunk(tag, body):
         return (struct.pack(">I", len(body)) + tag + body
@@ -139,7 +146,7 @@ def write_png(path, width, height, pixels, palette):
 
     with open(path, "wb") as f:
         f.write(b"\x89PNG\r\n\x1a\n")
-        f.write(chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)))
+        f.write(chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)))
         f.write(chunk(b"IDAT", zlib.compress(bytes(raw), 9)))
         f.write(chunk(b"IEND", b""))
 

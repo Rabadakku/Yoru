@@ -1,5 +1,39 @@
 # Yoru roadmap
 
+## Release candidate 1.0.3
+
+See [release notes](RELEASE-1.0.3.md). The repair branch now includes save
+durability receipts and failed-write retries, unsigned record decoding,
+transactional artwork imports, corrected wallpaper palettes, and initial UI
+readability improvements. Full Collection interaction redesign, conservative
+legacy gift assessment and final decomposition remain open. Historical
+checkpoint notes below are retained with their original scope.
+
+## Current audit overrides — September 2026
+
+The historical plan below is retained as context, not evidence that the current
+release is complete. The fresh repository's audit issues are **#4–#12**.
+Read [the repair/design handoff](design/AUDIT-2026-09.md) and
+[the visual reference](design/reference.html) before implementing them.
+
+- **Implemented on `codex/audit-recovery`:** unsigned Pokémon decoding/encoding
+  and nature (#4), independent wire-format regression, and test home/preferences
+  isolation (part of #10). Existing genuine saves need no rewrite.
+- **Additional repairs on that branch:** two-bank wallpaper decoding, staged
+  artwork publication with rollback tests, saved-game access without emulator
+  setup, occupied-record read warnings, storage before reward cards, and bounded
+  save-queue retries with visible vault-save status. These are partial delivery
+  of #5–#8; authoritative session acknowledgements and full layout work remain.
+- **Open:** save-health UX (#5), staged artwork and wallpaper repair (#6), durable
+  acknowledgement/retry (#7), Collection redesign (#8), visual-system work (#9),
+  remaining test coverage (#10), conservative legacy gift assessment (#11).
+- **Last:** codebase decomposition and mechanical cleanup (#12), after behavior
+  and visual changes land. Companion placement remains existing issue #3.
+- **Validation:** full isolated suite and named-module check pass. Installed
+  app observation and local read-only diagnosis confirmed the reported party
+  display defect. Native full-campaign and multi-platform release checks remain.
+
+
 Updated 2026-09-12. **v1.0 has shipped; v1.0.2 focuses on functional repairs.**
 
 Completed in this repair: ROM sprite and PC wallpaper extraction, background
@@ -10,7 +44,7 @@ priority. Validation includes the full synthetic suite, real local ROM import,
 an installed-core boot check, and page/dialog renders. Full campaign completion
 has not been re-verified in this repair.
 
-The original v1.0 plan below is historical. It was It is
+The original v1.0 plan below is historical. It was
 tracked on GitHub in the pinned [v1.0 release plan](https://github.com/Rabadakku/yoru/issues/55)
 and the [v1.0 milestone](https://github.com/Rabadakku/yoru/milestone/1). Read
 [AGENTS.md](../AGENTS.md) before contributing, [PRODUCT-GOALS.md](PRODUCT-GOALS.md)

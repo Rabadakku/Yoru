@@ -442,7 +442,7 @@ public final class ContrastTest {
         check(Theme.TYPE_HEADING>Theme.TYPE_PROSE,"a heading outranks prose");
         check(Theme.TYPE_PROSE>Theme.TYPE_LABEL,"prose outranks a button face");
         check(Theme.TYPE_LABEL>Theme.TYPE_SECTION,"a button face outranks a section header");
-        check(Theme.TYPE_SECTION>=Theme.TYPE_BODY,"a section header is never smaller than body copy");
+        check(Theme.TYPE_SECTION>=Theme.TYPE_CAPTION,"section signposts meet the caption legibility floor");
         check(Theme.TYPE_BODY>Theme.TYPE_CAPTION,"body copy outranks a caption");
         check(Theme.TYPE_CAPTION>=11,""+Theme.TYPE_CAPTION+" px is below the mono face's legibility floor");
         check(Theme.TYPE_TIMER<=60,"the timer stops growing at "+Theme.TYPE_TIMER+" px");

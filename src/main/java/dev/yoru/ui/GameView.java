@@ -1,6 +1,5 @@
 package dev.yoru.ui;
 
-import dev.yoru.domain.Model.GameSave;
 import dev.yoru.domain.Model.State;
 import dev.yoru.game.Gen3Pokemon;
 import dev.yoru.game.Gen3Save;
@@ -24,19 +23,32 @@ import java.util.UUID;
  */
 final class GameView {
 
-    private static GameSave source;
-    private static Gen3Save read;
+    enum SaveKind { ABSENT, UNREADABLE, READABLE }
+    record SaveHealth(SaveKind kind, String message, java.time.Instant savedAt) { }
 
     private GameView() { }
 
-    static synchronized Gen3Save save(State state) {
-        var game = state.game();
-        if (game == null) return null;
-        if (game != source) {
-            source = game;
-            try { read = Gen3Save.read(game.bytes()); } catch (IllegalArgumentException e) { read = null; }
-        }
-        return read;
+    // Decode a fresh read model per request: callers cannot mutate a global
+    // cached save, and changing vaults never exposes another vault's records.
+    static Gen3Save save(State state) {
+        if (state.game() == null) return null;
+        try { return Gen3Save.read(state.game().bytes()); }
+        catch (IllegalArgumentException e) { return null; }
+    }
+
+    static SaveHealth health(State state) {
+        if (state.game() == null) return new SaveHealth(SaveKind.ABSENT,
+            "Save once inside the game to show your party here.", null);
+        var save = save(state);
+        if (save == null) return new SaveHealth(SaveKind.UNREADABLE,
+            "Your save is here, but Yoru cannot read it. Export a copy before making changes.", state.game().updatedAt());
+        return new SaveHealth(SaveKind.READABLE,
+            "Saved in your vault", state.game().updatedAt());
+    }
+
+    static boolean readable(Gen3Pokemon mon) {
+        return mon != null && mon.checksumValid() && (mon.flags & 1) == 0
+            && (mon.isEgg() || mon.nationalDex() > 0);
     }
 
     static Progression.Progress progress(State state) {
@@ -48,12 +60,13 @@ final class GameView {
     static Gen3Pokemon lead(State state) {
         var save = save(state);
         if (save == null) return null;
-        for (var mon : save.party()) if (!mon.isEgg() && mon.nationalDex() > 0) return mon;
+        for (var mon : save.party()) if (readable(mon) && !mon.isEgg() && mon.nationalDex() > 0) return mon;
         return null;
     }
 
     /** Its nickname, or its species when it has none. */
     static String name(Gen3Pokemon mon) {
+        if (!readable(mon)) return "Cannot read Pokémon";
         if (mon.isEgg()) return "Egg";
         String species = species(mon);
         String nickname = mon.nickname == null ? "" : mon.nickname.strip();
@@ -66,6 +79,7 @@ final class GameView {
 
     /** "Lv 12 · Treecko ♂" — the species only when a nickname hides it. */
     static String detail(Gen3Pokemon mon) {
+        if (!readable(mon)) return "This occupied slot is preserved. Export a save copy before attempting recovery.";
         if (mon.isEgg()) return "Waiting to hatch";
         var out = new StringBuilder("Lv ").append(mon.level());
         if (!name(mon).equals(species(mon))) out.append("  ·  ").append(species(mon));
