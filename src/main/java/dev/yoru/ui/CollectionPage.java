@@ -173,6 +173,7 @@ final class CollectionPage {
         body.add(screen, BorderLayout.WEST);
         body.add(details, BorderLayout.CENTER);
         describe(details, null);
+        screen.showPartyLead();
         c.add(body);
 
         // The flag outlives the screen: an edit rebuilds the page, and the
@@ -186,7 +187,8 @@ final class CollectionPage {
         });
         if (StorageScreen.wallpaper(0) == null) {
             gap(c, SPACE_SM);
-            c.add(bodyLabel("Box wallpapers come from your own game: run tools/extract-storage-graphics.py against it."));
+            c.add(bodyLabel("Add your game file in Settings to load Pokémon pictures and box backgrounds."));
+            c.add(button("Manage artwork", () -> shell.show("Settings")));
         }
         return c;
     }

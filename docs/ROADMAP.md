@@ -1,5 +1,14 @@
 # Yoru roadmap
 
+## Release candidate 1.0.3
+
+See [release notes](RELEASE-1.0.3.md). The repair branch now includes save
+durability receipts and failed-write retries, unsigned record decoding,
+transactional artwork imports, corrected wallpaper palettes, and initial UI
+readability improvements. Full Collection interaction redesign, conservative
+legacy gift assessment and final decomposition remain open. Historical
+checkpoint notes below are retained with their original scope.
+
 ## Current audit overrides — September 2026
 
 The historical plan below is retained as context, not evidence that the current
