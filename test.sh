@@ -28,6 +28,8 @@ java -ea -cp build/classes dev.yoru.PrivacyTest
 java -ea -cp build/classes dev.yoru.LegacyVaultTest
 java -ea -cp build/classes dev.yoru.persistence.VaultStoreTest
 java -ea -cp build/classes dev.yoru.persistence.PasswordTest
+java -ea -cp build/classes dev.yoru.update.UpdateTest
+java -ea -cp build/classes dev.yoru.update.MacInstallTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.DialogFocusTest
 java -ea -cp build/classes dev.yoru.VaultSwitchTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.VaultUiTest
@@ -63,6 +65,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskCalendarTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.FocusMixTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.StorageTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SaveStatusUiTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.UpdatesUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PackagedArtworkTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ActivityUiTest
 

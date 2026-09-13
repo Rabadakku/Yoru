@@ -1,5 +1,44 @@
 # Development handoff
 
+## 1.0.4 released, and updating from Settings — September 13, 2026
+
+1.0.4 is published from PR #16 (save health, #5) with all three installers. Its
+text is `docs/RELEASE-1.0.4.md`. `release.yml` writes generic notes only when no
+release exists yet, so a release created right after its tag is pushed keeps its
+own notes and still receives the installers when they finish.
+
+Branch `claude/updater`, target 1.0.5: Settings → Updates, which the predecessor
+repository tracked as #69 and never built. `dev.yoru.update` has no Swing:
+
+- `Version` reads `jpackage.app-version`, which the jpackage launcher passes in.
+  It is absent in a source build, and a source build is never replaced.
+- `ReleaseFeed` makes one GET to `releases/latest`, and only when asked.
+- `Updates` maps the platform to its installer: an Apple silicon `.dmg`, a Windows
+  `.msi`, or an amd64 `.deb`.
+- `Download` fetches only Yoru release URLs, streams to `name.part`, and renames
+  it only when both size and the SHA-256 digest GitHub publishes match.
+- `MacInstall` stages the app out of the image and checks it is `dev.yoru` at the
+  expected version. A script then waits for this process, swaps the bundles and
+  reopens, putting the old bundle back if the new one cannot move in.
+
+`UpdatesCard` lives as long as the window, so rebuilding Settings does not lose a
+check or a download. `YoruApp.closeForUpdate` closes the game and the vault as
+quitting does, runs the installer step and exits. It refuses while a game is
+stuck, unlike an ordinary quit.
+
+Watch out: tests compile inside the `dev.yoru` module, because `build/classes`
+holds `module-info`, so a test cannot import `com.sun.net.httpserver`. `UpdateTest`
+serves HTTP from a `java.base` `ServerSocket` instead. `MacInstallTest` builds a
+real disk image with `hdiutil`, never touches /Applications, and skips off macOS.
+
+Not yet exercised on a real install:
+
+- the Windows `msiexec` path
+- a Mac update from one published release to the next
+
+Their first real run is 1.0.5 to the release after it. Copies older than 1.0.5
+have no updater, so 1.0.5 is installed by hand once.
+
 ## Save health — September 13, 2026, #5
 
 Branch `claude/save-read-model`. Codex has stopped; Claude owns the remaining
