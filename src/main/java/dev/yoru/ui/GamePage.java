@@ -7,15 +7,13 @@ import dev.yoru.game.LibretroCore;
 import dev.yoru.game.RetroArchSetup;
 import dev.yoru.game.SpeciesNames;
 import java.awt.BorderLayout;
-import java.awt.FlowLayout;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
-import javax.swing.Box;
 import javax.swing.JButton;
-import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -69,27 +67,36 @@ final class GamePage {
         if (game.problem() != null) { p.add(label(game.problem(), TYPE_BODY, DANGER)); gap(p, SPACE_LG); }
 
         var state = shell.tracker().state();
-        var save = GameView.save(state);
+        var read = GameView.read(state);
+        var save = read.save();
         var hero = card();
         hero.add(sectionHeader("SAVED GAME")); gap(hero, SPACE_MD);
         // 18, not 22: the rule is that a figure earns 22 and a headline does
         // not, and none of these five lines is a number.
-        if (state.game() == null) {
-            hero.add(label("No save yet", TYPE_HEADING, TEXT)); gap(hero, SPACE_SM);
+        JLabel headline;
+        if (read.kind() == GameView.SaveKind.ABSENT) {
+            headline = label("No save yet", TYPE_HEADING, TEXT);
+            hero.add(headline); gap(hero, SPACE_SM);
             hero.add(bodyLabel("Press Play to begin. Once you choose your starter and save in the game, your vault keeps every save it makes."));
-        } else if (save == null) {
-            hero.add(label("A save Yoru cannot read", TYPE_HEADING, GOLD_TEXT)); gap(hero, SPACE_SM);
-            hero.add(bodyLabel(GameView.read(state).detail()));
-        } else if (!save.hasStarter()) {
-            hero.add(label("A new adventure", TYPE_HEADING, TEXT)); gap(hero, SPACE_SM);
+        } else if (read.kind() == GameView.SaveKind.UNREADABLE) {
+            headline = label(read.headline(), TYPE_HEADING, GOLD_TEXT);
+            hero.add(headline); gap(hero, SPACE_SM);
+            hero.add(bodyLabel(read.detail()));
+        } else if (!save.hasStarter() && read.partyCount() == 0) {
+            // The flag alone is not the test: a save with Pokémon in its party
+            // is a game in progress whatever the flag says.
+            headline = label("A new adventure", TYPE_HEADING, TEXT);
+            hero.add(headline); gap(hero, SPACE_SM);
             hero.add(bodyLabel("Choose your starter and save in the game. It becomes your study companion."));
         } else {
             var trainer = save.trainer();
             int badges = save.badges(), minutes = trainer.playTimeMinutes();
-            hero.add(label(trainer.name(), TYPE_HEADING, TEXT)); gap(hero, SPACE_SM);
+            headline = label(trainer.name(), TYPE_HEADING, TEXT);
+            hero.add(headline); gap(hero, SPACE_SM);
             hero.add(label(Theme.plural(badges, "badge") + " · " + save.ownedCount() + " caught · "
                 + Analytics.report(minutes * 60L) + " played" + (save.gameClear() ? " · Hall of Fame" : ""), TYPE_BODY, TEXT));
         }
+        headline.setName("game.saveHeadline");
         if (state.game() != null) {
             gap(hero, SPACE_XS);
             hero.add(label("Saved " + state.game().updatedAt().atZone(ZoneId.systemDefault()).format(SAVED), TYPE_CAPTION, MUTED));
@@ -100,7 +107,8 @@ final class GamePage {
         play.setEnabled(LibretroCore.present(core) && rom != null);
         play.setToolTipText(!LibretroCore.present(core) ? "Choose an emulator core below to play"
             : rom == null ? "Choose a game file below to play" : "Continue from your saved game");
-        var export = button("Export save…", this::exportSave);
+        var export = button("Export save…", () -> SaveExport.export(shell));
+        export.setName("game.export");
         export.setEnabled(state.game() != null);
         // Disabled with the reason on it rather than a button that does nothing.
         export.setToolTipText(state.game() == null ? "There is no save in this vault yet" : "Write a copy of this save somewhere else");
@@ -117,28 +125,6 @@ final class GamePage {
         p.add(rewards());
         gap(p, SPACE_XL);
         p.add(whenYouPlay());
-    }
-
-    /**
-     * A row of controls whose first one starts on the column's left edge.
-     *
-     * {@link Theme#row()} is a {@link FlowLayout} that leaves its {@code
-     * SPACE_MD} gap before the first control as well as between them, so the
-     * button row here began 12 px inside the text above it: the title, the meta
-     * line and the note under the buttons all sat at x=49 and the buttons at
-     * x=61, and the page's left margin zigzagged. This row keeps the gap
-     * between neighbours and none before the first, from the same token, so
-     * every left edge on the page is one vertical line.
-     */
-    private static JPanel flushRow(JComponent... controls) {
-        var p = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, SPACE_XS));
-        p.setAlignmentX(0);
-        p.setOpaque(false);
-        for (var control : controls) {
-            if (p.getComponentCount() > 0) p.add(Box.createHorizontalStrut(SPACE_MD));
-            p.add(control);
-        }
-        return p;
     }
 
     /**
@@ -253,19 +239,6 @@ final class GamePage {
             return;
         final byte[] save = bytes;
         shell.perform(() -> { shell.tracker().replaceGameSave(save); shell.game().sync(); });
-    }
-
-    private void exportSave() {
-        var game = shell.tracker().state().game();
-        if (game == null) return;
-        var rom = GameFiles.rom();
-        var file = Dialogs.saveFile(shell.owner(), "Export game save", (rom == null ? "game" : GameFiles.stem(rom)) + ".sav");
-        if (file == null) return;
-        shell.perform(() -> {
-            Files.write(file, game.bytes());
-            Dialogs.info(shell.owner(), "A copy of your game is saved in " + file.getFileName() + ".\n\n"
-                + "Emulators load a save that sits beside the game file under the same name. RetroArch looks for .srm.");
-        });
     }
 
     private void chooseRom() {
