@@ -79,7 +79,7 @@ final class GamePage {
             hero.add(bodyLabel("Press Play to begin. Once you choose your starter and save in the game, your vault keeps every save it makes."));
         } else if (save == null) {
             hero.add(label("A save Yoru cannot read", TYPE_HEADING, GOLD_TEXT)); gap(hero, SPACE_SM);
-            hero.add(bodyLabel(GameView.health(state).message()));
+            hero.add(bodyLabel(GameView.read(state).detail()));
         } else if (!save.hasStarter()) {
             hero.add(label("A new adventure", TYPE_HEADING, TEXT)); gap(hero, SPACE_SM);
             hero.add(bodyLabel("Choose your starter and save in the game. It becomes your study companion."));

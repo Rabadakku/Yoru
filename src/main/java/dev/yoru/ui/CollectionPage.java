@@ -117,10 +117,10 @@ final class CollectionPage {
 
     private JPanel empty(Gen3Save save) {
         var c = card();
-        var health = GameView.health(shell.tracker().state());
-        c.add(label(health.kind() == GameView.SaveKind.UNREADABLE ? "Your save needs attention" : "No game save yet", TYPE_HEADING, TEXT));
+        var read = GameView.read(shell.tracker().state());
+        c.add(label(read.kind() == GameView.SaveKind.UNREADABLE ? "Your save needs attention" : "No game save yet", TYPE_HEADING, TEXT));
         gap(c, SPACE_SM);
-        c.add(bodyLabel(health.message()));
+        c.add(bodyLabel(read.detail()));
         gap(c, SPACE_LG);
         c.add(button("Open the game", () -> shell.show("Game")));
         return c;
