@@ -85,7 +85,7 @@ public final class BuddyCardTest {
     }
 
     private static BuddyCard card(Tracker tracker,ZoneId zone,Runnable openCollection,Runnable openGame) throws Exception {
-        return new BuddyCard(tracker,zone,()->{},()->{},openCollection,openGame);
+        return new BuddyCard(tracker,zone,openCollection,openGame);
     }
 
     private static JComponent find(Container root,String name) {
@@ -243,7 +243,11 @@ public final class BuddyCardTest {
             check(button(noLead,"Open collection")==null,"and not the collection");
             check(button(withLead,"Open collection")!=null,"a save with a party offers the collection");
             check(button(withLead,"Open the game")==null,"and not the game");
-            check(button(withLead,"Clock in")!=null,"the shortcut does not displace the clock");
+            check(String.valueOf(text(withLead,"buddy.species")).startsWith("Lv ")
+                &&String.valueOf(text(withLead,"buddy.saved")).startsWith("Saved in your vault · "),
+                "the partner gives its level and species, and says the vault holds the save (#9), got "
+                    +text(withLead,"buddy.species")+" / "+text(withLead,"buddy.saved"));
+            check(text(noLead,"buddy.saved")==null&&text(noLead,"buddy.species")==null,"with no save there is nothing to vouch for");
             var shortcut=button(navCard,"Open collection");
             check(shortcut!=null,"the collection shortcut is on the card");
             check(shortcut.getAccessibleContext().getAccessibleName()!=null
@@ -252,11 +256,11 @@ public final class BuddyCardTest {
             shortcut.doClick();
             check("collection".equals(opened[0]),"the collection shortcut navigates, got "+opened[0]);
 
-            // --- the action follows the state --------------------------------
-            check(button(firstRun,"+ Activity")!=null,"a vault with no activities offers to make one");
-            check(button(firstRun,"Clock in")==null,"and does not offer a clock with nothing to clock into");
-            check(button(resting,"Clock in")!=null,"a resting card offers Clock in");
-            check(button(studying,"■  Clock out")!=null,"and a running one offers Clock out");
+            // --- the clock lives on the focus card, not here (#9) ------------
+            // Two Clock in buttons side by side competed for one action.
+            for(var card:List.of(firstRun,resting,studying,withLead))
+                check(button(card,"Clock in")==null&&button(card,"■  Clock out")==null&&button(card,"+ Activity")==null,
+                    "the partner card repeats none of the focus card's actions");
 
             // --- the numbers come from the vault, not from the card ----------
             check(together==1800,"the fixture recorded half an hour, got "+together);
@@ -291,11 +295,11 @@ public final class BuddyCardTest {
             check(new Dimension(150,140).equals(companion.getMinimumSize()),
                 "and never shrinks below the field box's minimum, got "+companion.getMinimumSize());
             var portrait=render(companion,260,168);
-            check(colours(portrait)>=4,theme+" paints the companion with a Dex number ("+colours(portrait)+" colours)");
-            // "?" for no save, "#252" for the lead: two different pictures.
+            check(colours(portrait)>=4,theme+" paints the companion without artwork ("+colours(portrait)+" colours)");
+            // "?" for no save, a plain shape for a lead without artwork: two different pictures.
             var empty=find(card(tracker(now),zone),"buddy.companion");
             check(!same(portrait,render(empty,260,168)),
-                theme+" draws the Dex number where an empty card draws a question mark");
+                theme+" draws a plain shape where an empty card draws a question mark");
         }
         Theme.apply(ThemeId.MIDNIGHT);
 

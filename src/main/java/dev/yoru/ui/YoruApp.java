@@ -509,7 +509,7 @@ public final class YoruApp extends JPanel implements Shell {
         // of that card, inside its padding and on the card title's left edge,
         // rather than a caption floating in the gutter under a shorter card.
         var column=card();
-        buddyCard=new BuddyCard(tracker,zone,this::toggleClock,this::addActivity,
+        buddyCard=new BuddyCard(tracker,zone,
             ()->showPage("Collection"),()->showPage("Game"));
         // Its own height and no more: the slack above the caption belongs to the
         // floor, so the companion never grows a gap between its blocks.
@@ -522,16 +522,6 @@ public final class YoruApp extends JPanel implements Shell {
         return column;
     }
 
-    /** The companion's one action: clock out if timing, otherwise clock in on the last activity used. */
-    private void toggleClock() {
-        if(tracker.active()!=null) { clockOut(); return; }
-        var activities=tracker.state().activities();
-        if(activities.isEmpty()) { addActivity(); return; }
-        var sessions=tracker.state().sessions();
-        UUID last=sessions.isEmpty()?null:sessions.getLast().activityId();
-        UUID id=last!=null&&activities.stream().anyMatch(a->a.id().equals(last))?last:activities.getFirst().id();
-        perform(()->tracker.start(id));
-    }
 
     /** The 52-week heat map, or the first-run state when there is nothing to draw. */
     private JPanel heatCard(LocalDate today) {
