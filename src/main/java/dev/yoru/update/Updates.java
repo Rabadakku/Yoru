@@ -1,9 +1,14 @@
 package dev.yoru.update;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /** Which installer a platform takes from a release, and how Windows runs one. */
 public final class Updates {
@@ -45,5 +50,20 @@ public final class Updates {
      */
     public static void launchWindowsInstaller(Path msi) throws IOException {
         new ProcessBuilder("msiexec", "/i", msi.toString(), "/passive").start();
+    }
+
+    /**
+     * Removes update files that will not be used — a half-staged app, or a work
+     * folder whose update failed — as far as they can be removed. A leftover in
+     * the temporary folder is untidy, not dangerous, so this never throws.
+     */
+    public static void discard(Path root) {
+        if (root == null || !Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return;
+        try (Stream<Path> tree = Files.walk(root)) {
+            tree.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try { Files.deleteIfExists(path); } catch (IOException ignored) { }
+            });
+        } catch (IOException | UncheckedIOException ignored) {
+        }
     }
 }
