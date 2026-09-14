@@ -88,11 +88,15 @@ final class GameController {
         });
     }
     private List<GameDelivery.Outcome> outcomes = List.of();
+    /** The game's encounter tables, kept for this session only (#12). */
+    private final EncounterTables encounters = new EncounterTables();
 
     GameController(Tracker tracker) {
         this.tracker = tracker;
         retry.setRepeats(false);
     }
+
+    EncounterTables encounters() { return encounters; }
 
     /** Who hears about changes: the window showing the game, replaced when the window is rebuilt. */
     void listen(Listener next) { listener = next == null ? new Listener() { } : next; }

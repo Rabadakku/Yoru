@@ -417,7 +417,7 @@ final class CollectionPage {
         var state = shell.tracker().state();
         StudyEncounter.Found found;
         try {
-            found = GameView.nextEncounter(state);
+            found = GameView.nextEncounter(state, shell.game().encounters());
         } catch (Exception e) {
             shell.error(e);
             return;

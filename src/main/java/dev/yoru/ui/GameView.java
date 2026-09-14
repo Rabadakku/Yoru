@@ -5,13 +5,10 @@ import dev.yoru.domain.Model.State;
 import dev.yoru.game.Gen3Pokemon;
 import dev.yoru.game.Gen3Save;
 import dev.yoru.game.Progression;
-import dev.yoru.game.Rom;
 import dev.yoru.game.SpeciesNames;
 import dev.yoru.game.StudyEncounter;
 import dev.yoru.game.StudyGift;
-import dev.yoru.game.WildEncounters;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -140,22 +137,15 @@ final class GameView {
 
     static String nature(Gen3Pokemon mon) { return NATURES[mon.nature()]; }
 
-    private static Path areasFrom;
-    private static List<WildEncounters.Area> areas;
-
-    /** The next study encounter, or null when no game file is set to draw it from. */
-    static StudyEncounter.Found nextEncounter(State state) throws IOException {
+    /**
+     * The next study encounter, or null when no game file is set to draw it from.
+     * The encounter tables come from the session that asks, not from a static
+     * cache here (#12).
+     */
+    static StudyEncounter.Found nextEncounter(State state, EncounterTables tables) throws IOException {
         var rom = GameFiles.rom();
         if (rom == null) return null;
-        return StudyEncounter.roll(state.campaign().nextEncounter(), areas(rom), progress(state));
-    }
-
-    private static synchronized List<WildEncounters.Area> areas(Path rom) throws IOException {
-        if (!rom.equals(areasFrom)) {
-            areas = WildEncounters.read(Rom.load(rom));
-            areasFrom = rom;
-        }
-        return areas;
+        return StudyEncounter.roll(state.campaign().nextEncounter(), tables.areas(rom), progress(state));
     }
 
     /** Whether a reward's Pokémon will be shiny, which depends on the trainer it arrives with. */
