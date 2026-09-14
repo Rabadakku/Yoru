@@ -76,7 +76,7 @@ public final class ScheduleUiTest {
         var editor=new WeeklyTemplate(tracker,()->{});
         check(button(editor,"repeat.add")!=null,"The editor offers a way to add a repeating block");
         check(field(editor,"repeat.day",JComboBox.class)!=null,"The editor offers a weekday");
-        check(field(editor,"repeat.from",JTextField.class).getText().equals("09:00"),"It opens on a sensible default time");
+        check(field(editor,"repeat.from",JTextField.class).getText().equals("9:00 AM"),"It opens on a sensible default time");
         // Four unnamed controls in a row are the same control to a screen reader
         // until each one says what it is.
         check("Repeat day".equals(field(editor,"repeat.day",JComboBox.class)
@@ -89,15 +89,32 @@ public final class ScheduleUiTest {
                 .getAccessibleContext().getAccessibleName()),"The activity picker names itself");
 
         field(editor,"repeat.day",JComboBox.class).setSelectedItem(DayOfWeek.TUESDAY);
-        field(editor,"repeat.from",JTextField.class).setText("11:00");
-        field(editor,"repeat.to",JTextField.class).setText("12:30");
+        field(editor,"repeat.from",JTextField.class).setText("11am");
+        field(editor,"repeat.to",JTextField.class).setText("12:30p");
         button(editor,"repeat.add").doClick();
         check(tracker.state().recurring().size()==1,"Adding reaches the tracker");
         var added=tracker.state().recurring().getFirst();
         check(added.dayOfWeek()==DayOfWeek.TUESDAY,"The chosen weekday is stored");
-        check(added.startTime().equals(LocalTime.of(11,0)),"The typed start time is stored");
-        check(added.endTime().equals(LocalTime.of(12,30)),"The typed end time is stored");
+        check(added.startTime().equals(LocalTime.of(11,0)),"The typed start time is stored, read forgivingly");
+        check(added.endTime().equals(LocalTime.of(12,30)),"The typed end time is stored, read forgivingly");
         check(button(editor,"repeat.remove."+added.id())!=null,"The new entry appears with a remove control");
+        check(button(editor,"repeat.edit."+added.id())!=null,"and an edit control (#21)");
+
+        // The edit dialog is modal; what it saves is driven through the same call.
+        var english=tracker.state().activities().get(1);
+        WeeklyTemplate.save(tracker,added.id(),english,DayOfWeek.WEDNESDAY,"1pm","2:15 PM");
+        var edited=tracker.state().recurring().getFirst();
+        check(edited.id().equals(added.id()),"Editing keeps the entry's identity");
+        check(edited.dayOfWeek()==DayOfWeek.WEDNESDAY&&edited.startTime().equals(LocalTime.of(13,0))
+            &&edited.endTime().equals(LocalTime.of(14,15))&&edited.activityId().equals(english.id()),
+            "and moves its day, times and activity");
+        try {
+            WeeklyTemplate.save(tracker,added.id(),english,DayOfWeek.WEDNESDAY,"soon","2pm");
+            throw new AssertionError("an unreadable time was saved");
+        } catch(IllegalArgumentException expected) {
+            check(expected.getMessage().startsWith("Start time: "),"An unreadable time names which one: "+expected.getMessage());
+        }
+        check(tracker.state().recurring().getFirst().equals(edited),"and changes nothing");
 
         button(editor,"repeat.remove."+added.id()).doClick();
         check(tracker.state().recurring().isEmpty(),"Removing reaches the tracker");
