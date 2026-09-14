@@ -156,6 +156,27 @@ public final class ArtworkTest {
             check(installed.scene()==7&&installed.cameos()==1,"an installed scene and its visitor are told apart: "+installed);
             check(installed.categories().get(3).describe().equals("Ready · 7 of 7 sheets · 1 route visitor"),
                 "so a complete scene reads Ready: "+installed.categories().get(3).describe());
+
+            // One budget for an import and every archive inside it (#6). Each of
+            // these zips is well under the 20,000-file limit and imports alone;
+            // three inside one zip pass it together, and are refused whole.
+            Path crowded=dir.resolve("crowded.zip");
+            try(var out=new ZipOutputStream(Files.newOutputStream(crowded))) {
+                for(int i=0;i<7000;i++) { out.putNextEntry(new ZipEntry("notes/"+i+".txt")); out.closeEntry(); }
+                out.putNextEntry(new ZipEntry("5.png")); out.write(image()); out.closeEntry();
+            }
+            check(ArtworkLibrary.install(crowded).skipped()==7000,"one crowded zip on its own imports its one picture");
+            Path nest=dir.resolve("nest.zip");
+            byte[] inner=Files.readAllBytes(crowded);
+            try(var out=new ZipOutputStream(Files.newOutputStream(nest))) {
+                for(int i=0;i<3;i++) { out.putNextEntry(new ZipEntry("part-"+i+".zip")); out.write(inner); out.closeEntry(); }
+            }
+            Path beforeNest=ArtworkLibrary.root();
+            try { ArtworkLibrary.install(nest);throw new AssertionError("nested archives reset the file budget"); }
+            catch(java.io.IOException expected) {
+                check(expected.getMessage().contains("too many files"),"three together pass the limit: "+expected.getMessage());
+            }
+            check(ArtworkLibrary.root().equals(beforeNest),"and the library is left as it was");
         } finally {
             System.setProperty("user.home",home);
             try(var walk=Files.walk(sandbox)) {
