@@ -668,6 +668,7 @@ public final class Tracker {
 
     /** Tasks keep everything except the tag; deleting a tag never deletes work. */
     public void deleteTag(UUID id) throws IOException {
+        if(state.tags().stream().noneMatch(t->t.id().equals(id)))throw new IllegalArgumentException("Tag no longer exists.");
         var tasks=state.tasks().stream().map(t->id.equals(t.tagId())
             ? new Task(t.id(),t.activityId(),null,t.title(),t.notes(),t.due(),t.status(),t.source(),t.createdAt(),t.order(),t.plannedFor())
             : t).toList();

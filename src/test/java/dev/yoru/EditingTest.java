@@ -78,6 +78,9 @@ public final class EditingTest {
         tracker.deleteBlock(block);
         rejects(()->tracker.deleteBlock(block),"deleting a block twice is refused");
         rejects(()->tracker.deleteBlock(UUID.randomUUID()),"deleting a block that never existed is refused");
+        var tag=tracker.addTag("Invented tag",0x336699);
+        tracker.deleteTag(tag.id());
+        rejects(()->tracker.deleteTag(tag.id()),"deleting a tag twice is refused");
 
         // Every period of a time-since tracker, not only the current one.
         var t0=clock.now.minusSeconds(100_000);
