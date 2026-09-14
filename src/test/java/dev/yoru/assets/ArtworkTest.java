@@ -93,6 +93,37 @@ public final class ArtworkTest {
             check(!ArtworkLibrary.root().equals(active),"successful import publishes a new generation");
             check(ArtworkLibrary.survey().species()==3,"incremental import preserves existing images");
             check(Files.exists(active.resolve("1.png")),"previous generation remains recoverable");
+
+            // Retention (#6): the active generation and the one it replaced stay; older ones go.
+            Path second=ArtworkLibrary.root();
+            Path generations=second.getParent();
+            Path unrelated=Files.createDirectories(generations.resolve("keep-me"));
+            Path fifth=dir.resolve("5.png");Files.write(fifth,image());
+            var before=ArtworkLibrary.survey();
+            var third=ArtworkLibrary.install(fifth);
+            check(third.changesSince(before).equals("Added 1 Pokémon picture."),"an import says what it added: "+third.changesSince(before));
+            try(var entries=Files.list(generations)) {
+                var names=entries.map(p->p.getFileName().toString()).sorted().toList();
+                check(names.size()==3,"the active generation, the one it replaced and an unrelated folder remain: "+names);
+            }
+            check(Files.isDirectory(second)&&Files.exists(second.resolve("4.png")),"the replaced generation stays as the rollback");
+            check(!Files.exists(active),"an older generation is removed, so imports stop piling up full copies");
+            check(Files.isDirectory(unrelated),"a folder not named like a generation is never touched");
+            var unchanged=ArtworkLibrary.survey();
+            var again=ArtworkLibrary.install(fifth);
+            check(again.changesSince(unchanged).startsWith("Updated 1 file"),"re-importing a file already there adds nothing: "+again.changesSince(unchanged));
+
+            var categories=ArtworkLibrary.survey().categories();
+            check(categories.stream().map(ArtworkLibrary.Category::key).toList().equals(java.util.List.of("game","pokemon","backgrounds","scenery")),
+                "four kinds of artwork, in order");
+            check(categories.get(0).readiness()==ArtworkLibrary.Readiness.MISSING&&categories.get(0).describe().equals("Missing"),"no game file is missing");
+            check(categories.get(1).readiness()==ArtworkLibrary.Readiness.PARTIAL&&categories.get(1).describe().equals("Partial · 4 of 386 normal, 1 shiny"),
+                "a few sprites are partial, with counts: "+categories.get(1).describe());
+            check(categories.get(2).readiness()==ArtworkLibrary.Readiness.MISSING,"no box backgrounds are missing");
+            check(categories.get(3).readiness()==ArtworkLibrary.Readiness.PARTIAL&&categories.get(3).describe().equals("Partial · 1 of 10 sheets"),
+                "one scenery sheet is partial: "+categories.get(3).describe());
+            var complete=new ArtworkLibrary.Report(386,386,10,0,1,16,0,java.util.List.of());
+            check(complete.categories().stream().allMatch(c->c.readiness()==ArtworkLibrary.Readiness.READY),"a complete library is ready everywhere");
         } finally {
             System.setProperty("user.home",home);
             try(var walk=Files.walk(sandbox)) {
