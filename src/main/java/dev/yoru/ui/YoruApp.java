@@ -612,7 +612,7 @@ public final class YoruApp extends JPanel implements Shell {
             remove.setToolTipText(timing?"Clock out before deleting this activity":"Delete this activity");
             ActivityManager.activityRow(table,row++,label(a.name(),TYPE_PROSE,TEXT),
                 label(Analytics.duration(sec)+(a.targetMinutes()==0?" · open-ended":" · target "+a.targetMinutes()+"m"),TYPE_BODY,MUTED),
-                rename,remove);
+                ActivityManager.targetButton(this,tracker,a,()->showPage("Today")),rename,remove);
         }
         categories.add(table);
         return categories;

@@ -103,10 +103,10 @@ public final class ScheduleUiTest {
         // The edit dialog is modal; what it saves is driven through the same call.
         var english=tracker.state().activities().get(1);
         WeeklyTemplate.save(tracker,added.id(),english,DayOfWeek.WEDNESDAY,"1pm","2:15 PM");
-        var edited=tracker.state().recurring().getFirst();
-        check(edited.id().equals(added.id()),"Editing keeps the entry's identity");
-        check(edited.dayOfWeek()==DayOfWeek.WEDNESDAY&&edited.startTime().equals(LocalTime.of(13,0))
-            &&edited.endTime().equals(LocalTime.of(14,15))&&edited.activityId().equals(english.id()),
+        var rescheduled=tracker.state().recurring().getFirst();
+        check(rescheduled.id().equals(added.id()),"Editing keeps the entry's identity");
+        check(rescheduled.dayOfWeek()==DayOfWeek.WEDNESDAY&&rescheduled.startTime().equals(LocalTime.of(13,0))
+            &&rescheduled.endTime().equals(LocalTime.of(14,15))&&rescheduled.activityId().equals(english.id()),
             "and moves its day, times and activity");
         try {
             WeeklyTemplate.save(tracker,added.id(),english,DayOfWeek.WEDNESDAY,"soon","2pm");
@@ -114,7 +114,7 @@ public final class ScheduleUiTest {
         } catch(IllegalArgumentException expected) {
             check(expected.getMessage().startsWith("Start time: "),"An unreadable time names which one: "+expected.getMessage());
         }
-        check(tracker.state().recurring().getFirst().equals(edited),"and changes nothing");
+        check(tracker.state().recurring().getFirst().equals(rescheduled),"and changes nothing");
 
         button(editor,"repeat.remove."+added.id()).doClick();
         check(tracker.state().recurring().isEmpty(),"Removing reaches the tracker");
