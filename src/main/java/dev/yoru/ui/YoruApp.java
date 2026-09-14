@@ -612,7 +612,7 @@ public final class YoruApp extends JPanel implements Shell {
             remove.setToolTipText(timing?"Clock out before deleting this activity":"Delete this activity");
             ActivityManager.activityRow(table,row++,label(a.name(),TYPE_PROSE,TEXT),
                 label(Analytics.duration(sec)+(a.targetMinutes()==0?" · open-ended":" · target "+a.targetMinutes()+"m"),TYPE_BODY,MUTED),
-                rename,remove);
+                ActivityManager.targetButton(this,tracker,a,()->showPage("Today")),rename,remove);
         }
         categories.add(table);
         return categories;
@@ -1173,7 +1173,7 @@ public final class YoruApp extends JPanel implements Shell {
         var deleteSession=button("Delete selected session",()-> {
             int index=t.getSelectedRow();
             if(index>=0&&Dialogs.confirmDestructive(this,"Delete this recorded session.","Delete session","Delete"))
-                perform(()->tracker.deleteSession(sessions.get(index).id()));
+                perform(()->tracker.deleteSession(sessions.get(t.convertRowIndexToModel(index)).id()));
         });
         editSession.setEnabled(false); deleteSession.setEnabled(false);
         if(t==null) {
@@ -1798,13 +1798,14 @@ public final class YoruApp extends JPanel implements Shell {
         artwork.add(bodyLabel("Add your Emerald game to extract all 386 normal and shiny sprites, or import your own PNG artwork."));
         gap(artwork,SPACE_MD);
         var survey=SpriteAssets.survey();
-        artwork.add(label(survey.summary(),TYPE_BODY,survey.empty()?MUTED:TEXT));
+        var currentGame=GameFiles.rom();
+        artwork.add(ArtworkStatus.rows(survey,currentGame!=null,this::importArtwork,
+            ()->{if(GameFiles.rom()!=null)installArtwork(GameFiles.rom().toFile());}));
         gap(artwork,SPACE_MD);
         artwork.add(bodyLabel("Drop your .gba, folder or .zip anywhere on this window, or:"));
         gap(artwork,SPACE_SM);
         var artworkActions=row();
         artworkActions.add(button("Add artwork…",this::importArtwork));
-        var currentGame=GameFiles.rom();
         if(currentGame!=null)artworkActions.add(button("Extract from current game",()->installArtwork(currentGame.toFile())));
         artworkActions.add(button("Open library folder",()->{
             try {

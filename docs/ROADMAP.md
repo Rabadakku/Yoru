@@ -1,5 +1,23 @@
 # Yoru roadmap
 
+## Release candidate 1.0.9 — September 14, 2026
+
+Built on `claude/open-issues` from v1.0.8. See the [release notes](RELEASE-1.0.9.md);
+each issue's handoff comment records its commits, tests and limits.
+
+- **Finished:** #20 updater command timeouts; #21 editing audit ([matrix](EDITING-AUDIT.md))
+  and the gaps it found; and the owner's new #24, Notion-style date and time
+  entry, and #25, the Tasks page as a table.
+- **Progress, still open for native checks:** #6 per-category artwork status,
+  repair and generation retention; #7 a close held up by a failed vault write
+  now finishes once the retry saves, and start refuses a mismatched save; #10
+  isolation guard, independent save-section oracle and render inventory. None
+  of these was re-checked against a real game core.
+- **Not started in this release:** #9 visual system, #8 Collection redesign, #3
+  and #23 illustrated companion art, #12 cleanup (still last). The Waifu theme
+  split and three unregistered portraits sit unmerged on `codex/audit-recovery`
+  (7b26473, 221ccbe).
+
 ## Released 1.0.3 — September 13, 2026
 
 [Version 1.0.3](https://github.com/Rabadakku/Yoru/releases/tag/v1.0.3) is

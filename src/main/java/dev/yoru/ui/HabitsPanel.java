@@ -149,29 +149,72 @@ final class HabitsPanel {
         });
         edit.setToolTipText("Correct when this period began");
         buttons.add(edit);
-        var history=button("History",()-> {
-            var rows=stack();
-            var starts=habit.starts();
-            for(int i=0;i<starts.size();i++) {
-                var start=starts.get(i);
-                var end=i+1<starts.size()?starts.get(i+1):Instant.now();
-                var line=row();
-                line.add(label(start.atZone(zone).toLocalDateTime().format(WHEN),TYPE_BODY,TEXT));
-                line.add(label(Analytics.report(Duration.between(start,end).getSeconds()),TYPE_BODY,MUTED));
-                if(i==starts.size()-1)line.add(label("current",TYPE_CAPTION,CYAN));
-                rows.add(line);
-            }
-            // A bounded, scrolling window on the rows: a long history used to
-            // hand JOptionPane an unbounded stack, which grew the dialog past
-            // the screen and put OK out of reach.
-            var scroll=new JScrollPane(rows);
-            scroll.setBorder(controlBorder(LINE));
-            scroll.setPreferredSize(new Dimension(560,220));
-            Dialogs.info(card,"Your history",scroll);
-        });
+        var history=button("History",()->Dialogs.info(card,"Your history",history(tracker,habit.id(),zone,refresh)));
         history.setToolTipText("Every period this tracker has recorded");
         buttons.add(history);
         card.add(buttons);
+    }
+
+    /**
+     * Every period a time-since tracker has recorded, each with Edit and Delete (#21).
+     *
+     * Only the current period's start could be corrected before, so a mistyped
+     * restart further back stayed wrong for good. Periods are addressed by the
+     * instant they start, so an edit from a history that has since changed is
+     * refused rather than landing on another period, and the list rebuilds
+     * itself after each change in the dialog that is still open.
+     *
+     * A bounded, scrolling window on the rows: a long history used to hand
+     * JOptionPane an unbounded stack, which grew the dialog past the screen and
+     * put OK out of reach.
+     */
+    static JComponent history(Tracker tracker,java.util.UUID habitId,ZoneId zone,Runnable refresh) {
+        var rows=stack();
+        var scroll=new JScrollPane(rows);
+        scroll.setBorder(controlBorder(LINE));
+        scroll.setPreferredSize(new Dimension(640,240));
+        Runnable[] rebuild=new Runnable[1];
+        rebuild[0]=()-> {
+            rows.removeAll();
+            var habit=tracker.state().habits().stream().filter(h->h.id().equals(habitId)).findFirst().orElse(null);
+            if(habit==null) rows.add(bodyLabel("This tracker no longer exists."));
+            else {
+                var starts=habit.starts();
+                for(int i=0;i<starts.size();i++) {
+                    var start=starts.get(i);
+                    var end=i+1<starts.size()?starts.get(i+1):Instant.now();
+                    String when=start.atZone(zone).toLocalDateTime().format(WHEN);
+                    var line=row();
+                    line.add(label(when,TYPE_BODY,TEXT));
+                    line.add(label(Analytics.report(Duration.between(start,end).getSeconds()),TYPE_BODY,MUTED));
+                    if(i==starts.size()-1)line.add(label("current",TYPE_CAPTION,CYAN));
+                    var edit=button("Edit",()-> {
+                        var input=new DateTimeField(start,zone,"Start");
+                        while(Dialogs.confirm(rows,input,"Edit period start","Save")) {
+                            try{tracker.editHabitPeriod(habitId,start,input.value());refresh.run();rebuild[0].run();return;}
+                            catch(Exception error){Dialogs.error(rows,"Check date",error.getMessage());}
+                        }
+                    });
+                    edit.setName("habit.period.edit."+start.toEpochMilli());
+                    edit.getAccessibleContext().setAccessibleName("Edit the period starting "+when);
+                    var delete=button("Delete",()-> {
+                        if(!Dialogs.confirmDestructive(rows,"Delete the period starting "+when+"? The time it covered joins its neighbour. A vault backup is kept first.",
+                            "Delete period","Delete")) return;
+                        try{tracker.deleteHabitPeriod(habitId,start);refresh.run();rebuild[0].run();}
+                        catch(Exception error){Dialogs.error(rows,error.getMessage());}
+                    });
+                    delete.setName("habit.period.delete."+start.toEpochMilli());
+                    delete.getAccessibleContext().setAccessibleName("Delete the period starting "+when);
+                    delete.setEnabled(starts.size()>1);
+                    delete.setToolTipText(starts.size()>1?"Join this period to its neighbour":"A tracker keeps at least one period");
+                    line.add(edit);line.add(delete);
+                    rows.add(line);
+                }
+            }
+            rows.revalidate();rows.repaint();
+        };
+        rebuild[0].run();
+        return scroll;
     }
 
     private static void create(Tracker tracker,Runnable refresh,HabitKind kind,Component owner) {

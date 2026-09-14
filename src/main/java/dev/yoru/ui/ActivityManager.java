@@ -6,6 +6,7 @@ import dev.yoru.domain.Model;
 import dev.yoru.domain.Model.Activity;
 import javax.swing.*;
 import java.awt.*;
+import java.util.Locale;
 import java.util.UUID;
 import static dev.yoru.ui.Theme.*;
 
@@ -68,12 +69,46 @@ final class ActivityManager {
         tracker.removeActivity(id, keepTime);
     }
 
+    /** The vault-side target change, so the dialog and a test drive the same call. */
+    static void retarget(Tracker tracker, UUID id, int minutes) throws Exception {
+        tracker.retargetActivity(id, minutes);
+    }
+
+    /** Reads a typed daily target: whole minutes, with or without "min", blank for none. */
+    static int minutes(String typed) {
+        String text = typed.strip().toLowerCase(Locale.ROOT).replaceAll("\\s*(minutes?|mins?|m)$", "");
+        if (text.isEmpty()) return 0;
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException unreadable) {
+            throw new IllegalArgumentException("Type the daily target in minutes, like 45, or 0 for none.");
+        }
+    }
+
     /** Rename one activity, by identity. */
     static void rename(Component parent, Tracker tracker, Activity activity, Runnable changed) {
         String name = Dialogs.input(parent, "Rename \"" + activity.name()
             + "\". Every session, block, repeat and task stays attached.", "Rename activity");
         if (name == null) return;
         apply(parent, () -> rename(tracker, activity.id(), name), changed);
+    }
+
+    /** Change one activity's daily target, by identity (#21). */
+    static void retarget(Component parent, Tracker tracker, Activity activity, Runnable changed) {
+        String typed = Dialogs.input(parent, "Daily target for \"" + activity.name()
+            + "\", in minutes. 0 means none.", "Daily target", String.valueOf(activity.targetMinutes()));
+        if (typed == null) return;
+        apply(parent, () -> retarget(tracker, activity.id(), minutes(typed)), changed);
+    }
+
+    /** The control that opens {@link #retarget(Component, Tracker, Activity, Runnable)}, named for the activity. */
+    static JButton targetButton(Component parent, Tracker tracker, Activity activity, Runnable changed) {
+        var target = button("Target", () -> retarget(parent, tracker, activity, changed));
+        target.setName("activity.target." + activity.id());
+        target.setToolTipText(activity.targetMinutes() == 0 ? "No daily target · set one"
+            : "Daily target " + activity.targetMinutes() + " min · change it");
+        target.getAccessibleContext().setAccessibleName("Daily target for " + activity.name());
+        return target;
     }
 
     /** Remove one activity, asking first what should happen to its recorded time. */
@@ -141,20 +176,19 @@ final class ActivityManager {
     }
 
     /**
-     * One activity's row in that grid: name, figures, Rename, Delete.
+     * One activity's row in that grid: name, figures, then its controls
+     * (Target, Rename, Delete).
      *
      * The figures take the slack ({@code weightx 1, fill HORIZONTAL}), which is
-     * what holds the two controls against the row's right edge on every row, and
-     * both controls are given the wider of their labels plus {@code PAD_H} a
-     * side, so the column is one width whether the label is "Rename" or
-     * "Delete". The height is left alone, so the buttons stay on the control
-     * ladder.
+     * what holds the controls against the row's right edge on every row, and
+     * every control is given the widest of their labels, so each column is one
+     * width whatever its label. The height is left alone, so the buttons stay
+     * on the control ladder.
      */
-    static void activityRow(JPanel table, int row, JComponent name, JComponent detail,
-                            JComponent rename, JComponent remove) {
-        int width = Math.max(rename.getPreferredSize().width, remove.getPreferredSize().width);
-        rename.setPreferredSize(new Dimension(width, rename.getPreferredSize().height));
-        remove.setPreferredSize(new Dimension(width, remove.getPreferredSize().height));
+    static void activityRow(JPanel table, int row, JComponent name, JComponent detail, JComponent... controls) {
+        int width = 0;
+        for (var control : controls) width = Math.max(width, control.getPreferredSize().width);
+        for (var control : controls) control.setPreferredSize(new Dimension(width, control.getPreferredSize().height));
         var cell = new GridBagConstraints();
         cell.gridy = row;
         cell.anchor = GridBagConstraints.WEST;
@@ -169,11 +203,11 @@ final class ActivityManager {
         table.add(detail, cell);
         cell.weightx = 0;
         cell.fill = GridBagConstraints.NONE;
-        cell.gridx = 2;
-        table.add(rename, cell);
-        cell.gridx = 3;
-        cell.insets = new Insets(SPACE_XS, 0, SPACE_XS, 0);
-        table.add(remove, cell);
+        for (int i = 0; i < controls.length; i++) {
+            cell.gridx = 2 + i;
+            if (i == controls.length - 1) cell.insets = new Insets(SPACE_XS, 0, SPACE_XS, 0);
+            table.add(controls[i], cell);
+        }
     }
 
     /**
@@ -210,7 +244,7 @@ final class ActivityManager {
             boolean timing = !canRemove(tracker, activity.id());
             remove.setEnabled(!timing);
             remove.setToolTipText(timing ? "Clock out before deleting this activity" : "Delete this activity");
-            activityRow(table, row++, name, recorded, rename, remove);
+            activityRow(table, row++, name, recorded, targetButton(parent, tracker, activity, changed), rename, remove);
         }
         box.add(table);
         return box;

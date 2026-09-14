@@ -49,7 +49,7 @@ public final class PortableVaultTest {
         var pending=new Reward(UUID.randomUUID(),252,5,Instant.parse("2026-09-01T08:00:00Z"),null);
         var delivered=new Reward(UUID.randomUUID(),4,7,Instant.parse("2026-09-02T08:00:00Z"),
             Instant.parse("2026-09-02T09:00:00Z"));
-        var tag=new Tag(UUID.randomUUID(),"CS 240",0x90D8DA);
+        var tag=new Tag(UUID.randomUUID(),"Reading",0x90D8DA);
         return new State(
             List.of(study,japanese),
             List.of(new Session(UUID.randomUUID(),study.id(),Instant.parse("2026-09-03T09:00:00Z"),
@@ -66,13 +66,13 @@ public final class PortableVaultTest {
                         LocalTime.of(14,15),LocalTime.of(15,45))),
             List.of(new Task(UUID.randomUUID(),study.id(),tag.id(),"Read chapter 4",
                         "Worked examples\nsecond line, with \"quotes\" and 日本語",
-                        LocalDate.parse("2026-09-10"),TaskStatus.DOING,"syllabus.pdf",
+                        LocalDate.parse("2026-09-10"),TaskStatus.DOING,"reading-list.txt",
                         Instant.parse("2026-09-01T12:00:00Z"),3),
                     new Task(UUID.randomUUID(),null,null,"Order textbook","",null,
                         TaskStatus.DONE,"",Instant.parse("2026-09-01T12:00:01Z"),7),
                     // A task planned for a different day than it is due (#25).
                     new Task(UUID.randomUUID(),study.id(),tag.id(),"MLA citation quiz","",
-                        LocalDate.parse("2026-09-11"),TaskStatus.TODO,"syllabus.pdf",
+                        LocalDate.parse("2026-09-11"),TaskStatus.TODO,"reading-list.txt",
                         Instant.parse("2026-09-01T12:00:02Z"),9,LocalDate.parse("2026-09-10"))),
             List.of(new Habit(UUID.randomUUID(),"Evening reset",HabitKind.DAILY,"America/New_York",
                         Set.of(LocalDate.parse("2026-09-01"),LocalDate.parse("2026-09-03")),List.of()),

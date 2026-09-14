@@ -57,14 +57,67 @@ public final class ArtworkLibrary {
             this(species, shiny, sheets, skipped, games, 0, 0, List.of());
         }
         public boolean empty() { return species == 0 && shiny == 0 && sheets == 0 && wallpapers == 0; }
-        public String summary() {
-            String summary = species + "/" + SPECIES + " Pokémon pictures · " + shiny + " shiny · "
+        /** The library's counts, and nothing about any one import. */
+        public String totals() {
+            return species + "/" + SPECIES + " Pokémon pictures · " + shiny + " shiny · "
                 + wallpapers + "/16 box backgrounds · " + sheets + " scenery sheets";
+        }
+        public String summary() {
+            String summary = totals();
             if (imported > 0) summary = imported + " files imported. " + summary;
             if (empty()) summary = "No artwork installed. Pokémon names, levels and dex numbers remain available.";
             if (skipped > 0) summary += " · " + skipped + " files skipped";
             if (!warnings.isEmpty()) summary += "\n" + String.join("\n", warnings);
             return summary;
+        }
+
+        /**
+         * What an import added, against the library before it (#6).
+         *
+         * The old confirmation counted the whole library as if this import had
+         * brought all of it, so adding one sprite read the same as adding 772.
+         */
+        public String changesSince(Report before) {
+            var added = new java.util.ArrayList<String>();
+            if (games > before.games) added.add("the game file");
+            if (species > before.species) added.add(count(species - before.species, "Pokémon picture"));
+            if (shiny > before.shiny) added.add(count(shiny - before.shiny, "shiny picture"));
+            if (wallpapers > before.wallpapers) added.add(count(wallpapers - before.wallpapers, "box background"));
+            if (sheets > before.sheets) added.add(count(sheets - before.sheets, "scenery sheet"));
+            if (!added.isEmpty()) return "Added " + String.join(", ", added) + ".";
+            return imported > 0 ? "Updated " + count(imported, "file") + "; nothing new was added."
+                : "Nothing new was added: your library already had everything in that import.";
+        }
+
+        /** Settings' four rows, in the order a player needs them. */
+        public List<Category> categories() {
+            return List.of(
+                new Category("game", "Game file", Math.min(games, 1), 1, games > 0 ? "in your library" : ""),
+                new Category("pokemon", "Pokémon pictures", species + shiny, SPECIES * 2,
+                    species + " of " + SPECIES + " normal, " + shiny + " shiny"),
+                new Category("backgrounds", "Box backgrounds", wallpapers, WALLPAPERS, wallpapers + " of " + WALLPAPERS),
+                new Category("scenery", "Study scenery", sheets, SHEETS.size(), sheets + " of " + SHEETS.size() + " sheets"));
+        }
+
+        private static String count(int n, String noun) { return n + " " + noun + (n == 1 ? "" : "s"); }
+    }
+
+    static final int WALLPAPERS = 16;
+
+    /** How complete one kind of artwork is. */
+    public enum Readiness { READY, PARTIAL, MISSING }
+
+    /** One kind of artwork: how much of it is installed, out of how much there is. */
+    public record Category(String key, String name, int found, int expected, String detail) {
+        public Readiness readiness() {
+            return found >= expected ? Readiness.READY : found == 0 ? Readiness.MISSING : Readiness.PARTIAL;
+        }
+        public String describe() {
+            return switch (readiness()) {
+                case READY -> detail.isEmpty() ? "Ready" : "Ready · " + detail;
+                case PARTIAL -> "Partial · " + detail;
+                case MISSING -> "Missing";
+            };
         }
     }
 
@@ -150,12 +203,35 @@ public final class ArtworkLibrary {
             force(pointer);
             Files.move(pointer, base().resolve("current"), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             published = true;
+            prune(generations, generation, previous);
             return new Report(found.species(), found.shiny(), found.sheets(), skipped[0], found.games(),
                 found.wallpapers(), budget.imported, budget.warnings);
         } finally {
             Files.deleteIfExists(pointer);
             if (!published) deleteTree(stage);
         }
+    }
+
+    /**
+     * Keeps the generation just published and the one it replaced; removes the rest (#6).
+     *
+     * Every import copies the whole library forward, the game file included, so
+     * each one used to leave another full copy behind for good. The replaced
+     * generation stays as the one-step rollback. Anything older goes, and so does
+     * a staging folder a crashed import left. Only folders named like a
+     * generation are touched, and one that cannot be removed now is left for the
+     * next import rather than failing this one, which is already published.
+     */
+    static void prune(Path generations, String active, Path previous) {
+        String replaced = previous != null && generations.equals(previous.getParent())
+            ? previous.getFileName().toString() : null;
+        try (var entries = Files.list(generations)) {
+            for (Path entry : entries.toList()) {
+                String name = entry.getFileName().toString();
+                if (!name.matches("[a-f0-9-]{36}") || name.equals(active) || name.equals(replaced)) continue;
+                try { deleteTree(entry); } catch (IOException leftForNextTime) { }
+            }
+        } catch (IOException leftForNextTime) { }
     }
 
     private static void force(Path file) throws IOException {
