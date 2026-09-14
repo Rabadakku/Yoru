@@ -12,6 +12,8 @@ java() {
 }
 find src/test/java -name '*.java' > build/tests.txt
 javac --release 22 -encoding UTF-8 -cp build/classes -d build/classes @build/tests.txt
+# First, so a wrapper that stopped isolating fails before any test can touch the machine.
+java -ea -cp build/classes dev.yoru.ui.IsolationTest
 java -ea -cp build/classes dev.yoru.CoreTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.UiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ExpansionTest
@@ -42,6 +44,7 @@ java -ea -cp build/classes dev.yoru.game.Gen3RecordOracleTest
 java -ea -cp build/classes dev.yoru.game.Gen3FormatTest
 java -ea -cp build/classes dev.yoru.game.Gen3SaveTest
 java -ea -cp build/classes dev.yoru.game.Gen3SaveReasonsTest
+java -ea -cp build/classes dev.yoru.game.Gen3SectionOracleTest
 java -ea -cp build/classes dev.yoru.game.ExperienceTest
 java -ea -cp build/classes dev.yoru.game.EmulationLoopTest
 java -ea -cp build/classes dev.yoru.game.SessionHandleTest
@@ -86,6 +89,7 @@ java -ea -cp build/classes dev.yoru.importer.NotionTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.NotionImportTest
 
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.RouteCameoTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PreviewInventoryTest
 
 # The packaged app runs as a named module (jpackage --module dev.yoru), where the
 # custom combo/checkbox/slider UI delegates are instantiated reflectively by

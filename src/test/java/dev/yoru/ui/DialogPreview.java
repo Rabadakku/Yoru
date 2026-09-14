@@ -108,8 +108,8 @@ public final class DialogPreview {
                     public void close() { }
                 };
                 var tracker = new Tracker(memory, Clock.systemUTC());
-                tracker.addTag("CS 240", 0x90D8DA);
-                tracker.addTag("JPN 101", 0xE8B24C);
+                tracker.addTag("Reading", 0x90D8DA);
+                tracker.addTag("Language", 0xE8B24C);
                 tracker.addTag("Reading", 0xA98BD4);
                 render(out, "tags", new TagEditor(tracker, () -> { }), new String[]{"Done"});
 

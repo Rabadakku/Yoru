@@ -129,10 +129,10 @@ public final class TaskBoardTest {
         var today=LocalDate.now();
         var now=Instant.now();
 
-        var cs=tracker.addTag("CS 240",0x90D8DA);
-        var jpn=tracker.addTag("JPN 101",0xE8B24C);
+        var cs=tracker.addTag("Reading",0x90D8DA);
+        var jpn=tracker.addTag("Language",0xE8B24C);
         check(tracker.state().tags().size()==2,"Tags are created");
-        rejects(()->tracker.addTag("cs 240",0x111111),"Tag names are unique regardless of case");
+        rejects(()->tracker.addTag("reading",0x111111),"Tag names are unique regardless of case");
         rejects(()->tracker.addTag("Bad",0x1FFFFFF),"Tag colours are 24-bit RGB");
 
         // overdue / today / future / none, mixed statuses and tags.
@@ -300,8 +300,8 @@ public final class TaskBoardTest {
         check(tracker.state().tasks().size()==5,"Deleting a tag deletes no work");
         check(jpn.id().equals(task(tracker,dueToday).tagId()),"Other tags are unaffected");
 
-        tracker.editTag(jpn.id(),"JPN 102",0x123456);
-        check(tracker.state().tags().getFirst().name().equals("JPN 102"),"Tags rename");
+        tracker.editTag(jpn.id(),"Language II",0x123456);
+        check(tracker.state().tags().getFirst().name().equals("Language II"),"Tags rename");
         check(tracker.state().tags().getFirst().colour()==0x123456,"Tags recolour");
 
         var tags=new TagEditor(tracker,()->{});
@@ -340,7 +340,7 @@ public final class TaskBoardTest {
         var importNames=Arrays.stream(fresh.importMenu().getComponents()).map(Component::getName).toList();
         check(importNames.contains("task.import.paste")&&importNames.contains("task.import.notion"),
             "Import groups paste and the Notion export in one menu");
-        check(named(fresh,"task.tag."+dueToday) instanceof JLabel pill&&pill.getText().equals("JPN 102"),
+        check(named(fresh,"task.tag."+dueToday) instanceof JLabel pill&&pill.getText().equals("Language II"),
             "A tagged task shows its tag as a pill");
         check(named(fresh,"task.tag."+overdue)==null,"An untagged task leaves the tag cell empty");
         check(((JLabel)named(fresh,"task.due."+dueToday)).getText().equals("Today"),"Today's date says Today");
