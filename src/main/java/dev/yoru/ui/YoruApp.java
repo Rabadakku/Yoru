@@ -307,7 +307,7 @@ public final class YoruApp extends JPanel implements Shell {
         String galleryChoice=WaifuCatalog.forTheme(tracker.state().settings());
         if (galleryChoice!=null && !page.equals("Today")) {
             var illustrated=stack();
-            illustrated.add(new MoonlightGallery(galleryChoice));
+            illustrated.add(new MoonlightGallery(galleryChoice,page));
             gap(illustrated,SPACE_LG);
             illustrated.add(view);
             view=illustrated;
@@ -1611,25 +1611,47 @@ public final class YoruApp extends JPanel implements Shell {
             installArtwork(chooser.getSelectedFile());
     }
 
+    private static final int WAIFU_THUMB_WIDTH=72,WAIFU_THUMB_HEIGHT=108;
+
     /**
-     * The Settings value behind a WAIFU picker row: Off, a portrait id, or rotate.
-     * Row 0 is Off and the last row is Rotate, so the ids in between line up
-     * with the roster one for one.
+     * The waifu choices as small pictures (#23): the theme's default, every
+     * portrait in the roster, and Rotate. The stored choice is marked the way
+     * every other segmented choice is, and picking one writes it at once.
+     * A stored id no longer in the roster reads as the default, which is
+     * what the art shows for it.
      */
-    private static String waifuValue(int index) {
-        if(index==0)return null;
-        var roster=WaifuCatalog.all();
-        if(index==roster.size()+1)return WaifuCatalog.ROTATE;
-        return roster.get(index-1).id();
+    private JPanel waifuPicker(String stored) {
+        // Flush with the card's text, as Theme.flushRow is: a FlowLayout's own
+        // gaps indented the first picture and opened a band above the row.
+        var picker=new JPanel(new FlowLayout(FlowLayout.LEFT,0,0));
+        picker.setName("settings.waifu");
+        picker.setOpaque(false);
+        picker.setAlignmentX(0);
+        boolean known=WaifuCatalog.ROTATE.equals(stored)||WaifuCatalog.all().stream().anyMatch(w->w.id().equals(stored));
+        var choices=new ArrayList<JButton>();
+        choices.add(waifuChoice("default",null,"Theme default",WaifuCatalog.load("nightfall"),!known));
+        for(var w:WaifuCatalog.all())
+            choices.add(waifuChoice(w.id(),w.id(),w.name().replace(" · illustrated",""),WaifuCatalog.load(w.id()),w.id().equals(stored)));
+        choices.add(waifuChoice("rotate",WaifuCatalog.ROTATE,"Rotate",null,WaifuCatalog.ROTATE.equals(stored)));
+        for(var choice:choices) {
+            if(picker.getComponentCount()>0) picker.add(Box.createHorizontalStrut(SPACE_MD));
+            picker.add(choice);
+        }
+        return picker;
     }
 
-    /** The picker row for a stored value, so the combo shows what is set now. */
-    private static int waifuIndex(String choice) {
-        if(choice==null)return 0;
-        if(WaifuCatalog.ROTATE.equals(choice))return WaifuCatalog.all().size()+1;
-        var roster=WaifuCatalog.all();
-        for(int i=0;i<roster.size();i++)if(roster.get(i).id().equals(choice))return i+1;
-        return 0;   // a value no longer in the roster reads as Off, not an error
+    private JButton waifuChoice(String key,String value,String name,java.awt.image.BufferedImage portrait,boolean chosen) {
+        // Deferred so the button finishes its own event before the page it sits
+        // on is rebuilt around the change.
+        var choice=selected(button(name,()->SwingUtilities.invokeLater(()->applySettings(s->new Settings(s.theme(),s.trainer(),
+            s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),value)))),chosen);
+        choice.setName("settings.waifu."+key);
+        if(portrait!=null)
+            choice.setIcon(new ImageIcon(portrait.getScaledInstance(WAIFU_THUMB_WIDTH,WAIFU_THUMB_HEIGHT,Image.SCALE_SMOOTH)));
+        choice.setHorizontalTextPosition(SwingConstants.CENTER);
+        choice.setVerticalTextPosition(SwingConstants.BOTTOM);
+        choice.getAccessibleContext().setAccessibleName(name+" portrait"+(chosen?", chosen":""));
+        return choice;
     }
 
     /** Dropping onto any part of the window imports, so the path is hard to miss. */
@@ -1833,26 +1855,11 @@ public final class YoruApp extends JPanel implements Shell {
         var waifu=card();
         waifu.add(sectionHeader("APPEARANCE · WAIFU"));
         gap(waifu,SPACE_SM);
-        waifu.add(bodyLabel("Companion artwork belongs to Moonlight. It appears beside your timer and across its pages; your Pokémon and study tools remain available. Other themes keep this choice saved but hide the artwork."));
+        waifu.add(bodyLabel("Companion artwork belongs to the Waifu theme. It appears beside your timer and across its pages; your Pokémon and study tools remain available. Moonlight and the other themes keep this choice saved but hide the artwork."));
         gap(waifu,SPACE_MD);
-        // One picker for every choice, so there is nothing to remember: the
-        // combo shows what is set now and writes what is picked next.
-        var waifuPick=plainCombo(new JComboBox<String>());
-        waifuPick.addItem("Theme default · Nightfall");
-        for(var w:WaifuCatalog.all())waifuPick.addItem(w.name());
-        waifuPick.addItem("Rotate");
-        waifuPick.setSelectedIndex(waifuIndex(settings.waifu()));
-        waifuPick.setMaximumSize(new Dimension(Integer.MAX_VALUE,SPACE_XXL));
-        waifuPick.setAlignmentX(0);
-        waifuPick.getAccessibleContext().setAccessibleName("Waifu portrait");
-        waifuPick.addActionListener(e->{
-            String choice=waifuValue(waifuPick.getSelectedIndex());
-            // Deferred so the picker finishes its own event before the page it
-            // sits on is rebuilt around the change.
-            SwingUtilities.invokeLater(()->applySettings(s->new Settings(s.theme(),s.trainer(),
-                s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),choice)));
-        });
-        waifu.add(waifuPick);
+        // The choices as pictures rather than names in a list (#23): the
+        // portraits are the reason to choose, so the picker shows them.
+        waifu.add(waifuPicker(settings.waifu()));
         gap(waifu,SPACE_MD);
         // Said once so the art's provenance is never in question.
         waifu.add(label("The portraits ship with Yoru, so the choice travels with your vault.",
