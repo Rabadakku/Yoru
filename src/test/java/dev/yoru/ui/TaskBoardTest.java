@@ -51,6 +51,21 @@ public final class TaskBoardTest {
         }
         return null;
     }
+    /** One entry of a task's ⋯ menu, found by name the way the buttons are. */
+    private static JMenuItem item(TasksPanel board,UUID task,String prefix){
+        var menu=board.rowMenu(task);
+        if(menu==null)return null;
+        for(Component child:menu.getComponents())
+            if(child instanceof JMenuItem entry&&(prefix+task).equals(entry.getName()))return entry;
+        return null;
+    }
+    private static Component named(Container root,String name){
+        for(Component child:root.getComponents()){
+            if(name.equals(child.getName()))return child;
+            if(child instanceof Container nested){var found=named(nested,name);if(found!=null)return found;}
+        }
+        return null;
+    }
     /** Task ids in the order their rows are laid out. */
     private static void collect(Container root,List<String> into){
         for(Component child:root.getComponents()){
@@ -180,18 +195,18 @@ public final class TaskBoardTest {
         check(shown(board).getLast().equals(finished.toString()),"Status sort puts done last");
 
         // Reordering is only offered where it means something.
-        check(!button(board,"task.up."+later).isEnabled(),"A sorted board cannot be reordered by hand");
+        check(!item(board,later,"task.up.").isEnabled(),"A sorted board cannot be reordered by hand");
         sort.setSelectedItem(sortNamed(sort,"My order"));
         button(board,"view.open").doClick();
-        check(!button(board,"task.up."+later).isEnabled(),"A filtered board cannot be reordered by hand");
+        check(!item(board,later,"task.up.").isEnabled(),"A filtered board cannot be reordered by hand");
         button(board,"view.all").doClick();
-        check(!button(board,"task.up."+overdue).isEnabled(),"The first row cannot move up");
-        check(!button(board,"task.down."+finished).isEnabled(),"The last row cannot move down");
-        check(button(board,"task.up."+dueToday).isEnabled(),"Reordering is offered on the unfiltered board");
-        button(board,"task.up."+dueToday).doClick();
+        check(!item(board,overdue,"task.up.").isEnabled(),"The first row cannot move up");
+        check(!item(board,finished,"task.down.").isEnabled(),"The last row cannot move down");
+        check(item(board,dueToday,"task.up.").isEnabled(),"Reordering is offered on the unfiltered board");
+        item(board,dueToday,"task.up.").doClick();
         check(shown(board).getFirst().equals(dueToday.toString()),"Moving up reorders the board");
         check(task(tracker,dueToday).order()<task(tracker,overdue).order(),"The new order is stored");
-        button(board,"task.down."+dueToday).doClick();
+        item(board,dueToday,"task.down.").doClick();
         check(shown(board).getFirst().equals(overdue.toString()),"Moving down undoes moving up");
 
         // Pointer drag (#23), alongside the arrows rather than instead of them.
@@ -257,10 +272,12 @@ public final class TaskBoardTest {
         check(jpn.id().equals(task(tracker,dueToday).tagId()),"Cycling status keeps the tag");
         check(task(tracker,dueToday).due().equals(today),"Cycling status keeps the due date");
 
-        // Track is present on every row so the columns line up, and enabled only
-        // where it can actually clock in.
-        check(!button(board,"task.track."+later).isEnabled(),"A task with no activity cannot be tracked");
-        check(button(board,"task.track."+undated).isEnabled(),"A task with an activity can be tracked");
+        // Track is in every row's menu, and enabled only where it can actually clock in.
+        check(!item(board,later,"task.track.").isEnabled(),"A task with no activity cannot be tracked");
+        check(item(board,undated,"task.track.").isEnabled(),"A task with an activity can be tracked");
+        check(item(board,undated,"task.edit.")!=null&&item(board,undated,"task.delete.")!=null,
+            "Every row's menu offers edit and delete");
+        check(board.rowMenu(UUID.randomUUID())==null,"A task that is not on the board has no menu");
 
         // An edit must not quietly drop the tag or reset the order.
         var before=task(tracker,overdue);
@@ -309,6 +326,55 @@ public final class TaskBoardTest {
         layout(fresh);
         fresh.paint(new BufferedImage(1280,900,BufferedImage.TYPE_INT_RGB).getGraphics());
         check(shown(fresh).size()==5,"The rebuilt board still renders every task");
+
+        // The Notion layout (#25): a header, a done checkbox, pills and written dates.
+        var header=(Container)named(fresh,"task.header");
+        check(header!=null,"The table has a header row");
+        var headings=new ArrayList<String>();
+        for(Component cell:header.getComponents())if(cell instanceof JLabel l&&!l.getText().isEmpty())headings.add(l.getText());
+        check(headings.equals(List.of("Status","Task name","Tag","Due")),"The header names each column: "+headings);
+        check(button(fresh,"task.new")!=null,"New is the page's one primary action");
+        check(button(fresh,"task.newRow")!=null,"and the table ends in a New task row");
+        check(button(fresh,"task.up."+dueToday)==null&&button(fresh,"task.track."+dueToday)==null,
+            "Rare row actions are in the menu, not a row of buttons");
+        var importNames=Arrays.stream(fresh.importMenu().getComponents()).map(Component::getName).toList();
+        check(importNames.contains("task.import.paste")&&importNames.contains("task.import.notion"),
+            "Import groups paste and the Notion export in one menu");
+        check(named(fresh,"task.tag."+dueToday) instanceof JLabel pill&&pill.getText().equals("JPN 102"),
+            "A tagged task shows its tag as a pill");
+        check(named(fresh,"task.tag."+overdue)==null,"An untagged task leaves the tag cell empty");
+        check(((JLabel)named(fresh,"task.due."+dueToday)).getText().equals("Today"),"Today's date says Today");
+        check(((JLabel)named(fresh,"task.due."+later)).getText().equals(DateText.longDate(today.plusDays(9))),
+            "A later date is written out in full");
+        check(((JLabel)named(fresh,"task.due."+undated)).getText().isEmpty(),"An undated task leaves the date cell empty");
+
+        var done=(JCheckBox)named(fresh,"task.done."+undated);
+        check(!done.isSelected(),"An open task's checkbox is clear");
+        done.doClick();
+        check(task(tracker,undated).status()==TaskStatus.DONE,"Ticking the checkbox finishes the task");
+        check(((JCheckBox)named(fresh,"task.done."+undated)).isSelected(),"and the rebuilt row shows it ticked");
+        ((JCheckBox)named(fresh,"task.done."+undated)).doClick();
+        check(task(tracker,undated).status()==TaskStatus.TODO,"Clearing it reopens the task");
+
+        // A long title wraps and its row grows, instead of vanishing into an ellipsis.
+        var wordy=UUID.randomUUID();
+        tracker.addTasks(List.of(new Task(wordy,null,null,
+            "A deliberately long invented task title that has to wrap onto a second line at the narrowest window rather than disappear behind an ellipsis",
+            "",null,TaskStatus.TODO,"",now,50)));
+        var narrow=new TasksPanel(tracker,()->{},()->false);
+        narrow.setSize(840,1400);
+        layout(narrow);layout(narrow);
+        var longRow=rowOf(narrow,wordy);
+        var shortRow=rowOf(narrow,undated);
+        check(longRow.getHeight()>shortRow.getHeight(),"A long title's row is taller: "+longRow.getHeight()+" against "+shortRow.getHeight());
+        var wrapped=(JTextArea)named(narrow,"task.title."+wordy);
+        check(wrapped.getHeight()>=wrapped.getPreferredSize().height,"and the whole title fits in it: title "
+            +wrapped.getWidth()+"x"+wrapped.getHeight()+" wants "+wrapped.getPreferredSize()+", row "+longRow.getSize()
+            +" wants "+longRow.getPreferredSize());
+        check(longRow.getY()+longRow.getHeight()<=rowOf(narrow,finished).getY()||rowOf(narrow,finished).getY()+rowOf(narrow,finished).getHeight()<=longRow.getY(),
+            "without overlapping another row");
+        var status=button(narrow,"task.status."+wordy);
+        check(status.getWidth()<=status.getPreferredSize().width,"A status pill keeps its own width rather than filling its column");
     }
 
     private static Object sortNamed(JComboBox<?> combo,String label){
