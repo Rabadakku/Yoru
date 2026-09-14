@@ -153,6 +153,9 @@ final class UpdatesCard extends JPanel {
                 try {
                     staged = MacInstall.stage(file, work, release.version());
                 } catch (Exception e) {
+                    // Nothing staged survives a failure, so there is nothing to swap in;
+                    // the downloaded image goes too, since this path offers no retry from it.
+                    Updates.discard(work);
                     SwingUtilities.invokeLater(() -> failed("Yoru verified the update but could not open its disk image. "
                         + "Download it from the release page instead."));
                     return;

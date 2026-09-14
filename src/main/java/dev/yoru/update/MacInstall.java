@@ -2,9 +2,11 @@ package dev.yoru.update;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -20,6 +22,11 @@ import java.util.stream.Stream;
  */
 public final class MacInstall {
     private MacInstall() { }
+
+    /** How long one staging command may run before it is stopped. */
+    static final Duration COMMAND_TIMEOUT = Duration.ofMinutes(5);
+    /** The most of a command's output an error message keeps: its end, where failures explain themselves. */
+    static final int OUTPUT_LIMIT = 16 * 1024;
 
     /** The .app bundle a launcher runs from, or null when it is not inside one. */
     public static Path bundleOf(Path launcher) {
@@ -37,28 +44,33 @@ public final class MacInstall {
 
     /**
      * Copies the app out of a verified disk image into {@code work} and checks it
-     * is Yoru at the version expected. The image is detached whatever happens.
+     * is Yoru at the version expected. The image is detached whatever happens, and
+     * a copy that fails any step is removed, so nothing half-staged can be swapped in.
      */
     public static Path stage(Path dmg, Path work, Version expected) throws IOException, InterruptedException {
         Path mount = Files.createDirectories(work.resolve("mount"));
         run(List.of("/usr/bin/hdiutil", "attach", "-nobrowse", "-readonly", "-noautoopen",
-            "-mountpoint", mount.toString(), dmg.toString()), true);
+            "-mountpoint", mount.toString(), dmg.toString()), true, work, COMMAND_TIMEOUT);
+        Path staged = null;
         try {
             Path app;
             try (Stream<Path> entries = Files.list(mount)) {
                 app = entries.filter(p -> p.getFileName().toString().endsWith(".app")).findFirst()
                     .orElseThrow(() -> new IOException("The update's disk image holds no app."));
             }
-            Path staged = work.resolve(app.getFileName().toString());
-            run(List.of("/bin/rm", "-rf", staged.toString()), true);
-            run(List.of("/usr/bin/ditto", app.toString(), staged.toString()), true);
-            String id = plist(staged, "CFBundleIdentifier"), version = plist(staged, "CFBundleShortVersionString");
+            staged = work.resolve(app.getFileName().toString());
+            run(List.of("/bin/rm", "-rf", staged.toString()), true, work, COMMAND_TIMEOUT);
+            run(List.of("/usr/bin/ditto", app.toString(), staged.toString()), true, work, COMMAND_TIMEOUT);
+            String id = plist(work, staged, "CFBundleIdentifier"), version = plist(work, staged, "CFBundleShortVersionString");
             if (!"dev.yoru".equals(id)) throw new IOException("The update's app is not Yoru.");
             if (!expected.toString().equals(version))
                 throw new IOException("The update's app is version " + version + ", not " + expected + ".");
             return staged;
+        } catch (IOException | InterruptedException | RuntimeException e) {
+            if (staged != null) Updates.discard(staged);
+            throw e;
         } finally {
-            run(List.of("/usr/bin/hdiutil", "detach", mount.toString(), "-force"), false);
+            detach(mount, work);
         }
     }
 
@@ -98,23 +110,77 @@ public final class MacInstall {
         return "'" + path.toString().replace("'", "'\\''") + "'";
     }
 
-    private static String plist(Path app, String key) throws IOException, InterruptedException {
+    private static String plist(Path work, Path app, String key) throws IOException, InterruptedException {
         return run(List.of("/usr/libexec/PlistBuddy", "-c", "Print :" + key,
-            app.resolve("Contents/Info.plist").toString()), true);
+            app.resolve("Contents/Info.plist").toString()), true, work, COMMAND_TIMEOUT);
     }
 
-    private static String run(List<String> command, boolean required) throws IOException, InterruptedException {
-        var process = new ProcessBuilder(command).redirectErrorStream(true).start();
-        String output;
-        try (var in = process.getInputStream()) {
-            output = new String(in.readAllBytes(), StandardCharsets.UTF_8).strip();
+    /** Best effort: a detach that fails or hangs must not hide why staging stopped. */
+    private static void detach(Path mount, Path work) {
+        try {
+            run(List.of("/usr/bin/hdiutil", "detach", mount.toString(), "-force"), false, work, COMMAND_TIMEOUT);
+        } catch (IOException ignored) {
+            // The image stays mounted read-only until the next restart; nothing else depends on it.
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
-        if (!process.waitFor(5, TimeUnit.MINUTES)) {
-            process.destroyForcibly();
-            throw new IOException(Path.of(command.getFirst()).getFileName() + " did not finish.");
+    }
+
+    /**
+     * Runs one command with its timeout counting from the start. Output goes to a
+     * log file in {@code logs} rather than a pipe: a pipe has to be read before
+     * waiting, and a command that never closes it would block that read with no
+     * timeout running at all. The log is deleted afterwards.
+     */
+    static String run(List<String> command, boolean required, Path logs, Duration timeout)
+            throws IOException, InterruptedException {
+        String name = Path.of(command.getFirst()).getFileName().toString();
+        Path log = Files.createTempFile(logs, "command-", ".log");
+        try {
+            Process process = new ProcessBuilder(command)
+                .redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")))
+                .redirectOutput(log.toFile())
+                .redirectErrorStream(true)
+                .start();
+            boolean finished;
+            try {
+                finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                stop(process);
+                throw e;
+            }
+            if (!finished) {
+                stop(process);
+                String said = tail(log);
+                throw new IOException(name + " did not finish." + (said.isEmpty() ? "" : " It last said: " + said));
+            }
+            String output = tail(log);
+            if (required && process.exitValue() != 0) throw new IOException(name + " failed: " + output);
+            return output;
+        } finally {
+            Files.deleteIfExists(log);
         }
-        if (required && process.exitValue() != 0)
-            throw new IOException(Path.of(command.getFirst()).getFileName() + " failed: " + output);
-        return output;
+    }
+
+    /**
+     * Stops a command and everything it started. Only this command's own
+     * descendants: they are listed before it is killed, while they still are.
+     */
+    private static void stop(Process process) throws InterruptedException {
+        List<ProcessHandle> started = process.descendants().toList();
+        process.destroyForcibly();
+        started.forEach(ProcessHandle::destroyForcibly);
+        process.waitFor(10, TimeUnit.SECONDS);
+    }
+
+    private static String tail(Path log) throws IOException {
+        try (var file = new RandomAccessFile(log.toFile(), "r")) {
+            long size = file.length(), from = Math.max(0, size - OUTPUT_LIMIT);
+            byte[] bytes = new byte[(int) (size - from)];
+            file.seek(from);
+            file.readFully(bytes);
+            String text = new String(bytes, StandardCharsets.UTF_8).strip();
+            return from > 0 ? "…" + text : text;
+        }
     }
 }
