@@ -84,7 +84,7 @@ public final class TaskCalendarTest {
         var tracker=new Tracker(repo,Clock.systemUTC());
         tracker.addActivity("Study",0);
         UUID study=tracker.state().activities().getFirst().id();
-        var tag=tracker.addTag("CS 240",0x90D8DA);
+        var tag=tracker.addTag("Reading",0x90D8DA);
 
         // A fixed month, so the geometry does not depend on the day this runs.
         var month=YearMonth.of(2026,9);
