@@ -1798,13 +1798,14 @@ public final class YoruApp extends JPanel implements Shell {
         artwork.add(bodyLabel("Add your Emerald game to extract all 386 normal and shiny sprites, or import your own PNG artwork."));
         gap(artwork,SPACE_MD);
         var survey=SpriteAssets.survey();
-        artwork.add(label(survey.summary(),TYPE_BODY,survey.empty()?MUTED:TEXT));
+        var currentGame=GameFiles.rom();
+        artwork.add(ArtworkStatus.rows(survey,currentGame!=null,this::importArtwork,
+            ()->{if(GameFiles.rom()!=null)installArtwork(GameFiles.rom().toFile());}));
         gap(artwork,SPACE_MD);
         artwork.add(bodyLabel("Drop your .gba, folder or .zip anywhere on this window, or:"));
         gap(artwork,SPACE_SM);
         var artworkActions=row();
         artworkActions.add(button("Add artwork…",this::importArtwork));
-        var currentGame=GameFiles.rom();
         if(currentGame!=null)artworkActions.add(button("Extract from current game",()->installArtwork(currentGame.toFile())));
         artworkActions.add(button("Open library folder",()->{
             try {
