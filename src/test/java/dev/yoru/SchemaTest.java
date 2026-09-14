@@ -34,12 +34,12 @@ public final class SchemaTest {
 
         t.addActivity("Class",0);
         var activity=t.state().activities().getFirst().id();
-        var tag=t.addTag("CS 240",0x90D8DA);
+        var tag=t.addTag("Reading",0x90D8DA);
         check(t.state().tags().size()==1&&t.state().tags().getFirst().colour()==0x90D8DA,"tag stored with colour");
 
         t.addTasks(List.of(
             new Task(UUID.randomUUID(),activity,tag.id(),"Read chapter 4","notes",LocalDate.of(2026,9,12),
-                TaskStatus.DOING,"syllabus.pdf",now.minusSeconds(3600),2),
+                TaskStatus.DOING,"reading-list.txt",now.minusSeconds(3600),2),
             new Task(UUID.randomUUID(),activity,null,"Lab report","",null,TaskStatus.TODO,"",now,0)));
         check(t.state().tasks().size()==2,"tasks added");
 
@@ -73,7 +73,7 @@ public final class SchemaTest {
             check(loaded.settings().dailyGoalHours()==6,"daily goal persists");
             check(loaded.settings().minSessionSeconds()==120,"minimum session persists");
             check(loaded.settings().waifu().equals("waifu-fixture"),"the waifu choice persists");
-            check(loaded.tags().getFirst().name().equals("CS 240"),"tag persists");
+            check(loaded.tags().getFirst().name().equals("Reading"),"tag persists");
             check(loaded.tasks().stream().anyMatch(x->x.status()==TaskStatus.DOING),"task status persists");
             check(loaded.tasks().stream().anyMatch(x->tag.id().equals(x.tagId())),"task tag persists");
             check(loaded.tasks().stream().anyMatch(x->x.order()==2),"task order persists");

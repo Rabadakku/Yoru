@@ -6,13 +6,25 @@ import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.*;
 import java.util.*;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import static dev.yoru.ui.Theme.*;
 
-/** Local assignment board. AI has no write access; review is a separate user command. */
+/**
+ * The task board, laid out like a Notion database table (#25).
+ *
+ * View tabs and the one New action on top; sort, tags and import beneath; then a
+ * table whose header and rows share one set of column widths, so every checkbox,
+ * status, title, tag and date lands in the same place on every row. What a row
+ * is for — ticking it off and moving its status — is on the row. What is needed
+ * rarely — edit, track, reorder, delete — is in its trailing ⋯ menu, which the
+ * keyboard reaches like any button and a right-click opens too. A click on a
+ * title opens the task. AI has no write access; review is a separate user command.
+ */
 final class TasksPanel extends JPanel implements Scrollable {
     /** Which slice of the board is on screen. */
     private enum View {
@@ -27,6 +39,12 @@ final class TasksPanel extends JPanel implements Scrollable {
         @Override public String toString(){return label;}
     }
 
+    /** Column widths shared by the header and every row: done, status, title, tag, due, menu. The title's 0 takes the rest. */
+    private static final int[] COLUMNS={SPACE_XL,SPACE_XXL*2+SPACE_MD,0,SPACE_XXL*4,SPACE_XXL*5,SPACE_XXL};
+    private static final int TITLE_COLUMN=2;
+    /** Marks a label that is a pill, which keeps its own width instead of filling its column. */
+    private static final String PILL="yoru.pill";
+
     private final Tracker tracker;
     private final Runnable refresh;
     private final BooleanSupplier closed;
@@ -36,7 +54,7 @@ final class TasksPanel extends JPanel implements Scrollable {
     private View view=View.ALL;
     private Sort sort=Sort.MANUAL;
     private YearMonth month=YearMonth.now();
-    private final JPanel sortControls=row();
+    private final JPanel sortControls=new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_SM,0));
     private final List<JPanel> rowPanels=new ArrayList<>();
     private int dragFrom=-1, dragTo=-1;
 
@@ -45,61 +63,71 @@ final class TasksPanel extends JPanel implements Scrollable {
         this.tracker=tracker; this.refresh=refresh; this.closed=closed;
         var p=stack();
         p.add(YoruApp.pageHeaderFor("Tasks","TASKS · NOTES · DUE DATES"));
-        var actions=row();
-        actions.add(button("+ Task",()->edit(null)));
-        actions.add(button("Tags…",()->TagEditor.open(this,tracker,this::rebuildRows)));
-        actions.add(button("Paste proposals…",this::importPaste));
-        actions.add(button("Import Notion…",this::importNotion));
-        p.add(actions);gap(p,SPACE_LG);
 
-        var bar=row();
-        bar.add(label("VIEW",TYPE_CAPTION,MUTED));
+        var top=new JPanel(new BorderLayout(SPACE_MD,0));
+        top.setOpaque(false);
+        var tabs=new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_XS,0));
+        tabs.setOpaque(false);
         for(var value:View.values()) {
-            var b=compact(button(value.label,()->{view=value;rebuildRows();}));
+            var b=button(value.label,()->{view=value;rebuildRows();});
             b.setName("view."+value.name().toLowerCase());
-            viewButtons.put(value,b);bar.add(b);
+            viewButtons.put(value,b);tabs.add(b);
         }
+        top.add(tabs,BorderLayout.CENTER);
+        var create=accentButton("New",()->edit(null));
+        create.setName("task.new");
+        create.setToolTipText("Add a task");
+        top.add(create,BorderLayout.EAST);
+        p.add(top);gap(p,SPACE_MD);
+
         var order=plainCombo(new JComboBox<>(Sort.values()));
         order.setName("task.sort");
         // One control height for the app; the width is this control's own.
-        order.setPreferredSize(new Dimension(132,SPACE_XXL));
+        order.setPreferredSize(new Dimension(SPACE_XXL*4,SPACE_XXL));
         order.addActionListener(e->{sort=(Sort)order.getSelectedItem();rebuildRows();});
         sortControls.setOpaque(false);
-        sortControls.add(label("SORT",TYPE_CAPTION,MUTED));
+        sortControls.add(label("Sort",TYPE_CAPTION,MUTED));
         sortControls.add(order);
-        bar.add(sortControls);
-        p.add(bar);gap(p,SPACE_SM);
-        p.add(summary);gap(p,SPACE_MD);
+        var tags=button("Tags",()->TagEditor.open(this,tracker,this::rebuildRows));
+        tags.setName("task.tags");
+        var importer=button("Import ▾",()->{});
+        importer.setName("task.import");
+        importer.addActionListener(e->importMenu().show(importer,0,importer.getHeight()));
+        var tools=new JPanel(new BorderLayout(SPACE_MD,0));
+        tools.setOpaque(false);
+        var left=new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_SM,0));
+        left.setOpaque(false);
+        left.add(sortControls);left.add(tags);left.add(importer);
+        tools.add(left,BorderLayout.WEST);
+        tools.add(summary,BorderLayout.EAST);
+        p.add(tools);gap(p,SPACE_MD);
         p.add(rows);gap(p,SPACE_MD);
         add(p,BorderLayout.NORTH);
         rebuildRows();
     }
 
-    /**
-     * Row-sized button: the app's only exception to the shared control recipe.
-     *
-     * The standard button is built for a toolbar, not for a row of a list, so
-     * this one carries the caption's face and half the padding — the one place
-     * that is allowed to differ, and the one place to look if a row is too tall.
-     */
-    private static JButton compact(JButton b) {
-        b.setFont(captionFont());
-        b.setBorder(new CompoundBorder(new LineBorder(LINE),
-            new EmptyBorder(SPACE_XS,SPACE_SM,SPACE_XS,SPACE_SM)));
-        return b;
+    /** A view tab: quiet until chosen, then filled as Notion fills it, and bold so it is not told by colour alone. */
+    private static void tab(JButton b,boolean chosen) {
+        b.setBackground(chosen?LINE:BG);
+        b.setForeground(chosen?TEXT:MUTED);
+        b.setFont(chosen?labelFont().deriveFont(Font.BOLD):labelFont());
+        b.setBorder(new EmptyBorder(SPACE_XS,SPACE_MD,SPACE_XS,SPACE_MD));
+        b.getAccessibleContext().setAccessibleDescription(chosen?"Selected view":null);
     }
 
     /**
-     * The status pill's text colour: the palette role as it stands on a dark
-     * theme, one step deeper on a light one.
+     * A colour washed over the panel, for a pill whose text stays in the body ink.
      *
-     * The pill is 11 px text on the LINE tint, and on Linen and Sakura the raw
-     * roles measured 2.0-3.2:1 there — "Done" was the weakest thing on the row.
-     * One fixed step darker puts every state over 4.5:1 on both light palettes
-     * (Linen 4.65-7.79:1, Sakura 4.54-7.98:1) and leaves Midnight and Ember
-     * pixel-for-pixel as they were.
+     * The body ink measured at least 6:1 on every status and palette tag wash on
+     * all four themes, where coloured text on a grey pill had needed a darker
+     * shade on each light theme just to reach 4.5:1.
      */
-    private static Color pillInk(Color role) { return DARK?role:shade(role,-60); }
+    private static Color wash(Color colour) {
+        double a=DARK?0.30:0.24;
+        return new Color((int)Math.round(colour.getRed()*a+PANEL.getRed()*(1-a)),
+            (int)Math.round(colour.getGreen()*a+PANEL.getGreen()*(1-a)),
+            (int)Math.round(colour.getBlue()*a+PANEL.getBlue()*(1-a)));
+    }
 
     private List<Task> visible() {
         var today=LocalDate.now();
@@ -135,18 +163,20 @@ final class TasksPanel extends JPanel implements Scrollable {
 
     private void rebuildRows() {
         rows.removeAll();
-        viewButtons.forEach((value,b)->selected(b,value==view));
+        rowPanels.clear();
+        viewButtons.forEach((value,b)->tab(b,value==view));
         // The calendar is ordered by date. Offering a sort there would be a
         // control that silently does nothing.
         sortControls.setVisible(view!=View.CALENDAR);
         var tasks=visible();
         int open=(int)tracker.state().tasks().stream().filter(t->t.status()!=TaskStatus.DONE).count();
-        summary.setText(tasks.size()+" shown  /  "+open+" open  /  "+tracker.state().tasks().size()+" total"
-            +(view==View.CALENDAR?"  ·  drag a task onto a day to move it"
-                :reorderable()?"":"  ·  switch to All + My order to reorder"));
+        summary.setText(tasks.size()+" shown · "+open+" open · "+tracker.state().tasks().size()+" total"
+            +(view==View.CALENDAR?" · drag a task onto a day to move it"
+                :reorderable()?"":" · reorder in All, My order"));
         if(view==View.CALENDAR) { buildCalendar(); return; }
+        var table=table();
+        table.add(headerRow());
         if(tasks.isEmpty()) {
-            var empty=card();
             var headline=switch(view) {
                 case ALL->"No tasks yet.";
                 case TODAY->"Nothing due today or overdue.";
@@ -155,12 +185,13 @@ final class TasksPanel extends JPanel implements Scrollable {
                 case DONE->"Nothing completed yet.";
                 case CALENDAR->"No tasks planned this month.";
             };
-            empty.add(label(headline,TYPE_HEADING,TEXT));gap(empty,SPACE_MD);
-            empty.add(bodyLabel("Create one, or paste a reply from your own assistant and review it here."));
-            rows.add(empty);
+            var empty=emptyState(headline,"Add one with New, or bring a list in from Import.",null);
+            empty.setBorder(new EmptyBorder(SPACE_LG,SPACE_MD,SPACE_LG,SPACE_MD));
+            table.add(empty);
         }
-        rowPanels.clear();
-        for(int i=0;i<tasks.size();i++) { var line=taskRow(tasks,i); rowPanels.add(line); rows.add(line); }
+        for(int i=0;i<tasks.size();i++) { var line=taskRow(tasks,i); rowPanels.add(line); table.add(line); }
+        table.add(newRow());
+        rows.add(table);
         rows.revalidate();rows.repaint();
         revalidate();repaint();
     }
@@ -203,59 +234,183 @@ final class TasksPanel extends JPanel implements Scrollable {
         revalidate();repaint();
     }
 
+    /**
+     * The table's body. Each row is told the table's width before it is asked its
+     * height, so a title that wraps is measured at the width it will get; when
+     * the width changes, the page lays out once more with the new heights.
+     *
+     * BoxLayout caches every row's size until the container is invalidated, and
+     * resizing a row does not invalidate anything, so the cache is dropped here
+     * by hand. Without that a title wrapped to three lines kept a row measured
+     * for two at the old width, and its last line was cut off.
+     */
+    private static JPanel table() {
+        var table=new JPanel() {
+            private int measured=-1;
+            @Override public void doLayout() {
+                int width=getWidth()-getInsets().left-getInsets().right;
+                if(width!=measured) {
+                    measured=width;
+                    for(var row:getComponents()) row.setSize(width,row.getHeight());
+                    ((BoxLayout)getLayout()).invalidateLayout(this);
+                    SwingUtilities.invokeLater(this::revalidate);
+                }
+                super.doLayout();
+            }
+        };
+        table.setLayout(new BoxLayout(table,BoxLayout.Y_AXIS));
+        table.setOpaque(true);
+        table.setBackground(PANEL);
+        table.setBorder(new LineBorder(LINE,HAIRLINE,true));
+        table.setAlignmentX(0);
+        return table;
+    }
+
+    /** One line of the table in the shared columns, never taller than its cells need. */
+    private static JPanel tableRow() {
+        var line=new JPanel(new Columns()) {
+            @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE,getPreferredSize().height); }
+        };
+        line.setOpaque(false);
+        line.setAlignmentX(0);
+        return line;
+    }
+
+    private static JPanel headerRow() {
+        var header=tableRow();
+        header.setName("task.header");
+        header.setBorder(listRow());
+        for(String heading:new String[]{"","Status","Task name","Tag","Due",""}) header.add(label(heading,TYPE_CAPTION,MUTED));
+        return header;
+    }
+
     private JPanel taskRow(List<Task> tasks,int index) {
         var task=tasks.get(index);
         boolean done=task.status()==TaskStatus.DONE;
-        var line=new JPanel(new BorderLayout(12,0));
-        line.setOpaque(true);line.setBackground(PANEL);
+        var line=tableRow();
         line.setBorder(restingBorder());
 
-        var status=compact(button(task.status().label,()->cycle(task)));
+        var check=new JCheckBox();
+        check.setOpaque(false);
+        check.setSelected(done);
+        check.setName("task.done."+task.id());
+        check.getAccessibleContext().setAccessibleName("Done: "+task.title());
+        check.setToolTipText(done?"Mark as not done":"Mark as done");
+        check.addActionListener(e->status(task,check.isSelected()?TaskStatus.DONE:TaskStatus.TODO));
+        line.add(check);
+
+        var status=button(task.status().label,()->cycle(task));
         status.setName("task.status."+task.id());
-        status.setForeground(switch(task.status()){case TODO->pillInk(MUTED);case DOING->pillInk(GOLD);case DONE->pillInk(CYAN);});
-        status.setPreferredSize(new Dimension(72,26));
+        status.setBackground(wash(switch(task.status()){case TODO->MUTED;case DOING->GOLD;case DONE->CYAN;}));
+        status.setForeground(TEXT);
+        status.setFont(captionFont());
+        status.setBorder(new EmptyBorder(RING,SPACE_SM,RING,SPACE_SM));
         status.setToolTipText("Click to move this task to its next status");
-        line.add(status,BorderLayout.WEST);
+        status.getAccessibleContext().setAccessibleName("Status: "+task.status().label+". Activate for the next status");
+        line.add(status);
 
-        var title=label(task.title(),TYPE_LABEL,done?MUTED:TEXT);
-        if(!task.notes().isBlank())title.setToolTipText(task.notes());
-        line.add(title,BorderLayout.CENTER);
+        var title=new JTextArea(task.title());
+        title.setName("task.title."+task.id());
+        title.setEditable(false);
+        title.setFocusable(false);
+        title.setHighlighter(null);
+        title.setOpaque(false);
+        title.setLineWrap(true);
+        title.setWrapStyleWord(true);
+        title.setFont(labelFont());
+        title.setForeground(done?MUTED:TEXT);
+        title.setBorder(new EmptyBorder(0,0,0,0));
+        title.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        title.setToolTipText(task.notes().isBlank()?"Open to edit":task.notes());
+        title.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                if(SwingUtilities.isLeftMouseButton(e)&&e.getClickCount()==1) edit(task);
+            }
+        });
+        line.add(title);
 
-        // Fixed widths, and Track always present even when it cannot run: every
-        // column has to land in the same place on every row or this stops being
-        // a board and goes back to being a ragged list. The widths are this
-        // board's own; the gap between them is the shared one.
-        var right=tightRow();
-        var dueLabel=due(task);
-        dueLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-        dueLabel.setPreferredSize(new Dimension(96,20));
-        right.add(dueLabel);
-        var chip=chip(task);
-        chip.setPreferredSize(new Dimension(112,20));
-        right.add(chip);
-        var up=compact(button("↑",()->move(tasks,index,-1)));
-        up.setName("task.up."+task.id());up.setEnabled(reorderable()&&index>0);
-        up.setToolTipText(reorderable()?"Move up":"Reordering needs the All view in My order");
-        var down=compact(button("↓",()->move(tasks,index,1)));
-        down.setName("task.down."+task.id());down.setEnabled(reorderable()&&index<tasks.size()-1);
-        down.setToolTipText(reorderable()?"Move down":"Reordering needs the All view in My order");
-        right.add(up);right.add(down);
-        var track=compact(button("Track",()->{
-            try{tracker.start(task.activityId());Dialogs.info(this,"Timer started for this task's activity.");refresh.run();}
-            catch(Exception ex){error(ex);}
-        }));
-        track.setName("task.track."+task.id());
-        track.setEnabled(task.activityId()!=null&&!done);
-        track.setToolTipText(task.activityId()==null?"Assign an activity to time this task"
-            :done?"This task is finished":"Clock in on this task's activity");
-        right.add(track);
-        var editButton=compact(button("Edit",()->edit(task)));
-        editButton.setName("task.edit."+task.id());
-        right.add(editButton);
-        line.add(right,BorderLayout.EAST);
-        line.setMaximumSize(new Dimension(Integer.MAX_VALUE,line.getPreferredSize().height));
+        line.add(tagPill(task));
+        line.add(due(task));
+
+        var more=button("⋯",()->{});
+        more.setName("task.menu."+task.id());
+        more.setBackground(PANEL);
+        more.setForeground(MUTED);
+        more.setBorder(new EmptyBorder(RING,SPACE_SM,RING,SPACE_SM));
+        more.setToolTipText("Edit, track, move or delete");
+        more.getAccessibleContext().setAccessibleName("Actions for "+task.title());
+        more.addActionListener(e->{var menu=rowMenu(task.id());if(menu!=null)menu.show(more,0,more.getHeight());});
+        line.add(more);
+
+        install(line,new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { open(e); }
+            @Override public void mouseReleased(MouseEvent e) { open(e); }
+            private void open(MouseEvent e) {
+                if(!e.isPopupTrigger()) return;
+                var menu=rowMenu(task.id());
+                if(menu!=null) menu.show(e.getComponent(),e.getX(),e.getY());
+            }
+        });
         if(reorderable()) installDrag(line,tasks,index);
         return line;
+    }
+
+    /** Lays a row's cells into the shared column widths; the title column takes what is left. */
+    static final class Columns implements LayoutManager {
+        /** The width assumed before a row has one, so a first measurement is a sensible one. */
+        private static final int UNSIZED=SPACE_XXL*30;
+
+        @Override public void addLayoutComponent(String name,Component cell) { }
+        @Override public void removeLayoutComponent(Component cell) { }
+
+        static int[] widths(int inner) {
+            int fixed=Arrays.stream(COLUMNS).sum();
+            var out=COLUMNS.clone();
+            out[TITLE_COLUMN]=Math.max(SPACE_XXL*4,inner-fixed-SPACE_MD*(COLUMNS.length-1));
+            return out;
+        }
+
+        private static int inner(Container row) {
+            var insets=row.getInsets();
+            return (row.getWidth()>0?row.getWidth():UNSIZED)-insets.left-insets.right;
+        }
+
+        /** A wrapping title is as tall as its text at this width; anything else is its preferred height. */
+        private static int height(Component cell,int width) {
+            if(cell instanceof JTextArea wrapping) {
+                wrapping.setSize(width,Short.MAX_VALUE);
+                return wrapping.getPreferredSize().height;
+            }
+            return cell.getPreferredSize().height;
+        }
+
+        private static boolean fills(Component cell) {
+            return cell instanceof JTextArea||cell instanceof JLabel l&&l.getClientProperty(PILL)==null;
+        }
+
+        @Override public Dimension preferredLayoutSize(Container row) {
+            var insets=row.getInsets();
+            int[] w=widths(inner(row));
+            int tallest=0;
+            for(int i=0;i<Math.min(w.length,row.getComponentCount());i++) tallest=Math.max(tallest,height(row.getComponent(i),w[i]));
+            return new Dimension(Arrays.stream(w).sum()+SPACE_MD*(w.length-1)+insets.left+insets.right,
+                tallest+insets.top+insets.bottom);
+        }
+
+        @Override public Dimension minimumLayoutSize(Container row) { return new Dimension(0,preferredLayoutSize(row).height); }
+
+        @Override public void layoutContainer(Container row) {
+            var insets=row.getInsets();
+            int[] w=widths(inner(row));
+            int tallest=row.getHeight()-insets.top-insets.bottom, x=insets.left;
+            for(int i=0;i<Math.min(w.length,row.getComponentCount());i++) {
+                var cell=row.getComponent(i);
+                int width=fills(cell)?w[i]:Math.min(cell.getPreferredSize().width,w[i]);
+                int height=Math.min(tallest,height(cell,w[i]));
+                cell.setBounds(x,insets.top+Math.max(0,(tallest-height)/2),width,height);
+                x+=w[i]+SPACE_MD;
+            }
+        }
     }
 
     private static javax.swing.border.Border restingBorder() {
@@ -279,44 +434,43 @@ final class TasksPanel extends JPanel implements Scrollable {
     }
 
     /**
-     * Pointer drag to reorder (#23), alongside the arrows rather than instead of
-     * them: the arrows are keyboard reachable and are what a headless test drives.
+     * Pointer drag to reorder (#23), alongside Move up and Move down rather than
+     * instead of them: the menu is keyboard reachable and is what a headless test drives.
      *
      * Listeners go on the row and on its non-interactive children, because Swing
      * delivers to the deepest component under the cursor and does not walk up —
-     * a press on the title label would otherwise never reach the row. Buttons
-     * consume their own presses, so pressing Edit does not start a drag.
+     * a press on the title would otherwise never reach the row. Buttons and the
+     * checkbox consume their own presses, so pressing one does not start a drag.
      */
     private void installDrag(JPanel line,List<Task> tasks,int index) {
-        var handler=new java.awt.event.MouseAdapter() {
-            @Override public void mousePressed(java.awt.event.MouseEvent e) {
+        install(line,new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) {
                 dragFrom=index; dragTo=index;
             }
-            @Override public void mouseDragged(java.awt.event.MouseEvent e) {
+            @Override public void mouseDragged(MouseEvent e) {
                 if(dragFrom<0) return;
-                var inRows=SwingUtilities.convertPoint((java.awt.Component)e.getSource(),e.getPoint(),rows);
-                dragTo=slotAt(inRows.y);
+                var inTable=SwingUtilities.convertPoint((Component)e.getSource(),e.getPoint(),line.getParent());
+                dragTo=slotAt(inTable.y);
                 for(int i=0;i<rowPanels.size();i++)
                     rowPanels.get(i).setBorder(i==dragTo&&dragTo!=dragFrom?insertionBorder():restingBorder());
-                rows.repaint();
+                line.getParent().repaint();
             }
-            @Override public void mouseReleased(java.awt.event.MouseEvent e) {
+            @Override public void mouseReleased(MouseEvent e) {
                 if(dragFrom<0) return;
                 int from=dragFrom, to=dragTo;
                 dragFrom=-1; dragTo=-1;
-                if(to<0||to==from) { rebuildRows(); return; }
+                if(to<0||to==from) { rowPanels.forEach(row->row.setBorder(restingBorder())); return; }
                 moveTo(tasks,from,to);
             }
-        };
-        install(line,handler);
+        });
     }
 
-    private static void install(java.awt.Component component,java.awt.event.MouseAdapter handler) {
+    private static void install(Component component,MouseAdapter handler) {
         // Anything that handles its own clicks is left alone.
-        if(component instanceof JButton||component instanceof JComboBox<?>) return;
+        if(component instanceof AbstractButton||component instanceof JComboBox<?>) return;
         component.addMouseListener(handler);
         component.addMouseMotionListener(handler);
-        if(component instanceof java.awt.Container container)
+        if(component instanceof Container container)
             for(var child:container.getComponents()) install(child,handler);
     }
 
@@ -339,7 +493,9 @@ final class TasksPanel extends JPanel implements Scrollable {
 
     private JLabel due(Task task) {
         var when=task.workOn();
-        if(when==null)return label("no date",TYPE_CAPTION,MUTED);
+        var l=label("",TYPE_CAPTION,MUTED);
+        l.setName("task.due."+task.id());
+        if(when==null) { l.getAccessibleContext().setAccessibleName("No date"); return l; }
         var today=LocalDate.now();
         // Four steps of urgency, not three: overdue in danger, today in gold,
         // tomorrow in the body ink, and everything further out muted. Tomorrow
@@ -350,43 +506,144 @@ final class TasksPanel extends JPanel implements Scrollable {
             :when.isBefore(today)?DANGER
             :when.equals(today)?GOLD_TEXT
             :when.equals(today.plusDays(1))?TEXT:MUTED;
-        var text=when.equals(today)?"today"
-            :when.equals(today.plusDays(1))?"tomorrow"
-            :when.toString();
+        var text=when.equals(today)?"Today"
+            :when.equals(today.plusDays(1))?"Tomorrow"
+            :DateText.longDate(when);
         // A planned day that is not the deadline gets a marker, because the two
         // being different is the thing worth noticing.
         if(task.plannedFor()!=null&&task.due()!=null&&!task.plannedFor().equals(task.due())) text="→ "+text;
-        var l=label(text,TYPE_CAPTION,colour);
+        l.setText(text);
+        l.setForeground(colour);
         if(task.scheduledLate())
-            l.setToolTipText("Planned for "+task.plannedFor()+", but due "+task.due());
+            l.setToolTipText("Planned for "+DateText.date(task.plannedFor())+", but due "+DateText.date(task.due()));
         else if(task.plannedFor()!=null&&task.due()!=null)
-            l.setToolTipText("Planned for "+task.plannedFor()+", due "+task.due());
+            l.setToolTipText("Planned for "+DateText.date(task.plannedFor())+", due "+DateText.date(task.due()));
         else if(when.isBefore(today)&&task.status()!=TaskStatus.DONE)
-            l.setToolTipText("Overdue since "+when);
+            l.setToolTipText("Overdue since "+DateText.date(when));
         return l;
     }
 
-    private JComponent chip(Task task) {
+    /** Notion's select pill: the tag's name on a wash of its colour, or an empty cell for no tag. */
+    private JLabel tagPill(Task task) {
         var tag=tracker.state().tags().stream().filter(t->t.id().equals(task.tagId())).findFirst().orElse(null);
-        // Plain MUTED: the shaded version measured under 4.5:1 on the light themes.
-        if(tag==null)return label("untagged",TYPE_CAPTION,MUTED);
-        var chip=tightRow();
-        // A tag is its colour, and the stored palette is drawn for a dark
-        // ground: on a light card the raw teal and amber measured 1.6-1.9:1, so
-        // the one cue that says which tag this is disappeared. Deepening the
-        // dot on a light theme keeps its hue and puts every palette entry over
-        // 3:1 on both light grounds; the dark themes already had 5:1 and are
-        // left alone.
-        chip.add(TagEditor.swatch(shade(new Color(tag.colour()),DARK?0:-70).getRGB(),SPACE_MD));
-        chip.add(label(tag.name(),TYPE_CAPTION,MUTED));
-        return chip;
+        if(tag==null) return label("",TYPE_CAPTION,MUTED);
+        var fill=wash(new Color(tag.colour()));
+        var pill=new JLabel(tag.name()) {
+            @Override protected void paintComponent(Graphics graphics) {
+                var g=(Graphics2D)graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(fill);
+                g.fillRoundRect(0,0,getWidth(),getHeight(),RADIUS,RADIUS);
+                g.dispose();
+                super.paintComponent(graphics);
+            }
+        };
+        pill.putClientProperty("html.disable",true);
+        pill.putClientProperty(PILL,Boolean.TRUE);
+        pill.setName("task.tag."+task.id());
+        pill.setFont(captionFont());
+        pill.setForeground(TEXT);
+        pill.setBorder(new EmptyBorder(RING,SPACE_SM,RING,SPACE_SM));
+        pill.setToolTipText("Tag: "+tag.name());
+        return pill;
+    }
+
+    /** The last line of the table, as in Notion: a quiet way to add a task right where the list ends. */
+    private JComponent newRow() {
+        var add=button("+  New task",()->edit(null));
+        add.setName("task.newRow");
+        add.setBackground(PANEL);
+        add.setForeground(MUTED);
+        add.setHorizontalAlignment(SwingConstants.LEFT);
+        add.setBorder(new EmptyBorder(SPACE_SM,SPACE_MD,SPACE_SM,SPACE_MD));
+        var slot=new JPanel(new BorderLayout()) {
+            @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE,getPreferredSize().height); }
+        };
+        slot.setOpaque(false);
+        slot.setAlignmentX(0);
+        slot.add(add,BorderLayout.CENTER);
+        return slot;
+    }
+
+    /** The ⋯ menu for one task on the board, or null when it is not shown. Package-private for the tests. */
+    JPopupMenu rowMenu(UUID id) {
+        var tasks=visible();
+        int index=-1;
+        for(int i=0;i<tasks.size();i++) if(tasks.get(i).id().equals(id)) index=i;
+        if(index<0) return null;
+        int at=index;
+        var task=tasks.get(at);
+        boolean done=task.status()==TaskStatus.DONE;
+        var menu=menu();
+        menu.add(item("Edit…","task.edit."+id,true,()->edit(task),null));
+        menu.add(item("Track time","task.track."+id,task.activityId()!=null&&!done,()->track(task),
+            task.activityId()==null?"Assign an activity to time this task":"This task is finished"));
+        menu.addSeparator();
+        String why="Reordering needs the All view in My order";
+        menu.add(item("Move up","task.up."+id,reorderable()&&at>0,()->move(tasks,at,-1),reorderable()?null:why));
+        menu.add(item("Move down","task.down."+id,reorderable()&&at<tasks.size()-1,()->move(tasks,at,1),reorderable()?null:why));
+        menu.addSeparator();
+        menu.add(item("Delete…","task.delete."+id,true,()->delete(task),null));
+        return menu;
+    }
+
+    /** Import's two sources in one menu, rather than two buttons that looked as important as New. */
+    JPopupMenu importMenu() {
+        var menu=menu();
+        menu.add(item("Paste task proposals…","task.import.paste",true,this::importPaste,null));
+        menu.add(item("Notion export…","task.import.notion",true,this::importNotion,null));
+        return menu;
+    }
+
+    private static JPopupMenu menu() {
+        var menu=new JPopupMenu() {
+            // The look-and-feel's separator is drawn in its own highlight colour,
+            // which on these palettes was a bright accent line across the menu.
+            @Override public void addSeparator() {
+                var line=new JPopupMenu.Separator();
+                line.setForeground(LINE);
+                line.setBackground(PANEL);
+                add(line);
+            }
+        };
+        menu.setBackground(PANEL);
+        menu.setBorder(new CompoundBorder(new LineBorder(LINE),new EmptyBorder(SPACE_XS,0,SPACE_XS,0)));
+        return menu;
+    }
+
+    private static JMenuItem item(String text,String name,boolean enabled,Runnable action,String whyNot) {
+        var item=new JMenuItem(text);
+        item.setName(name);
+        item.setFont(labelFont());
+        item.setOpaque(true);
+        item.setBackground(PANEL);
+        item.setForeground(TEXT);
+        item.setBorder(new EmptyBorder(SPACE_XS,SPACE_MD,SPACE_XS,SPACE_MD));
+        item.setEnabled(enabled);
+        if(!enabled&&whyNot!=null) item.setToolTipText(whyNot);
+        item.addActionListener(e->action.run());
+        return item;
+    }
+
+    private void track(Task task) {
+        try{tracker.start(task.activityId());Dialogs.info(this,"Timer started for this task's activity.");refresh.run();}
+        catch(Exception ex){error(ex);}
+    }
+
+    private void delete(Task task) {
+        if(!Dialogs.confirmDestructive(this,"Delete “"+task.title()+"”?\n\nIts notes and dates go with it. Time you have tracked is kept.",
+            "Delete task","Delete")) return;
+        try{tracker.deleteTask(task.id());rebuildRows();}catch(Exception e){error(e);}
+    }
+
+    private void status(Task task,TaskStatus next) {
+        try{tracker.taskStatus(task.id(),next);rebuildRows();}catch(Exception e){error(e);}
     }
 
     private void cycle(Task task) {
-        var next=switch(task.status()) {
+        status(task,switch(task.status()) {
             case TODO->TaskStatus.DOING; case DOING->TaskStatus.DONE; case DONE->TaskStatus.TODO;
-        };
-        try{tracker.taskStatus(task.id(),next);rebuildRows();}catch(Exception e){error(e);}
+        });
     }
 
     private void move(List<Task> tasks,int index,int delta) {
@@ -433,31 +690,32 @@ final class TasksPanel extends JPanel implements Scrollable {
     private void edit(Task existing) {
         var title=new JTextField(existing==null?"":existing.title(),36);
         var notes=new JTextArea(existing==null?"":existing.notes(),5,36);notes.setLineWrap(true);notes.setWrapStyleWord(true);
-        var due=new JTextField(existing==null||existing.due()==null?"":existing.due().toString(),15);
+        var due=new DateField(existing==null?null:existing.due(),"Due",true);
         var activity=plainCombo(new JComboBox<Object>());activity.addItem("Unassigned");tracker.state().activities().forEach(activity::addItem);
         if(existing!=null&&existing.activityId()!=null)for(int i=1;i<activity.getItemCount();i++)if(((Activity)activity.getItemAt(i)).id().equals(existing.activityId()))activity.setSelectedIndex(i);
         var status=plainCombo(new JComboBox<>(TaskStatus.values()));
         status.setSelectedItem(existing==null?TaskStatus.TODO:existing.status());
         var tag=plainCombo(new JComboBox<Object>());tag.addItem("No tag");tracker.state().tags().forEach(tag::addItem);
         if(existing!=null&&existing.tagId()!=null)for(int i=1;i<tag.getItemCount();i++)if(((Tag)tag.getItemAt(i)).id().equals(existing.tagId()))tag.setSelectedIndex(i);
-        var planned=new JTextField(existing==null||existing.plannedFor()==null?"":existing.plannedFor().toString(),15);
+        var planned=new DateField(existing==null?null:existing.plannedFor(),"Plan for",true);
         planned.setName("task.plannedFor");
         var form=stack();form.add(new JLabel("Title"));form.add(title);gap(form,SPACE_MD);form.add(new JLabel("Notes"));form.add(new JScrollPane(notes));gap(form,SPACE_MD);
-        form.add(new JLabel("Due · the deadline · YYYY-MM-DD or blank"));form.add(due);gap(form,SPACE_MD);
+        form.add(new JLabel("Due · the deadline"));form.add(due);gap(form,SPACE_MD);
         form.add(new JLabel("Plan for · the day you mean to do it · blank to use the deadline"));form.add(planned);gap(form,SPACE_MD);
         form.add(new JLabel("Activity"));form.add(activity);gap(form,SPACE_MD);form.add(new JLabel("Status"));form.add(status);gap(form,SPACE_MD);form.add(new JLabel("Tag"));form.add(tag);
-        if(!Dialogs.confirm(this,form,existing==null?"New task":"Edit task","Save"))return;
-        try {
-            var task=merged(existing,
-                activity.getSelectedItem() instanceof Activity a?a.id():null,
-                tag.getSelectedItem() instanceof Tag t?t.id():null,
-                title.getText(),notes.getText(),
-                due.getText().isBlank()?null:LocalDate.parse(due.getText().strip()),
-                (TaskStatus)status.getSelectedItem(),nextOrder(),
-                planned.getText().isBlank()?null:LocalDate.parse(planned.getText().strip()));
-            if(existing==null)tracker.addTasks(List.of(task));else tracker.updateTask(task);
-            rebuildRows();
-        }catch(Exception e){error(e);}
+        // Reopened on a refusal with everything as typed, rather than closed with it lost.
+        while(Dialogs.confirm(this,form,existing==null?"New task":"Edit task","Save")) {
+            try {
+                var task=merged(existing,
+                    activity.getSelectedItem() instanceof Activity a?a.id():null,
+                    tag.getSelectedItem() instanceof Tag t?t.id():null,
+                    title.getText(),notes.getText(),due.value(),
+                    (TaskStatus)status.getSelectedItem(),nextOrder(),planned.value());
+                if(existing==null)tracker.addTasks(List.of(task));else tracker.updateTask(task);
+                rebuildRows();
+                return;
+            }catch(Exception e){error(e);}
+        }
     }
     private void importPaste() {
         var form=new TaskPastePanel();
@@ -492,8 +750,8 @@ final class TasksPanel extends JPanel implements Scrollable {
     private void review(List<Task> proposed) {
         if(proposed.isEmpty()){Dialogs.info(this,"No tasks were found in that reply. Nothing was saved.");return;}
         Object[][] rows=new Object[proposed.size()][4];
-        for(int i=0;i<proposed.size();i++){var t=proposed.get(i);rows[i]=new Object[]{true,t.title(),t.due()==null?"":t.due().toString(),t.notes()};}
-        var model=new DefaultTableModel(rows,new String[]{"Add","Task title","Due (YYYY-MM-DD)","Notes / evidence"}){public Class<?> getColumnClass(int c){return c==0?Boolean.class:String.class;}};
+        for(int i=0;i<proposed.size();i++){var t=proposed.get(i);rows[i]=new Object[]{true,t.title(),t.due()==null?"":DateText.date(t.due()),t.notes()};}
+        var model=new DefaultTableModel(rows,new String[]{"Add","Task title","Due (e.g. Sep 14)","Notes / evidence"}){public Class<?> getColumnClass(int c){return c==0?Boolean.class:String.class;}};
         var table=new JTable(model);plainTable(table);table.setRowHeight(SPACE_XXL);table.setFont(bodyFont());
         table.setBackground(PANEL);table.setForeground(TEXT);
         // TEXT on LINE measures 7.0-10.1:1 on all four themes; the accent it
@@ -514,7 +772,7 @@ final class TasksPanel extends JPanel implements Scrollable {
                 // Imported tasks land at the bottom of the manual order; the short
                 // constructor would give every one of them order 0, above the rest.
                 int order=nextOrder();
-                for(int i=0;i<rows.length;i++)if(Boolean.TRUE.equals(model.getValueAt(i,0))){String due=String.valueOf(model.getValueAt(i,2)).strip();selected.add(new Task(proposed.get(i).id(),activity.getSelectedItem() instanceof Activity a?a.id():null,null,String.valueOf(model.getValueAt(i,1)),String.valueOf(model.getValueAt(i,3)),due.isBlank()?null:LocalDate.parse(due),TaskStatus.TODO,proposed.get(i).source(),Instant.now(),order++));}
+                for(int i=0;i<rows.length;i++)if(Boolean.TRUE.equals(model.getValueAt(i,0))){String due=String.valueOf(model.getValueAt(i,2)).strip();selected.add(new Task(proposed.get(i).id(),activity.getSelectedItem() instanceof Activity a?a.id():null,null,String.valueOf(model.getValueAt(i,1)),String.valueOf(model.getValueAt(i,3)),due.isBlank()?null:DateText.parseDate(due,LocalDate.now()),TaskStatus.TODO,proposed.get(i).source(),Instant.now(),order++));}
                 int count=tracker.addTasks(selected);Dialogs.info(this,count+" tasks added. Existing title/date/activity duplicates were skipped.");rebuildRows();return;
             }catch(Exception e){error(e);}
         }

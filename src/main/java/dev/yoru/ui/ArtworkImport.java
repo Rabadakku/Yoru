@@ -20,12 +20,25 @@ final class ArtworkImport {
         dialog.setContentPane(content);dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
         dialog.pack();dialog.setLocationRelativeTo(owner);dialog.setVisible(true);
         new SwingWorker<ArtworkLibrary.Report,Void>() {
-            protected ArtworkLibrary.Report doInBackground() throws Exception { return ArtworkLibrary.install(source); }
+            private ArtworkLibrary.Report before;
+            protected ArtworkLibrary.Report doInBackground() throws Exception {
+                before=ArtworkLibrary.survey();
+                return ArtworkLibrary.install(source);
+            }
             protected void done() {
                 busy=false;dialog.dispose();
-                try { var report=get();SpriteAssets.refresh();ready.run();Dialogs.info(owner,"Artwork ready",report.summary()); }
+                try { var report=get();SpriteAssets.refresh();ready.run();Dialogs.info(owner,"Artwork ready",outcome(before,report)); }
                 catch(Exception e) { error.accept(e.getCause() instanceof Exception cause?cause:e); }
             }
         }.execute();
+    }
+
+    /** What the import added first, then anything it warned about or skipped, then the library it left (#6). */
+    static String outcome(ArtworkLibrary.Report before,ArtworkLibrary.Report after) {
+        var text=new StringBuilder(after.changesSince(before));
+        if(!after.warnings().isEmpty()) text.append("\n\n").append(String.join("\n",after.warnings()));
+        if(after.skipped()>0) text.append("\n\n").append(after.skipped()).append(after.skipped()==1?" file was":" files were")
+            .append(" not artwork and skipped.");
+        return text.append("\n\nYour library now has ").append(after.totals()).append('.').toString();
     }
 }

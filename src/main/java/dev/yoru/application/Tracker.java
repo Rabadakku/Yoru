@@ -147,6 +147,24 @@ public final class Tracker {
     }
 
     /**
+     * Changes an activity's daily target, by identity (#21).
+     *
+     * Like a rename, only the activity record changes: no session, block, repeat
+     * or task is touched. Validated by Activity first, backed up like a rename,
+     * and nothing is written when the target is already the one asked for.
+     */
+    public void retargetActivity(UUID id,int targetMinutes) throws IOException {
+        var existing=state.activities().stream().filter(a->a.id().equals(id)).findFirst()
+            .orElseThrow(()->new IllegalArgumentException("That activity no longer exists."));
+        var retargeted=existing.retargeted(targetMinutes);
+        if(retargeted.equals(existing)) return;
+        var list=new ArrayList<>(state.activities());
+        list.set(list.indexOf(existing),retargeted);
+        repository.backup();
+        commit(state.withCore(list,state.sessions(),state.blocks()));
+    }
+
+    /**
      * Removes an activity, keeping its recorded time under
      * {@link dev.yoru.domain.Model#UNCATEGORIZED} or deleting it along with the
      * activity.
@@ -268,11 +286,14 @@ public final class Tracker {
         list.add(next);
         commit(state.withCore(state.activities(),state.sessions(),list));
     }
+    /** Refused for a session that is already gone, so a stale control says so instead of appearing to work. */
     public void deleteSession(UUID id) throws IOException {
+        if(state.sessions().stream().noneMatch(s->s.id().equals(id)))throw new IllegalArgumentException("Session no longer exists.");
         if(active()!=null&&active().id().equals(id))throw new IllegalArgumentException("Clock out before deleting.");
         commit(state.withCore(state.activities(),state.sessions().stream().filter(s->!s.id().equals(id)).toList(),state.blocks()));
     }
     public void deleteBlock(UUID id) throws IOException {
+        if(state.blocks().stream().noneMatch(b->b.id().equals(id)))throw new IllegalArgumentException("Block no longer exists.");
         commit(state.withCore(state.activities(),state.sessions(),state.blocks().stream().filter(b->!b.id().equals(id)).toList()));
     }
 
@@ -371,8 +392,49 @@ public final class Tracker {
     public void editHabitStart(UUID id, Instant since) throws IOException {
         var h=habit(id);
         if(h.kind()!=HabitKind.TIME_SINCE) throw new IllegalArgumentException("Choose a time-since tracker.");
-        if(since.isAfter(clock.instant())) throw new IllegalArgumentException("Start cannot be in the future.");
-        var starts=new ArrayList<>(h.starts());starts.set(starts.size()-1,since);
+        editHabitPeriod(id,h.starts().getLast(),since);
+    }
+
+    /**
+     * Moves the start of any one period of a time-since tracker (#21).
+     *
+     * The period is found by the instant it starts at, not by its place in a
+     * list, so a history that changed after its dialog opened refuses the edit
+     * instead of moving some other period. A start stays after the period before
+     * it, before the period after it, and out of the future; each refusal says
+     * which, where the record itself could only say the order was wrong.
+     */
+    public void editHabitPeriod(UUID id, Instant periodStart, Instant newStart) throws IOException {
+        var h=habit(id);
+        if(h.kind()!=HabitKind.TIME_SINCE) throw new IllegalArgumentException("Choose a time-since tracker.");
+        int index=h.starts().indexOf(periodStart);
+        if(index<0) throw new IllegalArgumentException("That period changed after it was opened. Reopen the history and try again.");
+        if(newStart.isAfter(clock.instant())) throw new IllegalArgumentException("Start cannot be in the future.");
+        if(index>0&&!newStart.isAfter(h.starts().get(index-1)))
+            throw new IllegalArgumentException("A period has to start after the one before it began.");
+        if(index<h.starts().size()-1&&!newStart.isBefore(h.starts().get(index+1)))
+            throw new IllegalArgumentException("A period has to start before the one after it began.");
+        var starts=new ArrayList<>(h.starts());
+        starts.set(index,newStart);
+        replaceHabit(new Habit(h.id(),h.name(),h.kind(),h.zone(),h.checkIns(),starts));
+    }
+
+    /**
+     * Removes one period's start, so the time it covered joins its neighbour (#21).
+     *
+     * A tracker always keeps one period; deleting the last is deleting the
+     * tracker, which has its own control. Backed up first, like deleting a habit.
+     */
+    public void deleteHabitPeriod(UUID id, Instant periodStart) throws IOException {
+        var h=habit(id);
+        if(h.kind()!=HabitKind.TIME_SINCE) throw new IllegalArgumentException("Choose a time-since tracker.");
+        if(!h.starts().contains(periodStart))
+            throw new IllegalArgumentException("That period changed after it was opened. Reopen the history and try again.");
+        if(h.starts().size()==1)
+            throw new IllegalArgumentException("A time-since tracker keeps at least one period. Delete the tracker instead.");
+        var starts=new ArrayList<>(h.starts());
+        starts.remove(periodStart);
+        repository.backup();
         replaceHabit(new Habit(h.id(),h.name(),h.kind(),h.zone(),h.checkIns(),starts));
     }
     private Habit habit(UUID id) { return state.habits().stream().filter(h->h.id().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("Tracker no longer exists.")); }
@@ -606,6 +668,7 @@ public final class Tracker {
 
     /** Tasks keep everything except the tag; deleting a tag never deletes work. */
     public void deleteTag(UUID id) throws IOException {
+        if(state.tags().stream().noneMatch(t->t.id().equals(id)))throw new IllegalArgumentException("Tag no longer exists.");
         var tasks=state.tasks().stream().map(t->id.equals(t.tagId())
             ? new Task(t.id(),t.activityId(),null,t.title(),t.notes(),t.due(),t.status(),t.source(),t.createdAt(),t.order(),t.plannedFor())
             : t).toList();

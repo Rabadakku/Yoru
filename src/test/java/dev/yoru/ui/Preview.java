@@ -62,6 +62,13 @@ public final class Preview {
         Path out = Path.of(args.length > 0 ? args[0] : "build/preview");
         int width = args.length > 1 ? Integer.parseInt(args[1]) : 1280;
         int height = args.length > 2 ? Integer.parseInt(args[2]) : 1000;
+        renderAll(out, width, height);
+        // The windows' timers would keep the event thread, and so the JVM, alive.
+        System.exit(0);
+    }
+
+    /** Every render into {@code out}. PreviewInventoryTest holds the result to the full list. */
+    static void renderAll(Path out, int width, int height) throws Exception {
         Files.createDirectories(out);
 
         SwingUtilities.invokeAndWait(() -> {
@@ -86,7 +93,6 @@ public final class Preview {
                 throw new RuntimeException(e);
             }
         });
-        System.exit(0);
     }
 
     /** Every page, in the theme that is already applied, named with that theme. */
@@ -176,20 +182,20 @@ public final class Preview {
 
         // Tags first, so the board renders tagged and untagged rows side by
         // side; an overdue and a due-today row cover the date colours.
-        var cs=tracker.addTag("CS 240", 0x90D8DA);
-        var jpn=tracker.addTag("JPN 101", 0xE8B24C);
+        var cs=tracker.addTag("Reading", 0x90D8DA);
+        var jpn=tracker.addTag("Language", 0xE8B24C);
         var now=Instant.now();
         tracker.addTasks(java.util.List.of(
-            new Task(UUID.randomUUID(), study, cs.id(), "Read chapter 4", "Review the worked examples before Thursday.", today.plusDays(1), TaskStatus.TODO, "syllabus.pdf", now, 0),
+            new Task(UUID.randomUUID(), study, cs.id(), "Read chapter 4", "Review the worked examples before Thursday.", today.plusDays(1), TaskStatus.TODO, "reading-list.txt", now, 0),
             new Task(UUID.randomUUID(), activities.get(1).id(), cs.id(), "Finish lab 3", "Submit through the course portal.", today.minusDays(2), TaskStatus.DOING, "Manual entry", now, 1),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Kanji review deck", "", today, TaskStatus.TODO, "Manual entry", now, 2),
             new Task(UUID.randomUUID(), null, null, "Order textbook", "", null, TaskStatus.DONE, "Manual entry", now, 3),
-            new Task(UUID.randomUUID(), study, null, "Email the TA about lab hours", "", null, TaskStatus.TODO, "Manual entry", now, 4),
+            new Task(UUID.randomUUID(), study, null, "Ask about open lab hours", "", null, TaskStatus.TODO, "Manual entry", now, 4),
             new Task(UUID.randomUUID(), study, cs.id(), "HW 3.1 polynomials", "", today.plusDays(4), TaskStatus.TODO, "Manual entry", now, 5),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Kanji quiz", "", today.plusDays(6), TaskStatus.TODO, "Manual entry", now, 6),
-            new Task(UUID.randomUUID(), study, cs.id(), "Project 1 rough draft", "", today.plusDays(7), TaskStatus.TODO, "Manual entry", now, 7),
+            new Task(UUID.randomUUID(), study, cs.id(), "Essay rough draft", "", today.plusDays(7), TaskStatus.TODO, "Manual entry", now, 7),
             new Task(UUID.randomUUID(), null, null, "Return library books", "", null, TaskStatus.TODO, "Manual entry", now, 8),
-            new Task(UUID.randomUUID(), study, cs.id(), "Test 1 in class", "", today.plusDays(12), TaskStatus.TODO, "Manual entry", now, 9),
+            new Task(UUID.randomUUID(), study, cs.id(), "Practice quiz", "", today.plusDays(12), TaskStatus.TODO, "Manual entry", now, 9),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Grammar review", "", today.minusDays(4), TaskStatus.DONE, "Manual entry", now, 10)));
 
         tracker.addHabit("Evening reset", HabitKind.DAILY, zone, null);
