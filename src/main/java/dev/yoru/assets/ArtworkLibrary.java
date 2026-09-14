@@ -32,6 +32,15 @@ public final class ArtworkLibrary {
     private static final Set<String> SHEETS = Set.of(
         "brendan", "brendan-running", "may", "may-running", "tree", "rock", "grass",
         "route-trainer", "route-cyclist", "team-rocket");
+    /**
+     * The sheets only route visitors use. They are extras: the scene walks and
+     * runs without them, borrowing the other trainer as a passer-by, and no
+     * extractor or scene pack is expected to supply them. Counting them as
+     * required made a complete scene read "Partial · 7 of 10 sheets".
+     */
+    private static final Set<String> CAMEOS = Set.of("route-trainer", "route-cyclist", "team-rocket");
+    /** The sheets a complete walking scene needs. */
+    static final int SCENE_SHEETS = SHEETS.size() - CAMEOS.size();
 
     private static Path base() {
         return Path.of(System.getProperty("user.home"), ".yoru", "art");
@@ -50,12 +59,19 @@ public final class ArtworkLibrary {
         return base;
     }
 
+    /** @param cameos how many of {@code sheets} are optional route visitors rather than the scene's own */
     public record Report(int species, int shiny, int sheets, int skipped, int games,
-                         int wallpapers, int imported, List<String> warnings) {
+                         int wallpapers, int imported, List<String> warnings, int cameos) {
         public Report { warnings = List.copyOf(warnings); }
+        public Report(int species, int shiny, int sheets, int skipped, int games,
+                      int wallpapers, int imported, List<String> warnings) {
+            this(species, shiny, sheets, skipped, games, wallpapers, imported, warnings, 0);
+        }
         public Report(int species, int shiny, int sheets, int skipped, int games) {
             this(species, shiny, sheets, skipped, games, 0, 0, List.of());
         }
+        /** The walking scene's own sheets, without the route visitors. */
+        public int scene() { return Math.max(0, Math.min(SCENE_SHEETS, sheets - cameos)); }
         public boolean empty() { return species == 0 && shiny == 0 && sheets == 0 && wallpapers == 0; }
         /** The library's counts, and nothing about any one import. */
         public String totals() {
@@ -96,7 +112,8 @@ public final class ArtworkLibrary {
                 new Category("pokemon", "Pokémon pictures", species + shiny, SPECIES * 2,
                     species + " of " + SPECIES + " normal, " + shiny + " shiny"),
                 new Category("backgrounds", "Box backgrounds", wallpapers, WALLPAPERS, wallpapers + " of " + WALLPAPERS),
-                new Category("scenery", "Study scenery", sheets, SHEETS.size(), sheets + " of " + SHEETS.size() + " sheets"));
+                new Category("scenery", "Study scenery", scene(), SCENE_SHEETS, scene() + " of " + SCENE_SHEETS + " sheets"
+                    + (cameos > 0 ? " · " + count(cameos, "route visitor") : "")));
         }
 
         private static String count(int n, String noun) { return n + " " + noun + (n == 1 ? "" : "s"); }
@@ -152,20 +169,86 @@ public final class ArtworkLibrary {
     public static Report survey() { return survey(root()); }
 
     private static Report survey(Path root) {
-        int species = 0, shiny = 0, sheets = 0, wallpapers = 0;
+        int species = 0, shiny = 0, sheets = 0, wallpapers = 0, cameos = 0;
         for (int i = 1; i <= SPECIES; i++) {
             if (validImage(root.resolve(i + ".png"))) species++;
             if (validImage(root.resolve("shiny/" + i + ".png"))) shiny++;
         }
-        for (String sheet : SHEETS) if (validImage(root.resolve(sheet + ".png"))) sheets++;
+        for (String sheet : SHEETS) {
+            if (!validImage(root.resolve(sheet + ".png"))) continue;
+            sheets++;
+            if (CAMEOS.contains(sheet)) cameos++;
+        }
         for (int i = 0; i < 16; i++)
             if (validImage(root.resolve(String.format(Locale.ROOT, "pc/wallpaper-%02d.png", i)))) wallpapers++;
         int games = Files.isRegularFile(root.resolve("games/emerald-national-dex.gba")) ? 1 : 0;
-        return new Report(species, shiny, sheets, 0, games, wallpapers, 0, List.of());
+        return new Report(species, shiny, sheets, 0, games, wallpapers, 0, List.of(), cameos);
+    }
+
+    /** The last import that could not finish, kept on disk until one does (#6). */
+    public record Failure(java.time.Instant when, String reason) { }
+
+    private static Path failureFile() { return base().resolve("last-failure.properties"); }
+
+    /**
+     * The last import that failed, or null once an import has published since.
+     *
+     * A failed import changes nothing in the library, so the counts alone
+     * cannot say one was tried, and a restart erased the only sign of it, the
+     * error dialog. Settings reads this to mark what is still missing as
+     * Failed rather than as never attempted.
+     */
+    public static Failure lastFailure() {
+        try (var in = Files.newBufferedReader(failureFile())) {
+            var saved = new Properties();
+            saved.load(in);
+            return new Failure(java.time.Instant.parse(saved.getProperty("when")), saved.getProperty("reason", ""));
+        } catch (IOException | RuntimeException none) {
+            return null;
+        }
     }
 
     /** Stage, validate, then publish. No failed import can replace the active generation. */
     public static synchronized Report install(Path source) throws IOException {
+        Report report;
+        try {
+            report = stageAndPublish(source);
+        } catch (IOException | RuntimeException e) {
+            remember(e);
+            throw e;
+        }
+        try { Files.deleteIfExists(failureFile()); }
+        catch (IOException leftForNextTime) { }
+        return report;
+    }
+
+    private static void remember(Exception e) {
+        var saved = new Properties();
+        saved.setProperty("when", java.time.Instant.now().toString());
+        saved.setProperty("reason", reason(e));
+        try {
+            Files.createDirectories(base());
+            try (var out = Files.newBufferedWriter(failureFile())) { saved.store(out, null); }
+        } catch (IOException ignored) {
+            // The import's own error is already on its way to the player.
+        }
+    }
+
+    /**
+     * An import's error as product copy: the library's own messages are written
+     * for players, but the file system's name a path on this machine instead of
+     * saying what went wrong.
+     */
+    static String reason(Exception e) {
+        String message = e.getMessage();
+        if (e instanceof FileSystemException || message == null || message.isBlank()
+                || message.contains("/") || message.contains("\\"))
+            return "Yoru could not read or write part of the artwork library.";
+        message = message.strip();
+        return message.length() <= 240 ? message : message.substring(0, 239) + "…";
+    }
+
+    private static Report stageAndPublish(Path source) throws IOException {
         if (!Files.exists(source)) throw new IOException("That file or folder no longer exists.");
         source = source.toAbsolutePath().normalize();
         if (Files.isDirectory(source) && base().toAbsolutePath().normalize().startsWith(source))
@@ -205,7 +288,7 @@ public final class ArtworkLibrary {
             published = true;
             prune(generations, generation, previous);
             return new Report(found.species(), found.shiny(), found.sheets(), skipped[0], found.games(),
-                found.wallpapers(), budget.imported, budget.warnings);
+                found.wallpapers(), budget.imported, budget.warnings, found.cameos());
         } finally {
             Files.deleteIfExists(pointer);
             if (!published) deleteTree(stage);

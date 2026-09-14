@@ -1799,7 +1799,7 @@ public final class YoruApp extends JPanel implements Shell {
         gap(artwork,SPACE_MD);
         var survey=SpriteAssets.survey();
         var currentGame=GameFiles.rom();
-        artwork.add(ArtworkStatus.rows(survey,currentGame!=null,this::importArtwork,
+        artwork.add(ArtworkStatus.rows(survey,dev.yoru.assets.ArtworkLibrary.lastFailure(),currentGame!=null,this::importArtwork,
             ()->{if(GameFiles.rom()!=null)installArtwork(GameFiles.rom().toFile());}));
         gap(artwork,SPACE_MD);
         artwork.add(bodyLabel("Drop your .gba, folder or .zip anywhere on this window, or:"));
