@@ -1,6 +1,31 @@
 # Development handoff
 
-## Release candidate 1.0.8
+## Release candidate 1.0.9 — September 14, 2026
+
+Branch `claude/open-issues`, from v1.0.8. Notes: `RELEASE-1.0.9.md`. The full
+isolated suite passes; each issue's handoff comment lists commits and limits.
+
+- #20: updater commands log to a file, so the timeout starts at once; a stalled
+  command and its children are stopped; a failed stage removes its copy.
+- #24: `DateText`, `DateField`, `DateTimeField` and `CalendarPanel` give
+  Notion-style date and time entry. The blank Log time boxes were the spinner
+  editor's padding exceeding its height. Unreadable text is refused, never reverted.
+- #25: the Tasks page is a table with a row menu (edit, track, move, delete).
+  `TasksPanel.Columns` shares widths; the table drops BoxLayout's size cache when
+  its width changes, or wrapped titles keep stale heights.
+- #21: `EDITING-AUDIT.md`. Activity targets, repeat editing, time-since periods
+  by start instant, and stale delete refusals, covered by `EditingTest`.
+- #10: `IsolationTest` runs first; `Gen3SectionOracleTest` checks saves against
+  literal layout; `PreviewInventoryTest` requires all 100 renders.
+- #7: `GameController.finishStuckClose` ends a close that only waited on the
+  vault; `GameStartTest` covers the save-size refusal.
+- #6: `ArtworkStatus` rows in Settings; `ArtworkLibrary.prune` keeps the active
+  and previous generations; the import dialog says what was added.
+
+Open: #9, #8, #3/#23 (the illustrated theme work on `codex/audit-recovery` was
+not merged), #12. Native checks against a real core were not repeated.
+
+## Released 1.0.8
 
 Based on v1.0.7, retaining the other contributor's save read model, legacy gift
 repair and updater. Adds individual habit rename/delete with backup and
