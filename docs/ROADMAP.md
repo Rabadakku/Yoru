@@ -2,6 +2,12 @@
 
 ## Dedicated Waifu theme and following audit
 
+Unfinished checkpoint: stopped at the owner's request after committing the
+theme separation and saving three new original illustrations. Those assets
+are not wired into the catalog yet. The expanded theme release and subsequent
+whole-project audit remain pending. See the artwork provenance note for the
+remaining integration and validation work.
+
 Version 1.0.8 is published with habit rename/delete, scene-artwork recovery and
 the first illustrated gallery. The next release separates illustrations into
 a new **Waifu** theme; Moonlight keeps its own violet palette without portraits.
