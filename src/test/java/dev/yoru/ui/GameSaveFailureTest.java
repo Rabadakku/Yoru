@@ -32,12 +32,20 @@ public final class GameSaveFailureTest {
             if(game.phase()!=GameController.Phase.STUCK)throw new AssertionError("close discarded pending save");
             if(!game.running())throw new AssertionError("vault switching is not blocked");
         });
-        repo.fail=false;var retried=new CountDownLatch(1);
+        repo.fail=false;
+        // The retry timer's own action, with no second Close: a save that becomes
+        // durable must finish the close it was holding up, not leave the game locked.
+        SwingUtilities.invokeAndWait(game::retrySave);
+        SwingUtilities.invokeAndWait(()-> {
+            if(game.phase()!=GameController.Phase.IDLE)throw new AssertionError("a retried save left the closed game stuck");
+            if(game.running())throw new AssertionError("vault switching stayed blocked after the save was kept");
+            if(!Arrays.equals(save,tracker.state().game().bytes()))throw new AssertionError("latest save not recovered");
+        });
+        var retried=new CountDownLatch(1);
         SwingUtilities.invokeAndWait(()->game.close(retried::countDown));
-        if(!retried.await(5,TimeUnit.SECONDS))throw new AssertionError("retry stalled");
+        if(!retried.await(5,TimeUnit.SECONDS))throw new AssertionError("a close after recovery stalled");
         SwingUtilities.invokeAndWait(()-> {
             if(game.phase()!=GameController.Phase.IDLE)throw new AssertionError("retry did not finish");
-            if(!Arrays.equals(save,tracker.state().game().bytes()))throw new AssertionError("latest save not recovered");
         });
         var acknowledged=new java.util.concurrent.atomic.AtomicInteger();
         repo.fail=true;
