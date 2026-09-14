@@ -48,7 +48,7 @@ public final class WaifuUiTest {
     }
 
     private static Settings settings(String waifu) {
-        return new Settings(ThemeId.MOONLIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY,waifu);
+        return new Settings(ThemeId.WAIFU,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY,waifu);
     }
 
     private static Component find(Container root,String name) {
@@ -124,24 +124,24 @@ public final class WaifuUiTest {
         check(!hasText(app,"Try Moonlight"),"and recommends none");
         check(find(app,"waifu.art")==null,"no choice means no image");
 
-        // Moonlight supplies default artwork without changing the saved preference.
+        // Waifu supplies default artwork without changing the saved preference.
         onEdt(()->((JButton)find(app,"Settings")).doClick());
-        var moonlight=(JButton)find(app,"settings.theme.MOONLIGHT");
+        var moonlight=(JButton)find(app,"settings.theme.WAIFU");
         check(moonlight!=null,"each theme card's button is named for its theme");
         onEdt(moonlight::doClick);
-        check(tracker.state().settings().theme()==ThemeId.MOONLIGHT,"the Moonlight card chooses the theme");
+        check(tracker.state().settings().theme()==ThemeId.WAIFU,"the Waifu card chooses the theme");
         check(tracker.state().settings().waifu()==null,"without overwriting the portrait preference");
         onEdt(WaifuUiTest::openToday);
-        check(find(app,"waifu.art")!=null,"Moonlight has a default illustration");
+        check(find(app,"waifu.art")!=null,"Waifu has a default illustration");
         for(var theme:ThemeId.values()) {
             onEdt(()-> {
                 tracker.settings(new Settings(theme,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY,"amberglow"));
                 openToday();
             });
-            check((find(app,"waifu.art")!=null)==(theme==ThemeId.MOONLIGHT),"portrait art is exclusive to Moonlight: "+theme);
+            check((find(app,"waifu.art")!=null)==(theme==ThemeId.WAIFU),"portrait art is exclusive to Waifu: "+theme);
             check("amberglow".equals(tracker.state().settings().waifu()),"theme switch retains saved selection");
             onEdt(()->((JButton)find(app,"Tasks")).doClick());
-            check((find(app,"moonlight.gallery")!=null)==(theme==ThemeId.MOONLIGHT),"gallery is exclusive to Moonlight: "+theme);
+            check((find(app,"moonlight.gallery")!=null)==(theme==ThemeId.WAIFU),"gallery is exclusive to Waifu: "+theme);
         }
 
         // A value that is not in the roster reads as Off, not a crash.
@@ -159,8 +159,8 @@ public final class WaifuUiTest {
         check(find(app,"waifu.hint")==null,"a chosen waifu has no hint to show");
         var portrait=showing();
         check(portrait!=null,"a chosen waifu gives the panel an image to draw");
-        check(portrait.getWidth()>=1024,"retired pixel choices resolve to illustrated artwork");
-        check(WaifuCatalog.all().size()==2,"only illustrated portraits remain in the picker");
+        check(portrait.getWidth()>=768,"retired pixel choices resolve to illustrated artwork, shipped at 768 px wide");
+        check(WaifuCatalog.all().size()==5,"the roster is the five illustrated portraits, and nothing else");
 
         // Rotate cycles the roster; a click moves to the next portrait.
         onEdt(()->{
@@ -177,7 +177,7 @@ public final class WaifuUiTest {
             tracker.settings(settings("nightfall"));openToday();
             panel=(WaifuPanel)find(app,"waifu.panel");
         });
-        check(showing().getWidth()>=1024,"illustrated companion has full-size artwork");
+        check(showing().getWidth()>=768,"an illustrated companion is drawn from its full portrait");
         onEdt(()->panel.addNotify());
         check(!panel.cycling(),"one portrait does not waste a rotation timer");
         onEdt(()-> {
@@ -193,16 +193,51 @@ public final class WaifuUiTest {
             panel=(WaifuPanel)find(app,"waifu.panel");
         });
 
-        // The full portrait panel is on Today; Moonlight's other pages use a gallery.
+        // The full portrait panel is on Today; the Waifu theme's other pages use a gallery.
         onEdt(()->{ ((JButton)find(app,"Tasks")).doClick(); layout(app); });
         check(find(app,"waifu.panel")==null,"the panel is not on the other pages");
-        check(find(app,"moonlight.gallery")!=null,"Moonlight artwork continues on Tasks");
+        check(find(app,"moonlight.gallery")!=null,"Waifu artwork continues on Tasks");
 
         // Pages are rebuilt wholesale, so a panel taken off one must stop.
         onEdt(()->panel.addNotify());
         check(panel.cycling(),"the panel cycles while it is on a page");
         onEdt(()->panel.removeNotify());
         check(!panel.cycling(),"a panel taken off the page stops cycling");
+
+        // The picker shows the portraits themselves (#23): the default, all five, and Rotate.
+        onEdt(()->{
+            tracker.settings(settings("amberglow"));
+            ((JButton)find(app,"Settings")).doClick();
+            layout(app);
+        });
+        check(find(app,"settings.waifu.default")!=null&&find(app,"settings.waifu.rotate")!=null,"the picker offers the default and Rotate");
+        for(var w:WaifuCatalog.all()) {
+            var choice=(JButton)find(app,"settings.waifu."+w.id());
+            check(choice!=null&&choice.getIcon()!=null&&choice.getIcon().getIconWidth()==72,"each portrait is chosen by its picture: "+w.id());
+        }
+        check(((JButton)find(app,"settings.waifu.amberglow")).getAccessibleContext().getAccessibleName().endsWith(", chosen"),
+            "the stored choice is marked, and says so");
+        check(!((JButton)find(app,"settings.waifu.vermilion")).getAccessibleContext().getAccessibleName().endsWith(", chosen"),
+            "and no other choice does");
+        onEdt(()->((JButton)find(app,"settings.waifu.vermilion")).doClick());
+        onEdt(()->{ });
+        check("vermilion".equals(tracker.state().settings().waifu()),"picking a picture stores its id");
+
+        // Each page pairs the chosen portrait with a partner of its own (#23).
+        var partners=new java.util.LinkedHashSet<BufferedImage>();
+        for(String page:new String[]{"Tasks","Habits","Schedule","Collection","Game","Data","Settings"}) {
+            var shown=new java.util.ArrayList<BufferedImage>();
+            onEdt(()->{
+                tracker.settings(settings("solstice"));
+                ((JButton)find(app,page)).doClick();
+                layout(app);
+                shown.addAll(((MoonlightGallery)find(app,"moonlight.gallery")).shown());
+            });
+            check(shown.size()==2&&shown.get(0)==WaifuCatalog.load("solstice"),"the chosen portrait leads the gallery on "+page);
+            check(shown.get(1)!=shown.get(0),"and its partner is another portrait on "+page);
+            partners.add(shown.get(1));
+        }
+        check(partners.size()>=2,"the pages do not all repeat one pair, got "+partners.size()+" partners");
 
         // Closing stops the app's ticker, which is what keeps the JVM up once
         // the pages have been rendered.
