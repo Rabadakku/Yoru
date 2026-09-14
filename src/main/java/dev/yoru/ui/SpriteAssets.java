@@ -29,17 +29,20 @@ final class SpriteAssets {
 
     /** Report artwork the renderer can actually use, including portable installations. */
     static ArtworkLibrary.Report survey() {
-        int normal=0,shiny=0,sheets=0,wallpapers=0;
+        int normal=0,shiny=0,sheets=0,wallpapers=0,cameos=0;
         for(int i=1;i<=ArtworkLibrary.SPECIES;i++) {
             if(load(i+".png")!=null)normal++;
             if(load("shiny/"+i+".png")!=null)shiny++;
         }
         for(String name:KEYED) {
             var sheet=load(name);
-            if(sheet!=null&&(!RouteCameos.isArtwork(name)||RouteCameos.validStrip(sheet)))sheets++;
+            boolean visitor=RouteCameos.isArtwork(name);
+            if(sheet==null||visitor&&!RouteCameos.validStrip(sheet))continue;
+            sheets++;
+            if(visitor)cameos++;
         }
         for(int i=0;i<16;i++) if(load(String.format(Locale.ROOT,"pc/wallpaper-%02d.png",i))!=null)wallpapers++;
-        return new ArtworkLibrary.Report(normal,shiny,sheets,0,ArtworkLibrary.survey().games(),wallpapers,0,List.of());
+        return new ArtworkLibrary.Report(normal,shiny,sheets,0,ArtworkLibrary.survey().games(),wallpapers,0,List.of(),cameos);
     }
 
     private static List<Path> candidates(String name) {

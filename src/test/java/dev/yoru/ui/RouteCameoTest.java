@@ -62,6 +62,7 @@ public final class RouteCameoTest {
             var report=ArtworkLibrary.install(zip);
             check(report.sheets()==3,"Folder names normalised on ZIP import");
             check(SpriteAssets.survey().sheets()==3,"Settings counts all three renderable sheets");
+            check(SpriteAssets.survey().cameos()==3&&SpriteAssets.survey().scene()==0,"as route visitors, not as the scene's own sheets (#6)");
             for(String name:CameoFixtures.NAMES) {
                 check(Files.isRegularFile(ArtworkLibrary.root().resolve(name)),"Imported visitor installed");
                 check((SpriteAssets.load(name).getRGB(0,0)>>>24)==0,"Background remains transparent");

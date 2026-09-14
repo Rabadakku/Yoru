@@ -44,6 +44,12 @@ public final class ArtworkTest {
         maps("shiny/../../1.png",null);
         maps(".png",null);
 
+        // A remembered failure is shown in Settings, so it must read as product copy (#6).
+        check(ArtworkLibrary.reason(new java.nio.file.NoSuchFileException("/invented/folder/art.zip"))
+            .equals("Yoru could not read or write part of the artwork library."),"a file system error never shows its path");
+        check(ArtworkLibrary.reason(new java.io.IOException("Choose an Emerald game file, a folder, or a zip of artwork."))
+            .equals("Choose an Emerald game file, a folder, or a zip of artwork."),"the library's own messages are kept");
+
         // A zip of mixed content installs only the artwork, and reports the rest as skipped.
         Path dir=Files.createTempDirectory("yoru-art-test-");
         Path zip=dir.resolve("art.zip");
@@ -83,13 +89,24 @@ public final class ArtworkTest {
                 out.putNextEntry(new ZipEntry("unsupported.gba"));
                 out.write(new byte[32]);out.closeEntry();
             }
+            check(ArtworkLibrary.lastFailure()==null,"no failure is remembered before one happens");
             try { ArtworkLibrary.install(broken);throw new AssertionError("invalid game accepted"); }
-            catch(java.io.IOException expected) { }
+            catch(java.io.IOException expected) {
+                // Remembered on disk (#6), so Settings can still say so after a restart.
+                var failure=ArtworkLibrary.lastFailure();
+                check(failure!=null&&failure.reason().equals(ArtworkLibrary.reason(expected)),"the failed import is remembered: "+failure);
+                check(Files.isRegularFile(sandbox.resolve(".yoru/art/last-failure.properties")),"in the library folder, not in memory");
+            }
+            try { ArtworkLibrary.install(dir.resolve("no-such-art.zip"));throw new AssertionError("a missing source accepted"); }
+            catch(java.io.IOException expected) {
+                check("That file or folder no longer exists.".equals(ArtworkLibrary.lastFailure().reason()),"the newest failure replaces the one before");
+            }
             check(ArtworkLibrary.root().equals(active),"failure after a staged image preserves the active generation");
             check(java.util.Arrays.equals(original,Files.readAllBytes(active.resolve("1.png"))),"previous artwork survives byte for byte");
             check(!Files.exists(active.resolve("3.png")),"a failed import publishes no partial files");
             Path extra=dir.resolve("4.png");Files.write(extra,image());
             ArtworkLibrary.install(extra);
+            check(ArtworkLibrary.lastFailure()==null,"a successful import clears the remembered failure");
             check(!ArtworkLibrary.root().equals(active),"successful import publishes a new generation");
             check(ArtworkLibrary.survey().species()==3,"incremental import preserves existing images");
             check(Files.exists(active.resolve("1.png")),"previous generation remains recoverable");
@@ -120,10 +137,25 @@ public final class ArtworkTest {
             check(categories.get(1).readiness()==ArtworkLibrary.Readiness.PARTIAL&&categories.get(1).describe().equals("Partial · 4 of 386 normal, 1 shiny"),
                 "a few sprites are partial, with counts: "+categories.get(1).describe());
             check(categories.get(2).readiness()==ArtworkLibrary.Readiness.MISSING,"no box backgrounds are missing");
-            check(categories.get(3).readiness()==ArtworkLibrary.Readiness.PARTIAL&&categories.get(3).describe().equals("Partial · 1 of 10 sheets"),
+            check(categories.get(3).readiness()==ArtworkLibrary.Readiness.PARTIAL&&categories.get(3).describe().equals("Partial · 1 of 7 sheets"),
                 "one scenery sheet is partial: "+categories.get(3).describe());
             var complete=new ArtworkLibrary.Report(386,386,10,0,1,16,0,java.util.List.of());
             check(complete.categories().stream().allMatch(c->c.readiness()==ArtworkLibrary.Readiness.READY),"a complete library is ready everywhere");
+
+            // Route visitor sheets are extras, not part of the scene (#6). A pack with
+            // the scene's seven sheets read "Partial · 7 of 10" for want of them.
+            var visited=new ArtworkLibrary.Report(386,386,9,0,1,16,0,java.util.List.of(),2).categories().get(3);
+            check(visited.describe().equals("Ready · 7 of 7 sheets · 2 route visitors"),"visitors are counted as extras: "+visited.describe());
+            check(new ArtworkLibrary.Report(0,0,3,0,0,0,0,java.util.List.of(),3).categories().get(3).readiness()==ArtworkLibrary.Readiness.MISSING,
+                "visitors alone are not a scene");
+            Path scenePack=Files.createDirectories(dir.resolve("scene"));
+            for(String sheet:new String[]{"brendan","brendan-running","may","may-running","tree","rock","grass","route-cyclist"})
+                Files.write(scenePack.resolve(sheet+".png"),image());
+            ArtworkLibrary.install(scenePack);
+            var installed=ArtworkLibrary.survey();
+            check(installed.scene()==7&&installed.cameos()==1,"an installed scene and its visitor are told apart: "+installed);
+            check(installed.categories().get(3).describe().equals("Ready · 7 of 7 sheets · 1 route visitor"),
+                "so a complete scene reads Ready: "+installed.categories().get(3).describe());
         } finally {
             System.setProperty("user.home",home);
             try(var walk=Files.walk(sandbox)) {
