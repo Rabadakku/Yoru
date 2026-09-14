@@ -59,6 +59,7 @@ public final class ContrastTest {
         "src/main/java/dev/yoru/ui/DateField.java",
         "src/main/java/dev/yoru/ui/CalendarPanel.java",
         "src/main/java/dev/yoru/ui/ArtworkStatus.java",
+        "src/main/java/dev/yoru/ui/PartyStrip.java",
         "src/main/java/dev/yoru/ui/WaifuPanel.java",
         "src/main/java/dev/yoru/ui/BuddyCard.java");
 
