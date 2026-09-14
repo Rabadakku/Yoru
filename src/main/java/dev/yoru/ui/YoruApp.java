@@ -271,7 +271,14 @@ public final class YoruApp extends JPanel implements Shell {
     private String name(UUID id) {
         return tracker.state().activities().stream().filter(a->a.id().equals(id)).map(Activity::name).findFirst().orElse("Activity");
     }
+    /** The page on screen's scroll pane, so a rebuild of the same page can keep its place. */
+    private JScrollPane pageScroll;
+
     private void showPage(String next) {
+        // A rebuild of the page already on screen keeps its place. Saves, edits
+        // and moves all rebuild the page, and each one used to throw the reader
+        // back to the top (#8).
+        Point keep=next.equals(page)&&pageScroll!=null?pageScroll.getViewport().getViewPosition():null;
         // The game keeps running on every tab; only its picture stops while
         // another page is on screen. It stops when it is closed, not before.
         gamePage.leave();
@@ -316,8 +323,15 @@ public final class YoruApp extends JPanel implements Shell {
         scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scroll.getVerticalScrollBar().setUnitIncrement(SPACE_XL);
         content.add(scroll);
+        pageScroll=scroll;
         content.revalidate();
         content.repaint();
+        if(keep!=null) {
+            content.validate();
+            var viewport=scroll.getViewport();
+            int furthest=Math.max(0,view.getPreferredSize().height-viewport.getHeight());
+            viewport.setViewPosition(new Point(0,Math.min(keep.y,furthest)));
+        }
     }
     /**
      * The tab strip at its natural width: every tab's longest label plus its two
