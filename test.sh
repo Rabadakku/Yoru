@@ -48,6 +48,7 @@ java -ea -cp build/classes dev.yoru.game.Gen3SectionOracleTest
 java -ea -cp build/classes dev.yoru.game.ExperienceTest
 java -ea -cp build/classes dev.yoru.game.EmulationLoopTest
 java -ea -cp build/classes dev.yoru.game.SessionHandleTest
+java -ea -cp build/classes dev.yoru.game.GameStartTest
 java -ea -cp build/classes dev.yoru.game.SaveTransferTest
 java -ea -cp build/classes dev.yoru.game.LearnsetTest
 java -ea -cp build/classes dev.yoru.game.StudyGiftTest

@@ -186,7 +186,10 @@ final class GameController {
             acknowledged.run();
             listener.saveChanged();
         } finally {
-            if (phase == Phase.STUCK && session() != null && session().readyToFinishClosing()) stop();
+            if (phase == Phase.STUCK) {
+                if (session() == null) finishStuckClose();
+                else if (session().readyToFinishClosing()) stop();
+            }
         }
     }
 
@@ -229,6 +232,23 @@ final class GameController {
                 finishClosing();
             });
         });
+    }
+
+    /**
+     * A close that only waited on the vault, finished once the vault has the save (#7).
+     *
+     * The core had already stopped and been released; only the failed write kept
+     * the phase STUCK. The automatic retry used to make that save durable and
+     * then leave the phase where it was, because it only finished a close that
+     * still had a session to stop, so Play and vault switching stayed blocked
+     * until Close was pressed a second time.
+     */
+    private void finishStuckClose() {
+        phase = Phase.IDLE;
+        problem = null;
+        sync();
+        listener.phaseChanged();
+        finishClosing();
     }
 
     private void finishClosing() {
