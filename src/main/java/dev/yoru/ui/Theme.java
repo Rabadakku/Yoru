@@ -402,8 +402,13 @@ final class Theme {
     static final class ControlBorder extends AbstractBorder {
         private final Color line;
         private final int padV, padH;
+        /** Rings while anything inside holds the keyboard, for inputs that read as one control. */
+        private final boolean group;
 
-        ControlBorder(Color line, int padV, int padH) { this.line = line; this.padV = padV; this.padH = padH; }
+        ControlBorder(Color line, int padV, int padH) { this(line, padV, padH, false); }
+        ControlBorder(Color line, int padV, int padH, boolean group) {
+            this.line = line; this.padV = padV; this.padH = padH; this.group = group;
+        }
 
         @Override public Insets getBorderInsets(Component c) { return new Insets(padV, padH, padV, padH); }
         @Override public boolean isBorderOpaque() { return false; }
@@ -417,12 +422,35 @@ final class Theme {
                 g.drawRoundRect(x, y, w - 1, h - 1, corner(w, h), corner(w, h));
             }
             g.dispose();
-            if (focused(c)) paintRing(graphics, c, x, y, w, h);
+            if (group ? focusedWithin(c) : focused(c)) paintRing(graphics, c, x, y, w, h);
         }
     }
 
     /** The shared border, for code that builds a control by hand. */
     static Border controlBorder(Color line) { return new ControlBorder(line, PAD_V, PAD_H); }
+
+    /** True when the keyboard is on this component or on anything inside it. */
+    static boolean focusedWithin(Component c) {
+        if (focused(c)) return true;
+        if (!(c instanceof Container group)) return false;
+        for (var child : group.getComponents()) if (focusedWithin(child)) return true;
+        return false;
+    }
+
+    /**
+     * The shared border for inputs that read as one control, such as a date and
+     * a time in one box (#24): the ring shows while any member holds the keyboard.
+     * The focus tracker repaints only the member that gained or lost it, so each
+     * member repaints the group too, once that tracker has marked it.
+     */
+    static Border groupBorder(JComponent group, JComponent... members) {
+        var repaint = new java.awt.event.FocusAdapter() {
+            @Override public void focusGained(java.awt.event.FocusEvent e) { SwingUtilities.invokeLater(group::repaint); }
+            @Override public void focusLost(java.awt.event.FocusEvent e) { SwingUtilities.invokeLater(group::repaint); }
+        };
+        for (var member : members) member.addFocusListener(repaint);
+        return new ControlBorder(LINE, PAD_V, PAD_H, true);
+    }
 
     /**
      * A combo box's drop-down button: the shared fill with a chevron on it.
