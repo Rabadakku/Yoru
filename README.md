@@ -247,6 +247,22 @@ schema migration, the Generation III save format, encounter and delivery logic,
 and the rendered interface. `PrivacyTest` fails the build if personal data or a
 stray image reaches a tracked file.
 
+A few checks need things the repository never holds — your own libretro core
+and game, or a real display — so `./test.sh` does not run them. After it has
+built the tests, run them by hand:
+
+```bash
+# The core's ABI, refusing a mismatched save, Close and reopening the core.
+# Starts from an invented save; your game file is only read.
+java --enable-native-access=ALL-UNNAMED -cp build/classes dev.yoru.game.NativeLifecycleCheck \
+     path/to/mgba_libretro path/to/game.gba path/to/empty-work-dir
+# Saves Yoru writes, loaded by the game itself. Uses a copy of a save.
+java --enable-native-access=ALL-UNNAMED -cp build/classes dev.yoru.game.InGameCheck \
+     path/to/game.gba path/to/a-copy-of-a-save.srm path/to/empty-work-dir
+# Keyboard focus in real dialogs; skipped headless.
+java -ea -cp build/classes dev.yoru.ui.DialogFocusTest
+```
+
 ---
 
 ## FAQ
