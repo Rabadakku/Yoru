@@ -59,6 +59,7 @@ java -ea -cp build/classes dev.yoru.SaveEditTest
 java -ea -cp build/classes dev.yoru.RewardTest
 java -ea -cp build/classes dev.yoru.ReliabilityTest
 java -ea -cp build/classes dev.yoru.ActivitiesTest
+java -ea -cp build/classes dev.yoru.EditingTest
 java -ea -cp build/classes dev.yoru.PortableVaultTest
 java -ea -cp build/classes dev.yoru.RecurringTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.RouteTest

@@ -81,7 +81,16 @@ public final class ActivityUiTest {
                 check(button(app,"activity.rename."+coding)!=null,"Today offers a rename by identity");
                 check(button(app,"activity.rename."+japanese)!=null,"for every activity, not just the first");
                 check(button(app,"activity.remove."+coding)!=null,"and a removal for each");
+                check(button(app,"activity.target."+coding)!=null,"and a daily target for each (#21)");
                 render(app,1040,"Data");
+                check(button(app,"activity.target."+japanese)!=null,"the Data page offers the daily target too");
+                check(ActivityManager.minutes("45")==45&&ActivityManager.minutes(" 45 min ")==45&&ActivityManager.minutes("")==0,
+                    "a typed target reads minutes, with or without a unit");
+                try{ActivityManager.minutes("lots");throw new AssertionError("an unreadable target was read");}
+                catch(IllegalArgumentException expected){checks++;}
+                ActivityManager.retarget(tracker,coding,45);
+                check(tracker.state().activities().stream().anyMatch(a->a.id().equals(coding)&&a.targetMinutes()==45&&a.name().equals("Coding")),
+                    "retargeting changes only the target, by identity");
                 var recorded=(JLabel)find(app,"activity.recorded."+coding);
                 check(recorded!=null,"the Data page lists each activity's session count and time");
                 check(recorded.getText().equals("2 sessions · 01:30:00"),"counted from the records, got "+recorded.getText());

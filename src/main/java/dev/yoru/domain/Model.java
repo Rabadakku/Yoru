@@ -106,6 +106,10 @@ public final class Model {
         public Activity renamed(String name) {
             return new Activity(id,name,targetMinutes);
         }
+        /** The same activity with another daily target; nothing that points at it changes. */
+        public Activity retargeted(int targetMinutes) {
+            return new Activity(id,name,targetMinutes);
+        }
         public String toString() {
             return name;
         }

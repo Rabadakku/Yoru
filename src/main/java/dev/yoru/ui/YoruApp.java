@@ -1173,7 +1173,7 @@ public final class YoruApp extends JPanel implements Shell {
         var deleteSession=button("Delete selected session",()-> {
             int index=t.getSelectedRow();
             if(index>=0&&Dialogs.confirmDestructive(this,"Delete this recorded session.","Delete session","Delete"))
-                perform(()->tracker.deleteSession(sessions.get(index).id()));
+                perform(()->tracker.deleteSession(sessions.get(t.convertRowIndexToModel(index)).id()));
         });
         editSession.setEnabled(false); deleteSession.setEnabled(false);
         if(t==null) {
