@@ -241,6 +241,8 @@ public final class YoruApp extends JPanel implements Shell {
         closed=true;
         gamePage.leave();
         music.close();
+        // The session's encounter tables go with it (#12).
+        game.encounters().forget();
         ticker.stop();
         var window=SwingUtilities.getWindowAncestor(this);
         if(window!=null)window.dispose();
