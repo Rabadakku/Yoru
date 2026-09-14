@@ -19,11 +19,11 @@ being visible.
 
 | Surface | Create | Edit | Delete | Stale edit or delete | Keyboard path | Backup first |
 |---|---|---|---|---|---|---|
-| Tasks | New, New task row | Editor from the row menu or the title | Row menu (added in #25) | Refused (`updateTask`, `deleteTask`) | Checkbox, status pill and ⋯ menu are buttons | No |
-| Tags | Tag manager | Rename, recolour | Delete keeps the tasks, untagged | Refused (delete refusal added here) | Buttons | No |
+| Tasks | New, New task row | Editor from the row menu or the title | Row menu (added in #25) | Refused (`updateTask`, `deleteTask`) | Checkbox, status pill and ⋯ menu are buttons | Yes, since #7 |
+| Tags | Tag manager | Rename, recolour | Delete keeps the tasks, untagged | Refused (delete refusal added here) | Buttons | Yes, since #7 |
 | Activities | New activity | Rename; **daily target added here** | Delete, keeping or deleting the time | Refused | Buttons on Today and Data | Yes |
-| Recorded sessions | Log time, clock out | Grid double-click, Data table | Grid editor, Data table | Refused (delete refusal added here) | Data table's Edit and Delete selected | No |
-| Planned blocks | Plan block, drag on the grid | Grid double-click, Planned this week list | Same two places | Refused (delete refusal added here) | Planned this week list | No |
+| Recorded sessions | Log time, clock out | Grid double-click, Data table | Grid editor, Data table | Refused (delete refusal added here) | Data table's Edit and Delete selected | Yes, since #7 |
+| Planned blocks | Plan block, drag on the grid | Grid double-click, Planned this week list | Same two places | Refused (delete refusal added here) | Planned this week list | Yes, since #7 |
 | Weekly repeats | Weekly template | **Edit added here** | Remove | Refused | Buttons | No |
 | Daily habits | New daily check-off | Rename, check off any of the last 28 days | Delete | Refused | Buttons, one per day | Yes |
 | Time-since habits | New time-since | Rename; **any period's start, added here** | Delete; **any period, added here** | Refused, including a changed period | History dialog buttons | Yes, for deletes |
@@ -69,12 +69,13 @@ Target control on both pages. `TaskBoardTest` covers the task row menu, and
 
 ## Deliberately unchanged, and why
 
-- **Backups before small deletions.** Activity and habit deletions, imports,
-  resets and replacing a game save take a backup. Single sessions, blocks,
-  tasks and tags are confirmed but not backed up. `EncryptedVault.backup`
-  keeps every file it writes and nothing prunes them, so a backup per task
-  deletion would grow the vault folder without bound. Backup retention is the
-  policy question #7 records; add backups to small deletions after that.
+- **Backups before small deletions** waited on a retention policy, since
+  `EncryptedVault.backup` kept every file it wrote. That is now settled (#7):
+  each backup keeps the ten newest, the first of each of the last thirty days
+  and any dated in the future, and removes the rest. Migration backups and
+  files whose names it cannot read are never pruned. Deleting a session,
+  block, task or tag now takes a backup like every other deletion
+  (`BackupRetentionTest`, `EditingTest`).
 - **Daily check-ins older than 28 days** have no control. The grid shows the
   last four weeks, and older history is kept and counted. Nobody reported
   needing to correct further back.

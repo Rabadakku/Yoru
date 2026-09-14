@@ -67,20 +67,38 @@ public final class EditingTest {
         repo.fail=false;
         check(tracker.state().activities().getFirst().targetMinutes()==45,"and leaves the target as it was");
 
-        // A stale delete says so instead of appearing to work.
+        // A stale delete says so instead of appearing to work. A delete that
+        // goes ahead is backed up first, now that backups are pruned (#7); a
+        // refused one takes no backup.
         var session=tracker.state().sessions().getFirst().id();
+        backups=repo.backups;
         tracker.deleteSession(session);
         check(tracker.state().sessions().isEmpty(),"a session is deleted");
+        check(repo.backups==backups+1,"after a backup");
         check(rejects(()->tracker.deleteSession(session),"deleting a session twice is refused").contains("no longer exists"),
             "with a reason");
+        check(repo.backups==backups+1,"a refused delete takes no backup");
         tracker.plan(reading.id(),clock.now.plusSeconds(3600),clock.now.plusSeconds(7200));
         var block=tracker.state().blocks().getFirst().id();
+        backups=repo.backups;
         tracker.deleteBlock(block);
+        check(repo.backups==backups+1,"a block is backed up before it goes");
         rejects(()->tracker.deleteBlock(block),"deleting a block twice is refused");
         rejects(()->tracker.deleteBlock(UUID.randomUUID()),"deleting a block that never existed is refused");
+        check(repo.backups==backups+1,"and the refusals take none");
         var tag=tracker.addTag("Invented tag",0x336699);
+        backups=repo.backups;
         tracker.deleteTag(tag.id());
+        check(repo.backups==backups+1,"a tag is backed up before it goes");
         rejects(()->tracker.deleteTag(tag.id()),"deleting a tag twice is refused");
+        check(repo.backups==backups+1,"and the refusal takes none");
+        var task=new Task(UUID.randomUUID(),null,"Invented task","",null,false,"manual");
+        tracker.addTasks(List.of(task));
+        backups=repo.backups;
+        tracker.deleteTask(task.id());
+        check(tracker.state().tasks().isEmpty()&&repo.backups==backups+1,"a task is backed up before it goes");
+        rejects(()->tracker.deleteTask(task.id()),"deleting a task twice is refused");
+        check(repo.backups==backups+1,"and the refusal takes none");
 
         // Every period of a time-since tracker, not only the current one.
         var t0=clock.now.minusSeconds(100_000);

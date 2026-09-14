@@ -31,6 +31,7 @@ java -ea -cp build/classes dev.yoru.PrivacyTest
 java -ea -cp build/classes dev.yoru.LegacyVaultTest
 java -ea -cp build/classes dev.yoru.persistence.VaultStoreTest
 java -ea -cp build/classes dev.yoru.persistence.PasswordTest
+java -ea -cp build/classes dev.yoru.persistence.BackupRetentionTest
 java -ea -cp build/classes dev.yoru.update.UpdateTest
 java -ea -cp build/classes dev.yoru.update.MacInstallTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.DialogFocusTest
