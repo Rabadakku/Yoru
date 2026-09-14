@@ -433,31 +433,32 @@ final class TasksPanel extends JPanel implements Scrollable {
     private void edit(Task existing) {
         var title=new JTextField(existing==null?"":existing.title(),36);
         var notes=new JTextArea(existing==null?"":existing.notes(),5,36);notes.setLineWrap(true);notes.setWrapStyleWord(true);
-        var due=new JTextField(existing==null||existing.due()==null?"":existing.due().toString(),15);
+        var due=new DateField(existing==null?null:existing.due(),"Due",true);
         var activity=plainCombo(new JComboBox<Object>());activity.addItem("Unassigned");tracker.state().activities().forEach(activity::addItem);
         if(existing!=null&&existing.activityId()!=null)for(int i=1;i<activity.getItemCount();i++)if(((Activity)activity.getItemAt(i)).id().equals(existing.activityId()))activity.setSelectedIndex(i);
         var status=plainCombo(new JComboBox<>(TaskStatus.values()));
         status.setSelectedItem(existing==null?TaskStatus.TODO:existing.status());
         var tag=plainCombo(new JComboBox<Object>());tag.addItem("No tag");tracker.state().tags().forEach(tag::addItem);
         if(existing!=null&&existing.tagId()!=null)for(int i=1;i<tag.getItemCount();i++)if(((Tag)tag.getItemAt(i)).id().equals(existing.tagId()))tag.setSelectedIndex(i);
-        var planned=new JTextField(existing==null||existing.plannedFor()==null?"":existing.plannedFor().toString(),15);
+        var planned=new DateField(existing==null?null:existing.plannedFor(),"Plan for",true);
         planned.setName("task.plannedFor");
         var form=stack();form.add(new JLabel("Title"));form.add(title);gap(form,SPACE_MD);form.add(new JLabel("Notes"));form.add(new JScrollPane(notes));gap(form,SPACE_MD);
-        form.add(new JLabel("Due · the deadline · YYYY-MM-DD or blank"));form.add(due);gap(form,SPACE_MD);
+        form.add(new JLabel("Due · the deadline"));form.add(due);gap(form,SPACE_MD);
         form.add(new JLabel("Plan for · the day you mean to do it · blank to use the deadline"));form.add(planned);gap(form,SPACE_MD);
         form.add(new JLabel("Activity"));form.add(activity);gap(form,SPACE_MD);form.add(new JLabel("Status"));form.add(status);gap(form,SPACE_MD);form.add(new JLabel("Tag"));form.add(tag);
-        if(!Dialogs.confirm(this,form,existing==null?"New task":"Edit task","Save"))return;
-        try {
-            var task=merged(existing,
-                activity.getSelectedItem() instanceof Activity a?a.id():null,
-                tag.getSelectedItem() instanceof Tag t?t.id():null,
-                title.getText(),notes.getText(),
-                due.getText().isBlank()?null:LocalDate.parse(due.getText().strip()),
-                (TaskStatus)status.getSelectedItem(),nextOrder(),
-                planned.getText().isBlank()?null:LocalDate.parse(planned.getText().strip()));
-            if(existing==null)tracker.addTasks(List.of(task));else tracker.updateTask(task);
-            rebuildRows();
-        }catch(Exception e){error(e);}
+        // Reopened on a refusal with everything as typed, rather than closed with it lost.
+        while(Dialogs.confirm(this,form,existing==null?"New task":"Edit task","Save")) {
+            try {
+                var task=merged(existing,
+                    activity.getSelectedItem() instanceof Activity a?a.id():null,
+                    tag.getSelectedItem() instanceof Tag t?t.id():null,
+                    title.getText(),notes.getText(),due.value(),
+                    (TaskStatus)status.getSelectedItem(),nextOrder(),planned.value());
+                if(existing==null)tracker.addTasks(List.of(task));else tracker.updateTask(task);
+                rebuildRows();
+                return;
+            }catch(Exception e){error(e);}
+        }
     }
     private void importPaste() {
         var form=new TaskPastePanel();
@@ -492,8 +493,8 @@ final class TasksPanel extends JPanel implements Scrollable {
     private void review(List<Task> proposed) {
         if(proposed.isEmpty()){Dialogs.info(this,"No tasks were found in that reply. Nothing was saved.");return;}
         Object[][] rows=new Object[proposed.size()][4];
-        for(int i=0;i<proposed.size();i++){var t=proposed.get(i);rows[i]=new Object[]{true,t.title(),t.due()==null?"":t.due().toString(),t.notes()};}
-        var model=new DefaultTableModel(rows,new String[]{"Add","Task title","Due (YYYY-MM-DD)","Notes / evidence"}){public Class<?> getColumnClass(int c){return c==0?Boolean.class:String.class;}};
+        for(int i=0;i<proposed.size();i++){var t=proposed.get(i);rows[i]=new Object[]{true,t.title(),t.due()==null?"":DateText.date(t.due()),t.notes()};}
+        var model=new DefaultTableModel(rows,new String[]{"Add","Task title","Due (e.g. Sep 14)","Notes / evidence"}){public Class<?> getColumnClass(int c){return c==0?Boolean.class:String.class;}};
         var table=new JTable(model);plainTable(table);table.setRowHeight(SPACE_XXL);table.setFont(bodyFont());
         table.setBackground(PANEL);table.setForeground(TEXT);
         // TEXT on LINE measures 7.0-10.1:1 on all four themes; the accent it
@@ -514,7 +515,7 @@ final class TasksPanel extends JPanel implements Scrollable {
                 // Imported tasks land at the bottom of the manual order; the short
                 // constructor would give every one of them order 0, above the rest.
                 int order=nextOrder();
-                for(int i=0;i<rows.length;i++)if(Boolean.TRUE.equals(model.getValueAt(i,0))){String due=String.valueOf(model.getValueAt(i,2)).strip();selected.add(new Task(proposed.get(i).id(),activity.getSelectedItem() instanceof Activity a?a.id():null,null,String.valueOf(model.getValueAt(i,1)),String.valueOf(model.getValueAt(i,3)),due.isBlank()?null:LocalDate.parse(due),TaskStatus.TODO,proposed.get(i).source(),Instant.now(),order++));}
+                for(int i=0;i<rows.length;i++)if(Boolean.TRUE.equals(model.getValueAt(i,0))){String due=String.valueOf(model.getValueAt(i,2)).strip();selected.add(new Task(proposed.get(i).id(),activity.getSelectedItem() instanceof Activity a?a.id():null,null,String.valueOf(model.getValueAt(i,1)),String.valueOf(model.getValueAt(i,3)),due.isBlank()?null:DateText.parseDate(due,LocalDate.now()),TaskStatus.TODO,proposed.get(i).source(),Instant.now(),order++));}
                 int count=tracker.addTasks(selected);Dialogs.info(this,count+" tasks added. Existing title/date/activity duplicates were skipped.");rebuildRows();return;
             }catch(Exception e){error(e);}
         }
