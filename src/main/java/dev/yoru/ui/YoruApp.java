@@ -290,7 +290,7 @@ public final class YoruApp extends JPanel implements Shell {
         var heading=new JPanel(new BorderLayout());
         heading.setOpaque(false);
         heading.setBorder(new EmptyBorder(0,0,SPACE_XL,0));
-        heading.add(label("~/ "+rowFor(page).id(),TYPE_LABEL,CYAN),BorderLayout.WEST);
+        // No breadcrumb: the pages are flat, and the title below already names the page (#9).
         heading.add(label(LocalDate.now()+" · "+zone,TYPE_CAPTION,MUTED),BorderLayout.EAST);
         content.add(heading,BorderLayout.NORTH);
         JPanel view=switch(page) {
@@ -326,12 +326,17 @@ public final class YoruApp extends JPanel implements Shell {
         pageScroll=scroll;
         content.revalidate();
         content.repaint();
-        if(keep!=null) {
-            content.validate();
-            var viewport=scroll.getViewport();
-            int furthest=Math.max(0,view.getPreferredSize().height-viewport.getHeight());
-            viewport.setViewPosition(new Point(0,Math.min(keep.y,furthest)));
-        }
+        if(keep!=null)scrollTo(keep);
+    }
+
+    /** Puts the page on screen back where it was, or as far down as it still reaches. */
+    void scrollTo(Point keep) {
+        if(pageScroll==null)return;
+        content.validate();
+        var viewport=pageScroll.getViewport();
+        var shown=viewport.getView();
+        int furthest=Math.max(0,(shown==null?0:shown.getPreferredSize().height)-viewport.getHeight());
+        viewport.setViewPosition(new Point(0,Math.max(0,Math.min(keep.y,furthest))));
     }
     /**
      * The tab strip at its natural width: every tab's longest label plus its two
@@ -419,14 +424,18 @@ public final class YoruApp extends JPanel implements Shell {
         long weekSeconds=0;
         for(int i=0;i<7;i++)weekSeconds+=daily.getOrDefault(today.minusDays(i),0L);
         var stats=new JPanel(new GridLayout(1,3,SPACE_LG,0));
+        stats.setName("today.stats");
         stats.setAlignmentX(0);
         stats.setOpaque(false);
         stats.add(stat("TODAY",Analytics.duration(daily.getOrDefault(today,0L))));
         stats.add(stat("LAST 7 DAYS",Analytics.report(weekSeconds)));
         stats.add(stat("CURRENT STREAK",plural(Analytics.streak(daily,today),"day")));
-        p.add(stats);
+        // The agenda before the statistics (#9): what comes next, then how it has gone.
+        var agenda=schedulePreview();
+        agenda.setName("today.agenda");
+        p.add(agenda);
         gap(p,SPACE_LG);
-        p.add(schedulePreview());
+        p.add(stats);
         gap(p,SPACE_LG);
         p.add(heatCard(today));
         gap(p,SPACE_LG);
@@ -1036,8 +1045,6 @@ public final class YoruApp extends JPanel implements Shell {
         // are already on screen.
         p.add(ActivityManager.activities(tracker,this,()->showPage("Data")));
         gap(p,SPACE_LG);
-        p.add(vaultCard());
-        gap(p,SPACE_LG);
 
         var days=Analytics.daily(tracker.state(),null,zone,Instant.now());
         var chart=card();
@@ -1226,7 +1233,7 @@ public final class YoruApp extends JPanel implements Shell {
      */
     private JPanel vaultCard() {
         var c=card();
-        c.add(sectionHeader("VAULTS"));
+        c.add(sectionHeader("VAULT"));
         gap(c,SPACE_MD);
         String name=vaultName!=null?vaultName:vault==null?null:vault.name();
         if(store==null||name==null) {
@@ -1507,6 +1514,9 @@ public final class YoruApp extends JPanel implements Shell {
      */
     private void rebuildTo(String next) {
         var window=SwingUtilities.getWindowAncestor(this);
+        // A theme change rebuilds the whole window and lands back on Settings,
+        // where the palette was picked partway down; the new window keeps that place (#9).
+        Point keep=next.equals(page)&&pageScroll!=null?pageScroll.getViewport().getViewPosition():null;
         ticker.stop();
         gamePage.leave();
         music.close();
@@ -1521,6 +1531,7 @@ public final class YoruApp extends JPanel implements Shell {
             frame.revalidate();
             frame.repaint();
             fresh.showPage(next);
+            if(keep!=null)fresh.scrollTo(keep);
         }
     }
 
@@ -1646,22 +1657,22 @@ public final class YoruApp extends JPanel implements Shell {
     private JPanel settings() {
         var settings=tracker.state().settings();
         var p=stack();
-        p.add(pageHeaderFor("Settings","APPEARANCE · TRACKING · DATA"));
+        p.add(pageHeaderFor("Settings","APPEARANCE · TRACKING · GAME & ARTWORK · VAULT"));
         if(updates==null)updates=new UpdatesCard(dev.yoru.update.Version.running(),dev.yoru.update.Updates.current(),
             ()->new dev.yoru.update.ReleaseFeed().latest(),new UpdatesCard.Host() {
                 public boolean gameRunning() { return game.running(); }
                 public void quitThen(Runnable afterVaultClosed) { closeForUpdate(afterVaultClosed); }
                 public java.awt.Component owner() { return YoruApp.this; }
             });
-        p.add(updates);
-        gap(p,SPACE_XL);
 
         var appearance=card();
         appearance.add(sectionHeader("APPEARANCE"));
         gap(appearance,SPACE_SM);
         appearance.add(bodyLabel("Themes are stored in your vault, so they travel with the workspace."));
         gap(appearance,SPACE_LG);
-        var themes=new JPanel(new GridLayout(0,2,SPACE_MD,SPACE_MD));
+        // Three across: the five themes take two short rows rather than three tall ones (#9).
+        var themes=new JPanel(new GridLayout(0,3,SPACE_MD,SPACE_MD));
+        themes.setName("settings.themes");
         themes.setOpaque(false);
         themes.setAlignmentX(0);
         for(var id:ThemeId.values()) themes.add(themeCard(id));
@@ -1680,8 +1691,6 @@ public final class YoruApp extends JPanel implements Shell {
         motion.setForeground(TEXT);
         motion.addActionListener(e->reducedMotion=motion.isSelected());
         appearance.add(motion);
-        p.add(appearance);
-        gap(p,SPACE_XL);
 
         var tracking=card();
         tracking.add(sectionHeader("TRACKING"));
@@ -1739,11 +1748,9 @@ public final class YoruApp extends JPanel implements Shell {
         gap(tracking,SPACE_LG);
         tracking.add(button("Save tracking settings",()->applySettings(s->new Settings(s.theme(),s.trainer(),
             (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem(),s.waifu()))));
-        p.add(tracking);
-        gap(p,SPACE_XL);
 
         var audio=card();
-        audio.add(sectionHeader("STUDY MUSIC"));
+        audio.add(sectionHeader("TRACKING · STUDY MUSIC"));
         gap(audio,SPACE_SM);
         audio.add(bodyLabel("Your own files, played while the timer runs. Yoru ships no audio."));
         gap(audio,SPACE_MD);
@@ -1793,11 +1800,9 @@ public final class YoruApp extends JPanel implements Shell {
                 Dialogs.info(this,plural(gone,"track")+" deleted.");showPage("Settings");});
         }));
         audio.add(audioActions);
-        p.add(audio);
-        gap(p,SPACE_XL);
 
         var artwork=card();
-        artwork.add(sectionHeader("ARTWORK"));
+        artwork.add(sectionHeader("GAME & ARTWORK"));
         gap(artwork,SPACE_SM);
         artwork.add(bodyLabel("Add your Emerald game to extract all 386 normal and shiny sprites, or import your own PNG artwork."));
         gap(artwork,SPACE_MD);
@@ -1824,11 +1829,9 @@ public final class YoruApp extends JPanel implements Shell {
         var naming=label("PNG files named 1–386, shiny and overworld sheets optional.",TYPE_CAPTION,MUTED);
         naming.setToolTipText("Names may be zero-padded and nested in folders; anything else is skipped.");
         artwork.add(naming);
-        p.add(artwork);
-        gap(p,SPACE_XL);
 
         var waifu=card();
-        waifu.add(sectionHeader("WAIFU"));
+        waifu.add(sectionHeader("APPEARANCE · WAIFU"));
         gap(waifu,SPACE_SM);
         waifu.add(bodyLabel("Companion artwork belongs to Moonlight. It appears beside your timer and across its pages; your Pokémon and study tools remain available. Other themes keep this choice saved but hide the artwork."));
         gap(waifu,SPACE_MD);
@@ -1854,27 +1857,25 @@ public final class YoruApp extends JPanel implements Shell {
         // Said once so the art's provenance is never in question.
         waifu.add(label("The portraits ship with Yoru, so the choice travels with your vault.",
             TYPE_CAPTION,MUTED));
-        p.add(waifu);
-        gap(p,SPACE_XL);
 
-        // Integrations are not shipping in 1.0, so the card keeps its promise and
-        // loses its entry point until they do.
-        var integrations=card();
-        integrations.add(sectionHeader("INTEGRATIONS"));
-        gap(integrations,SPACE_MD);
-        integrations.add(bodyLabel("Anki, LeetCode and Apple Health are planned, not connected."));
-        p.add(integrations);
-        gap(p,SPACE_XL);
 
         var reset=card();
-        reset.add(sectionHeader("RESET DATA",GOLD));
+        reset.add(sectionHeader("VAULT · RESET DATA",GOLD));
         gap(reset,SPACE_MD);
         reset.add(label("Reset everything or choose individual sections.",TYPE_LABEL,TEXT));
         gap(reset,SPACE_SM);
         reset.add(bodyLabel("An encrypted backup is saved beside your vault before the reset."));
         gap(reset,SPACE_LG);
         reset.add(button("Choose data to reset…",this::resetDialog));
-        p.add(reset);
+        // Four sections, in the order a player looks for them (#9): how Yoru
+        // looks, how it tracks, the game and its artwork, then the vault, whose
+        // controls used to sit on the Data page. Updates are about the app
+        // rather than the workspace, so they come last. The planned-integrations
+        // card, which offered nothing to do, is gone.
+        for(var section:new JComponent[]{appearance,waifu,tracking,audio,artwork,vaultCard(),reset,updates}) {
+            p.add(section);
+            gap(p,SPACE_XL);
+        }
         return p;
     }
 

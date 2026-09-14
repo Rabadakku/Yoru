@@ -26,8 +26,8 @@ final class Theme {
     // ------------------------------------------------------------------ type
     /** The running figure on the focus timer: the one number allowed to dominate a page. */
     static final int TYPE_TIMER = 56;
-    /** Page title. Big enough to find the page at a glance, small enough to leave room for it. */
-    static final int TYPE_TITLE = 26;
+    /** Page title, set bold. Big enough to find the page at a glance, small enough to leave room for it. */
+    static final int TYPE_TITLE = 28;
     /** A card's headline figure. A number earns this size; prose never does. */
     static final int TYPE_FIGURE = 22;
     /** A dialog or panel heading: the first line of anything that opens over a page. */
@@ -174,7 +174,7 @@ final class Theme {
             case EMBER -> "Warm amber dark, after Gruvbox.";
             case SAKURA -> "Blossom pink light, after Rosé Pine Dawn.";
             case LINEN -> "Warm paper light, low chroma, quiet.";
-            case MOONLIGHT -> "The illustrated companion theme. Violet nights, rose accents, all your Pokémon features.";
+            case MOONLIGHT -> "Violet nights and soft rose accents.";
         };
     }
 
@@ -934,7 +934,13 @@ final class Theme {
     // The four roles a page names, so no page has to choose a size or a colour
     // for the same three things again.
     /** The page's own name. */
-    static JLabel title(String text) { return label(text, TYPE_TITLE, TEXT); }
+    static JLabel title(String text) {
+        var title = label(text, TYPE_TITLE, TEXT);
+        // Bold, the nearest the platform faces come to the semibold the visual
+        // system asks for (#9): a title set like body copy did not lead its page.
+        title.setFont(title.getFont().deriveFont(Font.BOLD));
+        return title;
+    }
     /** One line under the title saying what the page is for. */
     static JLabel subtitle(String text) { return label(text, TYPE_CAPTION, MUTED); }
     /** A card's signpost, uppercase at the call site. Small type, so the readable accent. */
@@ -1047,7 +1053,7 @@ final class Theme {
         return p;
     }
 
-    static final class VerticalPanel extends JPanel implements Scrollable {
+    static class VerticalPanel extends JPanel implements Scrollable {
         protected void addImpl(Component c,Object constraints,int index) {
             if(c instanceof JComponent j)j.setAlignmentX(0);
             super.addImpl(c,constraints,index);
@@ -1075,12 +1081,35 @@ final class Theme {
         return p;
     }
 
+    /** The corner a card turns: rounder than a control's, so a card reads as the surface controls sit on (#9). */
+    static final int CARD_RADIUS = 12;
+
     static JPanel card() {
-        var p=stack();
-        p.setOpaque(true);
+        var p=new CardPanel();
+        p.setAlignmentX(0);
+        p.setLayout(new BoxLayout(p,BoxLayout.Y_AXIS));
         p.setBackground(PANEL);
-        p.setBorder(new CompoundBorder(new LineBorder(LINE),new EmptyBorder(SPACE_LG,SPACE_XL,SPACE_LG,SPACE_XL)));
+        // The fill and hairline are painted round by the panel. The border is
+        // padding only, plus the hairline's pixel, so content sits exactly
+        // where it sat inside the square LineBorder this replaced.
+        p.setBorder(new EmptyBorder(SPACE_LG+HAIRLINE,SPACE_XL+HAIRLINE,SPACE_LG+HAIRLINE,SPACE_XL+HAIRLINE));
         return p;
+    }
+
+    /** A card's surface: its own rounded fill and hairline, since a LineBorder can only draw square corners. */
+    static final class CardPanel extends VerticalPanel {
+        CardPanel() { setOpaque(false); }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            var g=(Graphics2D)graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(getBackground());
+            g.fillRoundRect(0,0,getWidth()-1,getHeight()-1,CARD_RADIUS*2,CARD_RADIUS*2);
+            g.setColor(LINE);
+            g.drawRoundRect(0,0,getWidth()-1,getHeight()-1,CARD_RADIUS*2,CARD_RADIUS*2);
+            g.dispose();
+            super.paintComponent(graphics);
+        }
     }
 
     /**
