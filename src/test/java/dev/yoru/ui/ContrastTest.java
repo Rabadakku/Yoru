@@ -50,6 +50,7 @@ public final class ContrastTest {
         "src/main/java/dev/yoru/ui/HabitsPanel.java",
         "src/main/java/dev/yoru/ui/CollectionPage.java",
         "src/main/java/dev/yoru/ui/TodayPage.java",
+        "src/main/java/dev/yoru/ui/SettingsPage.java",
         "src/main/java/dev/yoru/ui/GamePage.java",
         "src/main/java/dev/yoru/ui/ActivityManager.java",
         "src/main/java/dev/yoru/ui/TagEditor.java",

@@ -2,6 +2,7 @@ package dev.yoru.ui;
 
 import dev.yoru.application.Tracker;
 import java.awt.Component;
+import javax.swing.JPanel;
 
 /** What a page needs from the window around it. */
 interface Shell {
@@ -43,4 +44,25 @@ interface Shell {
 
     /** An activity's name, for a label. */
     String activityName(java.util.UUID id);
+
+    /** Applies a settings change; a new palette rebuilds the window. */
+    void applySettings(java.util.function.UnaryOperator<dev.yoru.domain.Model.Settings> change);
+
+    /** Sets reduced motion for this session. */
+    void reducedMotion(boolean on);
+
+    /** Asks for a game, artwork folder or zip, and imports it. */
+    void importArtwork();
+
+    /** Imports a game, artwork folder, zip or picture already chosen. */
+    void installArtwork(java.io.File chosen);
+
+    /** The open vault's own controls: switch, new, rename, password and delete. */
+    JPanel vaultCard();
+
+    /** Asks which data to reset, and resets it after a backup. */
+    void chooseReset();
+
+    /** Closes the game and the vault for an update, then runs the installer's step. */
+    void quitForUpdate(Runnable afterVaultClosed);
 }
