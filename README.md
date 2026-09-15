@@ -167,15 +167,34 @@ National Dex numbers instead.
 
 ## Screenshots
 
-Rendered images of the app go here. Yoru draws its own interface, artwork and
-logo — no game screenshots, and no game art anywhere in this repository.
+Rendered by `dev.yoru.ui.Preview` from invented sample data, with no game
+artwork installed, which is why pictures read "Artwork missing". Yoru draws its
+own interface, artwork and logo — no game screenshots, and no game art anywhere
+in this repository.
 
-![Today: the timer running, the study buddy, the day's totals](docs/media/today.png)
+**Today** — the focus timer and walking scene, your partner, today's plan and totals.
+
+![Today: the focus timer, the partner card, today's plan and totals](docs/media/today.png)
+
+**Schedule** — the week grid, with plan and actual lanes side by side.
+
 ![The week grid, plan and actual lanes side by side](docs/media/schedule.png)
-![The task board and month calendar](docs/media/tasks.png)
+
+**Tasks** — a table, with views for due today, the next five days and a month calendar.
+
+![The Tasks table with its views, sort, tags and import](docs/media/tasks.png)
+
+**Heat map** — 52 weeks of recorded time, coloured against your daily goal.
+
 ![The 52-week heat map with goal-scaled tiers](docs/media/heatmap.png)
+
+**Collection** — your party, study encounters and PC boxes, read from the game's own save.
+
 ![The collection, read from the game's own save](docs/media/collection.png)
-![Settings: themes, the artwork importer and study music](docs/media/settings.png)
+
+**Settings** — six themes, each shown in its own colours.
+
+![Settings: the six themes](docs/media/settings.png)
 
 ---
 
