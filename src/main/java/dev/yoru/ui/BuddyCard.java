@@ -57,7 +57,7 @@ final class BuddyCard extends JPanel {
 
     BuddyCard(Tracker tracker,ZoneId zone,Runnable openCollection,Runnable openGame) {
         // Contents only: the card this sits in is the surface (see
-        // YoruApp.companionColumn). Drawing a second fill and hairline here put a
+        // TodayPage.companionColumn). Drawing a second fill and hairline here put a
         // frame inside the frame and pushed this content 24 px off the card
         // title's left edge, where the caption under it lives.
         setLayout(new BoxLayout(this,BoxLayout.Y_AXIS));
@@ -276,7 +276,7 @@ final class BuddyCard extends JPanel {
             setOpaque(false);
             // The portrait's own size — the field box's, and a contract
             // BuddyCardTest pins — never the height of the card around it. The
-            // card takes the height its column gives it (YoruApp.companionColumn
+            // card takes the height its column gives it (TodayPage.companionColumn
             // caps it), so this number no longer sets the hero row's height.
             setPreferredSize(new Dimension(260,168));
             setMinimumSize(new Dimension(150,140));
