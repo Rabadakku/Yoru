@@ -44,14 +44,16 @@ clock.
 
 | Package | Holds |
 |---|---|
-| `domain` | Immutable records and their validation. `Model.State` is the whole world. |
-| `application` | `Tracker` — the only mutation boundary. `Analytics` — derived views. `Repository` — the storage port. |
-| `persistence` | `EncryptedVault` (AES-256-GCM), `LocalAccess` (password-free key). |
-| `collection` | `Encounters` (reward economy), `Evolutions` (species graph). |
-| `assets` | `ArtworkLibrary` — importing and surveying user-supplied artwork. |
-| `json` | `Json` — the bounded codec. Its own leaf because `ai` and `persistence` both need it and neither may depend on the other. |
-| `ai` | Optional OpenAI extraction. Bring-your-own key. |
-| `ui` | Swing. `YoruApp` is the shell; one class per page or component. |
+| `domain` | `Model`: immutable records and their validation. `Model.State` is the whole world. |
+| `application` | `Tracker`, the only mutation boundary. `Analytics` for derived views, `Encounters` for the reward economy, `GameSync` for rewards into the save, and the `Repository` port. |
+| `persistence` | `EncryptedVault` (AES-256-GCM, backups and their retention), `VaultStore` (the vault folder, names and moves), `PortableVault` (JSON import and export), `LocalAccess` (password-free key), `LegacyCollection`. |
+| `game` | The save format (`Gen3Save`, `Gen3Pokemon`, `Gen3Text`), edits and delivery (`StorageEdit`, `GameDelivery`, `StudyGift`, `LegacyGifts`), encounters (`WildEncounters`, `StudyEncounter`, `Progression`), and the emulator (`LibretroCore`, `GameSession`, `EmulationLoop`, `SaveTransfer`, `SessionHandle`, `Rom`). |
+| `assets` | `ArtworkLibrary`, the library's front: what it holds, what is complete, the last failed import. `ArtworkStaging` reads an import into a stage under one budget; `ArtworkGenerations` publishes it and keeps two generations. `EmeraldArtwork` decodes sprites from the player's own game. `MusicLibrary`. |
+| `importer` | `NotionImport`. |
+| `update` | `ReleaseFeed`, `Download`, `Updates`, `MacInstall`, `Version`. |
+| `json` | `Json`, the bounded codec. |
+| `ai`, `plugins` | Kept for later integrations; not reachable in the app. |
+| `ui` | Swing. `YoruApp` is the window: navigation, the ticker and the vault. Pages reach it through `Shell`. |
 
 ### The three rules that hold it together
 
@@ -101,23 +103,29 @@ UTC instants everywhere, half-open intervals `[start, end)`.
 
 ## UI structure
 
-`YoruApp` owns the window shell, the nav bar and a single 70 ms ticker that
-drives the clock and the animated scenes. Pages are rebuilt wholesale on
-navigation — cheap at this data size, and it removes a whole class of stale-view
-bugs.
+`YoruApp` owns the window shell, the nav bar, the open vault and a single 70 ms
+ticker that drives the clock and the animated scenes. Pages are rebuilt
+wholesale on navigation — cheap at this data size, and it removes a whole class
+of stale-view bugs — and a rebuild of the page on screen keeps its scroll.
+
+Pages are their own classes and reach the window only through `Shell`:
+`TodayPage`, `TasksPanel`, `HabitsPanel`, `CollectionPage`, `GamePage` and
+`SettingsPage`. The Schedule and Data pages are still built in `YoruApp`. What
+several pages share, and what needs the open vault, stays in the window behind
+`Shell`: the time editors, a new activity, applying settings, artwork imports,
+the vault's controls and quitting for an update.
 
 | Component | Role |
 |---|---|
-| `Theme` | The palette, as mutable statics so `apply()` can swap all four themes without touching call sites. Also the shared widgets. |
+| `Theme` | The palette, as mutable statics so `apply()` can swap every theme without touching call sites. Also the shared widgets and the type and spacing scale. |
 | `Dialogs` | Every dialog. Suppresses stock Java icons and keeps wording consistent. |
-| `DateTimeField` | The one date/time editor. Reverts invalid text rather than persisting it. |
+| `DateText`, `DateField`, `DateTimeField` | Dates and times typed in a forgiving form or picked from `CalendarPanel`; unreadable text is refused, never saved. |
+| `GameController` | The game from Play to Close: the save queue, acknowledgement and retry, and the session's `EncounterTables`. |
+| `StorageScreen`, `PartyStrip`, `Arrangement` | The Collection's box grid, party row and the move shared between them. |
 | `ScheduleGrid` | The week: hour rules, recorded sessions, planned blocks, drag to create/move/resize. |
-| `TrainerScene` | The trainer walking beside the timer, with parallax scenery. |
-| `BuddyScene` | The companion in its field box. |
+| `TrainerScene`, `BuddyCard` | The trainer walking beside the timer, and the partner card beside it. |
+| `WaifuCatalog`, `WaifuPanel`, `MoonlightGallery` | The Waifu theme's bundled portraits, the Today card and the other pages' gallery. |
 | `SpriteAssets` | Bounded, cached sprite decoding. |
-
-Two pages are separate classes because they carry real logic: `TasksPanel` and
-`HabitsPanel`.
 
 ### Swing constraints, learned the hard way
 

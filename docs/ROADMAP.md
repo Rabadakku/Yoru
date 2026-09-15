@@ -1,6 +1,41 @@
 # Yoru roadmap
 
-## Release candidate 1.0.9 — September 14, 2026
+## Release candidate 1.0.10 — September 14, 2026
+
+Built on `claude/close-out` from v1.0.9. It carries the remaining audit issues;
+each issue's comment lists the commits, the tests and what was not verified.
+
+| Issue | State |
+|---|---|
+| [#6](https://github.com/Rabadakku/Yoru/issues/6) artwork repair | Done. Per-kind status with a Failed state, generation retention, route visitors no longer counted as required scenery, and tests for tile flips, a decoy wallpaper table and one budget across nested archives. |
+| [#7](https://github.com/Rabadakku/Yoru/issues/7) save durability | Done. Vault backups are pruned, Close during a start and saves behind a slow disk are tested, and an opt-in lifecycle check ran against a real core. |
+| [#8](https://github.com/Rabadakku/Yoru/issues/8) Collection | Done. Party first as real controls, one rewards row, PC boxes with real controls, arranging as a worded mode, readable missing and damaged data, and place kept across rebuilds. |
+| [#9](https://github.com/Rabadakku/Yoru/issues/9) visual system | Done, except a 200% text-scaling review. Titles, rounded cards, no breadcrumb, Today's order and partner card, Settings in four sections. |
+| [#10](https://github.com/Rabadakku/Yoru/issues/10) test isolation and oracles | Done. The #4 regression was shown failing before its fix; native and desktop checks are documented and were run by hand. |
+| [#12](https://github.com/Rabadakku/Yoru/issues/12) cleanup | Done. Today and Settings pages out of YoruApp, encounter tables scoped to a session, the artwork library split into staging and generations, unused code removed, and this table. |
+| [#23](https://github.com/Rabadakku/Yoru/issues/23) illustrated theme | Done. A Waifu theme separate from Moonlight, five portraits within the package budget, a visual picker and page-varied galleries. |
+| [#3](https://github.com/Rabadakku/Yoru/issues/3) companion placement | Placement shipped in 1.0.7; its art direction is carried by #23. |
+
+### Release gates
+
+| Gate | Evidence | State |
+|---|---|---|
+| Isolated suite | `./test.sh`, including the named-module check | Passing |
+| Every page, every theme, both sizes | `PreviewInventoryTest`: 120 renders | Passing |
+| Mechanical refactors change nothing on screen | Page renders compared pixel by pixel before and after each #12 move | Unchanged apart from animation |
+| No personal data or game assets | `PrivacyTest`, `DistributionTest` | Passing |
+| Real libretro core | `NativeLifecycleCheck`, run by hand | 26 checks passed |
+| Keyboard focus on a real display | `DialogFocusTest` with a display | Passing |
+| Installers | `release.yml` on the version tag | Pending the release |
+| Clean-machine install and a full campaign | By hand | Not verified |
+
+## Archived history
+
+Everything below is kept as history and is not a statement of current work.
+Issue numbers in the v1.0 plan (#24 and #38–#57) refer to the original
+repository, not this one.
+
+## Released 1.0.9 — September 14, 2026
 
 Built on `claude/open-issues` from v1.0.8. See the [release notes](RELEASE-1.0.9.md);
 each issue's handoff comment records its commits, tests and limits.
