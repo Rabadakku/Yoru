@@ -49,6 +49,8 @@ public final class ContrastTest {
         "src/main/java/dev/yoru/ui/TasksPanel.java",
         "src/main/java/dev/yoru/ui/HabitsPanel.java",
         "src/main/java/dev/yoru/ui/CollectionPage.java",
+        "src/main/java/dev/yoru/ui/TodayPage.java",
+        "src/main/java/dev/yoru/ui/SettingsPage.java",
         "src/main/java/dev/yoru/ui/GamePage.java",
         "src/main/java/dev/yoru/ui/ActivityManager.java",
         "src/main/java/dev/yoru/ui/TagEditor.java",
@@ -59,6 +61,7 @@ public final class ContrastTest {
         "src/main/java/dev/yoru/ui/DateField.java",
         "src/main/java/dev/yoru/ui/CalendarPanel.java",
         "src/main/java/dev/yoru/ui/ArtworkStatus.java",
+        "src/main/java/dev/yoru/ui/PartyStrip.java",
         "src/main/java/dev/yoru/ui/WaifuPanel.java",
         "src/main/java/dev/yoru/ui/BuddyCard.java");
 

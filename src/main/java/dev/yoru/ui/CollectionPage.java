@@ -23,13 +23,31 @@ import static dev.yoru.ui.Theme.*;
  * here the next time it saves; what study earns goes into the game the next
  * time it starts or closes. Yoru keeps no collection of its own to disagree
  * with the game's.
+ *
+ * Laid out party first (#8). Two reward cards used to fill the first screen,
+ * so at the window's minimum the party began below the fold. Now the party
+ * leads, study rewards take one row, and the PC boxes follow with the details
+ * beside the grid when the page is wide enough and under it when not.
  */
 final class CollectionPage {
+    /** Content at least this wide puts the details beside the box rather than under it. */
+    static final int DETAILS_BESIDE = 1040;
+    static final int DETAILS_WIDTH = 240;
+    /** Beside the box the details stop growing here, so a wide window reads as box and details, not a blank field. */
+    static final int DETAILS_MAX = 360;
+
+    private enum Region { NONE, PARTY, BOXES }
+
     private final Shell shell;
     /** The box on screen: the game's own open box at first, then whichever was turned to. */
     private int box = -1;
     /** Arranging survives the page rebuild every edit causes, like {@code box} does. */
     private boolean arranging;
+    /** Where the Pokémon on show sits, kept across rebuilds so a save notification does not reset it. */
+    private StorageEdit.Place shown;
+    /** Where the keyboard was when a move rebuilt the page, and the place it went to. */
+    private Region keyboard = Region.NONE;
+    private StorageEdit.Place keyboardAt;
 
     CollectionPage(Shell shell) { this.shell = shell; }
 
@@ -45,76 +63,14 @@ final class CollectionPage {
             p.add(label("The game is running. This is its last save; what you catch now appears when it saves again.", TYPE_BODY, GOLD_TEXT));
             gap(p, SPACE_LG);
         }
-        p.add(read.kind() == GameView.SaveKind.READABLE ? storage(read.save()) : unavailable(read));
-        gap(p, SPACE_XL);
-        var top = new JPanel(new GridLayout(1, 2, SPACE_LG, 0));
-        top.setOpaque(false);
-        top.setAlignmentX(0);
-        top.add(encounters(state));
-        top.add(onTheirWay(shell));
-        p.add(top);
+        if (read.kind() != GameView.SaveKind.READABLE) {
+            p.add(unavailable(read));
+            gap(p, SPACE_XL);
+            p.add(rewards(state));
+            return p;
+        }
+        storage(p, read.save());
         return p;
-    }
-
-    private JPanel encounters(State state) {
-        var c = card();
-        c.add(sectionHeader("STUDY ENCOUNTERS")); gap(c, SPACE_MD);
-        long waiting = Encounters.available(state);
-        c.add(label(waiting == 0 ? "None waiting" : waiting + " waiting", TYPE_FIGURE, waiting > 0 ? TEXT : MUTED)); gap(c, SPACE_SM);
-        c.add(label(Encounters.towardNext(state) / 60 + " / 30m toward the next · "
-            + state.campaign().encountersUsed() + " opened", TYPE_CAPTION, MUTED));
-        gap(c, SPACE_MD);
-        boolean playable = GameFiles.rom() != null;
-        var open = button("Open encounter", this::openEncounter);
-        open.setName("collection.encounter");
-        open.setEnabled(waiting > 0 && playable);
-        // A disabled control that does not say why is a dead end; this one says
-        // which of the two reasons applies.
-        open.setToolTipText(!playable ? "Choose your game file on the Game tab first"
-            : waiting == 0 ? "No encounter waiting yet: one arrives every 30 minutes recorded" : "Open the encounter");
-        c.add(open);
-        // One explainer, not two: the line at :208 said the same thing.
-        if (!playable) {
-            gap(c, SPACE_SM);
-            c.add(bodyLabel("Choose your game file on the Game tab. Encounters come from its wild Pokémon."));
-        }
-        return c;
-    }
-
-    /** Rewards not yet in the game, and what happened the last time any were sent in. */
-    static JPanel onTheirWay(Shell shell) {
-        var state = shell.tracker().state();
-        var pending = state.pendingRewards();
-        var c = card();
-        c.add(sectionHeader("ON THEIR WAY TO YOUR GAME", GOLD_TEXT)); gap(c, SPACE_MD);
-        if (pending.isEmpty()) {
-            // Not the words of the card beside it: with an empty vault both
-            // read "None waiting", and two headlines that match word for word
-            // in adjacent cards look like one of them was copied by mistake.
-            // Each card names its own queue instead.
-            c.add(label("None on their way", TYPE_FIGURE, MUTED)); gap(c, SPACE_SM);
-            c.add(bodyLabel("Pokémon caught in study encounters are sent into your game."));
-        } else {
-            c.add(label(pending.size() + " Pokémon", TYPE_FIGURE, TEXT)); gap(c, SPACE_SM);
-            c.add(label(pending.stream().limit(4).map(r -> SpeciesNames.of(r.nationalDex()) + " Lv " + r.level())
-                .collect(Collectors.joining("  ·  ")) + (pending.size() > 4 ? "  ·  +" + (pending.size() - 4) + " more" : ""), TYPE_BODY, TEXT));
-            gap(c, SPACE_SM);
-            var save = GameView.save(state);
-            c.add(label(save == null || !save.hasStarter() ? "They arrive once you have chosen your starter and saved in the game."
-                : shell.game().running() ? "They go in when you close the game."
-                : "They go in when the game starts: your party if there is room, then your PC.", TYPE_CAPTION, MUTED));
-        }
-        for (var outcome : shell.game().outcomes()) {
-            boolean delivered = outcome.kind() == GameDelivery.Kind.DELIVERED;
-            boolean trouble = switch (outcome.kind()) {
-                case UNREADABLE, NOT_EDITABLE, FULL, FAILED -> true;
-                default -> false;
-            };
-            if (!delivered && !trouble) continue;
-            gap(c, SPACE_XS);
-            c.add(label(outcome.message(), TYPE_CAPTION, delivered ? CYAN : DANGER));
-        }
-        return c;
     }
 
     /**
@@ -165,81 +121,283 @@ final class CollectionPage {
         return c;
     }
 
-    private JPanel storage(Gen3Save save) {
-        var c = card();
-        var trainer = save.trainer();
-        int badges = save.badges();
-        c.add(sectionHeader("POKÉMON STORAGE · " + trainer.name() + " · " + save.ownedCount() + " caught · "
-            + Theme.plural(badges, "badge")));
-        gap(c, SPACE_MD);
-        // The edits live here, and only while the game is closed: while it
-        // runs, the buttons say so rather than pretending to work.
+    /** The party, the rewards row and the PC boxes, sharing one selection and one arrangement. */
+    private void storage(JPanel page, Gen3Save save) {
         boolean gameOpen = shell.game().running();
-        var controls = tightRow();
-        var arrange = button(gameOpen ? "The game is running" : arranging ? "Done arranging" : "Arrange", () -> { });
-        arrange.setName("collection.arrange");
-        arrange.setEnabled(!gameOpen);
-        controls.add(arrange);
-        var rename = button("Rename box…", this::renameBox);
-        rename.setName("collection.rename");
-        rename.setEnabled(!gameOpen);
-        controls.add(rename);
-        var paper = button("Wallpaper", this::nextWallpaper);
-        paper.setName("collection.wallpaper");
-        paper.setEnabled(!gameOpen);
-        controls.add(paper);
-        // Three controls that are disabled for one reason, said on each of them.
-        if (gameOpen) for (var control : new JComponent[] {arrange, rename, paper})
-            control.setToolTipText("Close the game first: while it runs it holds its own copy of the save");
-        gap(c, SPACE_SM);
-        c.add(controls);
+        // The edits live here, and only while the game is closed: while it runs,
+        // the controls say so rather than pretending to work.
+        var arrangement = new Arrangement(gameOpen ? null : (from, to) -> {
+            keyboard = focusRegion(page);
+            keyboardAt = to;
+            editSave(bytes -> StorageEdit.move(bytes, from, to));
+        });
+        arrangement.setOn(arranging);
+        if (box < 0) box = Gen3Save.currentBox(save.storage());
 
-        // A minimum, not a fixed width: the storage screen beside it needs a set
-        // width, and a fixed one here overflowed the page at the window minimum.
         var details = stack();
-        details.setMinimumSize(new Dimension(0, StorageScreen.boxHeight()));
-        // A frame of its own. Without one the empty-state hint floated over the
-        // card above the box's header row, belonging to nothing; inside a
-        // hairline it is anchored, and reads as the panel it is.
+        details.setName("collection.details");
+        // A frame of its own, so the details read as the panel they are,
+        // beside the box or under it.
         details.setBorder(new CompoundBorder(new LineBorder(LINE),
             new EmptyBorder(SPACE_LG, SPACE_LG, SPACE_LG, SPACE_LG)));
-        if (box < 0) box = Gen3Save.currentBox(save.storage());
-        var screen = new StorageScreen(save, box, mon -> describe(details, mon), turned -> box = turned,
-            gameOpen ? null : (from, to) -> editSave(bytes -> StorageEdit.move(bytes, from, to)));
-        var body = new JPanel(new BorderLayout(SPACE_XL, 0));
-        body.setOpaque(false);
-        body.setAlignmentX(0);
-        body.add(screen, BorderLayout.WEST);
-        body.add(details, BorderLayout.CENTER);
-        describe(details, null);
-        screen.showPartyLead();
-        c.add(body);
-
-        // The flag outlives the screen: an edit rebuilds the page, and the
-        // rebuild must come back in the mode it left.
-        screen.setArranging(arranging && !gameOpen);
-        final var arrangeToggle = arrange;
-        arrangeToggle.addActionListener(e -> {
-            arranging = !arranging;
-            screen.setArranging(arranging);
-            arrangeToggle.setText(arranging ? "Done arranging" : "Arrange");
+        var holder = new StorageScreen[1];
+        var strip = new PartyStrip(save.party(), arrangement, mon -> {
+            shown = new StorageEdit.Place(true, -1, save.party().indexOf(mon));
+            holder[0].select(mon);
+            describe(details, mon, shown);
         });
-        if (StorageScreen.wallpaper(0) == null) {
-            gap(c, SPACE_SM);
-            c.add(bodyLabel("Add your game file in Settings to load Pokémon pictures and box backgrounds."));
-            c.add(button("Manage artwork", () -> shell.show("Settings")));
+
+        var names = new String[Gen3Save.BOXES];
+        for (int i = 0; i < names.length; i++) {
+            String name = save.boxName(save.storage(), i).strip();
+            names[i] = name.isEmpty() ? "BOX " + (i + 1) : name;
+        }
+        var selector = plainCombo(new JComboBox<>(names));
+        selector.setName("collection.box");
+        selector.getAccessibleContext().setAccessibleName("Box");
+        var occupancy = label("", TYPE_LABEL, MUTED);
+        occupancy.setName("collection.occupancy");
+        var screen = new StorageScreen(save, box, mon -> {
+            shown = mon == null ? null : new StorageEdit.Place(false, holder[0].box(), holder[0].cursor());
+            strip.select(mon);
+            describe(details, mon, shown);
+        }, turned -> {
+            box = turned;
+            if (selector.getSelectedIndex() != turned) selector.setSelectedIndex(turned);
+            occupancy.setText(holder[0].occupancy() + " / " + Gen3Save.PER_BOX);
+        }, arrangement);
+        holder[0] = screen;
+        selector.setSelectedIndex(screen.box());
+        selector.addActionListener(e -> screen.showBox(selector.getSelectedIndex()));
+        occupancy.setText(screen.occupancy() + " / " + Gen3Save.PER_BOX);
+        strip.onSwitchArea(screen::requestFocusInWindow);
+        screen.onSwitchArea(() -> {
+            for (int i = 0; i < Gen3Save.PARTY_LIMIT; i++)
+                if (strip.slot(i).isEnabled()) { strip.slot(i).requestFocusInWindow(); return; }
+        });
+
+        var chosen = restoreSelection(save, screen);
+        strip.select(chosen);
+        screen.select(chosen);
+        describe(details, chosen, shown);
+
+        page.add(party(save, strip));
+        gap(page, SPACE_XL);
+        page.add(rewards(shell.tracker().state()));
+        gap(page, SPACE_XL);
+        page.add(boxes(save, screen, selector, occupancy, details, arrangement, gameOpen));
+        returnKeyboard(strip, screen);
+    }
+
+    /** The Pokémon last on show if its place still holds one, else the party's lead. */
+    private Gen3Pokemon restoreSelection(Gen3Save save, StorageScreen screen) {
+        if (shown != null) {
+            Gen3Pokemon there = shown.party()
+                ? (shown.slot() >= 0 && shown.slot() < save.party().size() ? save.party().get(shown.slot()) : null)
+                : save.boxed(save.storage(), shown.box(), shown.slot());
+            if (there != null) return there;
+        }
+        shown = save.party().isEmpty() ? null : new StorageEdit.Place(true, -1, 0);
+        return save.party().isEmpty() ? null : save.party().getFirst();
+    }
+
+    /** After a move rebuilt the page, the keyboard goes back to where it was, on the place it moved to. */
+    private void returnKeyboard(PartyStrip strip, StorageScreen screen) {
+        var region = keyboard;
+        var at = keyboardAt;
+        keyboard = Region.NONE;
+        keyboardAt = null;
+        if (region == Region.NONE || at == null) return;
+        if (region == Region.BOXES && !at.party() && at.box() == screen.box()) screen.placeCursor(at.slot());
+        SwingUtilities.invokeLater(() -> {
+            if (region == Region.PARTY && at.party()) strip.slot(at.slot()).requestFocusInWindow();
+            else screen.requestFocusInWindow();
+        });
+    }
+
+    private static Region focusRegion(JPanel page) {
+        var owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        if (owner instanceof StorageScreen) return Region.BOXES;
+        if (owner != null && SwingUtilities.getAncestorOfClass(PartyStrip.class, owner) != null) return Region.PARTY;
+        return Region.NONE;
+    }
+
+    private JPanel party(Gen3Save save, PartyStrip strip) {
+        var c = card();
+        c.setName("collection.party");
+        c.add(sectionHeader("YOUR PARTY · " + save.trainer().name() + " · " + save.ownedCount() + " caught · "
+            + Theme.plural(save.badges(), "badge")));
+        gap(c, SPACE_MD);
+        c.add(strip);
+        return c;
+    }
+
+    /** Study rewards in one row: encounters waiting, Pokémon on their way, and the one action. */
+    private JPanel rewards(State state) {
+        var c = card();
+        c.setName("collection.rewards");
+        var summaries = new JPanel(new GridLayout(1, 2, SPACE_XL, 0));
+        summaries.setOpaque(false);
+        summaries.add(encounters(state));
+        summaries.add(onTheirWay(state));
+        var row = new JPanel(new BorderLayout(SPACE_LG, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(0);
+        row.add(summaries, BorderLayout.CENTER);
+        row.add(flushRow(encounterButton(state)), BorderLayout.EAST);
+        c.add(row);
+        for (var outcome : shell.game().outcomes()) {
+            boolean delivered = outcome.kind() == GameDelivery.Kind.DELIVERED;
+            boolean trouble = switch (outcome.kind()) {
+                case UNREADABLE, NOT_EDITABLE, FULL, FAILED -> true;
+                default -> false;
+            };
+            if (!delivered && !trouble) continue;
+            gap(c, SPACE_XS);
+            c.add(label(outcome.message(), TYPE_CAPTION, delivered ? CYAN : DANGER));
         }
         return c;
     }
 
-    private static void describe(JPanel details, Gen3Pokemon mon) {
+    private static JPanel encounters(State state) {
+        var s = stack();
+        long waiting = Encounters.available(state);
+        var headline = label(waiting == 0 ? "No study encounters waiting"
+            : Theme.plural((int) waiting, "study encounter") + " waiting", TYPE_BODY, waiting > 0 ? TEXT : MUTED);
+        headline.setName("collection.encounters");
+        s.add(headline);
+        s.add(caption(Encounters.towardNext(state) / 60 + " / 30 min toward the next · "
+            + state.campaign().encountersUsed() + " opened"));
+        if (GameFiles.rom() == null) s.add(caption("Choose your game file on the Game tab first."));
+        return s;
+    }
+
+    private JPanel onTheirWay(State state) {
+        var s = stack();
+        var pending = state.pendingRewards();
+        var headline = label(pending.isEmpty() ? "None on their way to your game"
+            : pending.size() + " Pokémon on their way to your game", TYPE_BODY, pending.isEmpty() ? MUTED : GOLD_TEXT);
+        headline.setName("collection.onTheirWay");
+        s.add(headline);
+        if (pending.isEmpty()) {
+            s.add(caption("Pokémon caught in study encounters are sent into your game."));
+            return s;
+        }
+        s.add(caption(pending.stream().limit(3).map(r -> SpeciesNames.of(r.nationalDex()) + " Lv " + r.level())
+            .collect(Collectors.joining(" · ")) + (pending.size() > 3 ? " · +" + (pending.size() - 3) + " more" : "")));
+        var save = GameView.save(state);
+        s.add(caption(save == null || !save.hasStarter() ? "They arrive once you have chosen your starter and saved."
+            : shell.game().running() ? "They go in when you close the game."
+            : "They go in when the game starts: party first, then PC."));
+        return s;
+    }
+
+    private JButton encounterButton(State state) {
+        long waiting = Encounters.available(state);
+        boolean playable = GameFiles.rom() != null;
+        var open = waiting > 0 && playable ? accentButton("Open encounter", this::openEncounter)
+            : button("Open encounter", this::openEncounter);
+        open.setName("collection.encounter");
+        open.setEnabled(waiting > 0 && playable);
+        // A disabled control that does not say why is a dead end; this one says
+        // which of the two reasons applies.
+        open.setToolTipText(!playable ? "Choose your game file on the Game tab first"
+            : waiting == 0 ? "No encounter waiting yet: one arrives every 30 minutes recorded" : "Open the encounter");
+        return open;
+    }
+
+    private static JLabel caption(String text) {
+        var line = bodyLabel(text);
+        line.setFont(sans(TYPE_CAPTION));
+        return line;
+    }
+
+    private JPanel boxes(Gen3Save save, StorageScreen screen, JComboBox<String> selector, JLabel occupancy,
+                         JPanel details, Arrangement arrangement, boolean gameOpen) {
+        var c = card();
+        c.setName("collection.boxes");
+        c.add(sectionHeader("PC BOXES"));
+        gap(c, SPACE_SM);
+        var previous = button("‹ Previous", () -> screen.turn(-1));
+        previous.setName("collection.previousBox");
+        var next = button("Next ›", () -> screen.turn(1));
+        next.setName("collection.nextBox");
+        c.add(flushRow(previous, selector, next, occupancy));
+
+        var arrange = button(gameOpen ? "The game is running" : "Arrange", () -> setArranging(arrangement, true));
+        arrange.setName("collection.arrange");
+        arrange.setEnabled(!gameOpen);
+        var rename = button("Rename box…", this::renameBox);
+        rename.setName("collection.rename");
+        rename.setEnabled(!gameOpen);
+        var paper = button("Wallpaper", this::nextWallpaper);
+        paper.setName("collection.wallpaper");
+        paper.setEnabled(!gameOpen);
+        // Three controls that are disabled for one reason, said on each of them.
+        if (gameOpen) for (var control : new JComponent[] {arrange, rename, paper})
+            control.setToolTipText("Close the game first: while it runs it holds its own copy of the save");
+        // Arrange last: it hides while arranging, and a hidden control first in
+        // a flush row would leave its gap behind and push the row off the margin.
+        c.add(flushRow(rename, paper, arrange));
+
+        // Arranging is a mode with its instruction in words, a way to put a
+        // Pokémon back, and a way out, rather than a hint painted on the box.
+        var instruction = label("", TYPE_BODY, ACCENT_TEXT);
+        instruction.setName("collection.instruction");
+        var cancel = button("Cancel move", arrangement::cancel);
+        cancel.setName("collection.cancelMove");
+        var done = accentButton("Done", () -> setArranging(arrangement, false));
+        done.setName("collection.doneArranging");
+        var mode = flushRow(instruction, cancel, done);
+        mode.setName("collection.arranging");
+        c.add(mode);
+        Runnable follow = () -> {
+            instruction.setText(arrangement.instruction());
+            cancel.setEnabled(arrangement.picked() != null);
+            mode.setVisible(arrangement.on());
+            arrange.setVisible(!arrangement.on());
+            c.revalidate();
+            c.repaint();
+        };
+        arrangement.listen(follow);
+        follow.run();
+        gap(c, SPACE_MD);
+
+        var body = new JPanel(new Beside(screen, details));
+        body.setName("collection.boxBody");
+        body.setOpaque(false);
+        body.setAlignmentX(0);
+        body.add(screen);
+        body.add(details);
+        c.add(body);
+        if (StorageScreen.wallpaper(0) == null) {
+            gap(c, SPACE_SM);
+            c.add(bodyLabel("Add your game file in Settings to load Pokémon pictures and box backgrounds."));
+            c.add(flushRow(button("Manage artwork", () -> shell.show("Settings"))));
+        }
+        return c;
+    }
+
+    private void setArranging(Arrangement arrangement, boolean on) {
+        arranging = on;
+        arrangement.setOn(on);
+    }
+
+    private static void describe(JPanel details, Gen3Pokemon mon, StorageEdit.Place place) {
         details.removeAll();
         if (mon == null) {
-            details.add(bodyLabel("Click a Pokémon to see it."));
+            details.add(bodyLabel("Choose a Pokémon to see it."));
         } else {
-            details.add(new Portrait(mon)); gap(details, SPACE_MD);
-            details.add(label(GameView.name(mon), TYPE_HEADING, mon.shiny() ? GOLD_TEXT : TEXT)); gap(details, SPACE_XS);
+            var portrait = new Portrait(mon);
+            details.add(portrait); gap(details, SPACE_MD);
+            details.add(label(GameView.name(mon), TYPE_HEADING, mon.shiny() && GameView.readable(mon) ? GOLD_TEXT : TEXT));
+            gap(details, SPACE_XS);
+            if (place != null) {
+                String where = Arrangement.where(place);
+                details.add(label(Character.toUpperCase(where.charAt(0)) + where.substring(1), TYPE_CAPTION, MUTED));
+            }
             details.add(bodyLabel(GameView.detail(mon)));
+            if (portrait.missingArtwork()) details.add(label("Artwork missing", TYPE_CAPTION, MUTED));
             if (GameView.readable(mon) && !mon.isEgg()) {
                 gap(details, SPACE_MD);
                 details.add(label(GameView.nature(mon) + " nature", TYPE_BODY, TEXT));
@@ -259,7 +417,7 @@ final class CollectionPage {
         var state = shell.tracker().state();
         StudyEncounter.Found found;
         try {
-            found = GameView.nextEncounter(state);
+            found = GameView.nextEncounter(state, shell.game().encounters());
         } catch (Exception e) {
             shell.error(e);
             return;
@@ -296,7 +454,7 @@ final class CollectionPage {
         editSave(bytes -> StorageEdit.renameBox(bytes, box, name));
     }
 
-    /** Cycles the open box's wallpaper to the next one the game ships. */
+    /** Cycles the open box's wallpaper to the next one the game ships, back to the first after the last. */
     private void nextWallpaper() {
         var state = shell.tracker().state();
         var save = GameView.save(state);
@@ -323,38 +481,90 @@ final class CollectionPage {
         });
     }
 
-    /** A Pokémon's picture, drawn crisp at a whole-number scale. */
+    /**
+     * The box and its details side by side when the content is at least
+     * {@link #DETAILS_BESIDE} wide, the details under the box when not (#8), so
+     * a narrow window never squeezes the details into a sliver.
+     */
+    private static final class Beside implements LayoutManager {
+        private final Component box, details;
+        private Boolean laidOutBeside;
+
+        Beside(Component box, Component details) { this.box = box; this.details = details; }
+
+        /** Whether a box body this wide sits in content wide enough for the details beside it. */
+        static boolean beside(int width) { return width + 2 * SPACE_XL >= DETAILS_BESIDE; }
+
+        @Override public void addLayoutComponent(String name, Component comp) { }
+        @Override public void removeLayoutComponent(Component comp) { }
+
+        @Override public Dimension preferredLayoutSize(Container parent) {
+            var boxSize = box.getPreferredSize();
+            var detailSize = details.getPreferredSize();
+            if (beside(PartyStrip.availableWidth(parent)))
+                return new Dimension(boxSize.width + SPACE_XL + DETAILS_WIDTH, Math.max(boxSize.height, detailSize.height));
+            return new Dimension(boxSize.width, boxSize.height + SPACE_LG + detailSize.height);
+        }
+
+        @Override public Dimension minimumLayoutSize(Container parent) { return box.getMinimumSize(); }
+
+        @Override public void layoutContainer(Container parent) {
+            int width = parent.getWidth();
+            boolean side = beside(width);
+            var boxSize = box.getPreferredSize();
+            box.setBounds(0, 0, boxSize.width, boxSize.height);
+            if (side) details.setBounds(boxSize.width + SPACE_XL, 0,
+                Math.max(DETAILS_WIDTH, Math.min(DETAILS_MAX, width - boxSize.width - SPACE_XL)),
+                Math.max(boxSize.height, details.getPreferredSize().height));
+            else details.setBounds(0, boxSize.height + SPACE_LG, width, details.getPreferredSize().height);
+            // Moving the details changes the height asked for, and the card
+            // around this has already been laid out with the old one.
+            if (laidOutBeside != null && laidOutBeside != side) SwingUtilities.invokeLater(parent::revalidate);
+            laidOutBeside = side;
+        }
+    }
+
+    /** A Pokémon's picture, drawn crisp at a whole-number scale, or a plain shape where there is none. */
     private static final class Portrait extends JPanel {
         private final BufferedImage sprite;
-        private final String fallback;
+        private final Gen3Pokemon mon;
 
         Portrait(Gen3Pokemon mon) {
+            this.mon = mon;
             setOpaque(false);
             sprite = !GameView.readable(mon) || mon.isEgg() ? null : GameView.sprite(mon.nationalDex(), mon.shiny());
-            // Never the dex number: a number where a picture should be reads as
-            // the Pokémon's name, and "#252" is not one.
-            fallback = mon.isEgg() ? "Egg" : "?";
             var size = new Dimension(128, 128);
             setPreferredSize(size);
             setMaximumSize(size);
             setAlignmentX(0);
         }
 
+        boolean missingArtwork() { return sprite == null && GameView.readable(mon) && !mon.isEgg(); }
+
         @Override protected void paintComponent(Graphics graphics) {
             var g = (Graphics2D) graphics.create();
             try {
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int cx = getWidth() / 2;
                 if (sprite != null) {
                     int scale = Math.max(1, Math.min(getWidth() / sprite.getWidth(), getHeight() / sprite.getHeight()));
                     int w = sprite.getWidth() * scale, h = sprite.getHeight() * scale;
                     g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
                     g.drawImage(sprite, (getWidth() - w) / 2, getHeight() - h, w, h, null);
-                } else {
-                    g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-                    g.setColor(MUTED);
+                } else if (mon.isEgg()) {
+                    g.setColor(TEXT);
+                    g.fillOval(cx - 30, getHeight() / 2 - 40, 60, 80);
+                } else if (!GameView.readable(mon)) {
+                    g.setColor(DANGER);
                     g.setFont(headingFont());
                     var metrics = g.getFontMetrics();
-                    g.drawString(fallback, (getWidth() - metrics.stringWidth(fallback)) / 2,
-                        getHeight() / 2 + metrics.getAscent() / 2);
+                    g.drawString("!", cx - metrics.stringWidth("!") / 2, getHeight() / 2 + metrics.getAscent() / 2);
+                } else {
+                    // Never the dex number: a number where a picture should be
+                    // reads as the Pokémon's name, and "#252" is not one.
+                    g.setColor(MUTED);
+                    g.fillOval(cx - 22, 20, 44, 44);
+                    g.fillRoundRect(cx - 40, 72, 80, 44, 32, 32);
                 }
             } finally {
                 g.dispose();

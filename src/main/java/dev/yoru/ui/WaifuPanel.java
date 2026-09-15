@@ -20,8 +20,6 @@ import java.util.List;
 final class WaifuPanel extends JPanel {
     /** One image stays up for a few seconds: long enough to read, short enough to notice. */
     private static final int INTERVAL_MS = 60000;
-    /** Eight grid steps tall at most: bounded so the page never reflows around it. */
-    private static final int MAX_ART_HEIGHT = Theme.SPACE_XXL * 8;
     /** What the panel says when no waifu is chosen, in every empty case. */
     static final String HINT = "Choose a waifu in Settings";
     static final String HINT_NAME = "waifu.hint";

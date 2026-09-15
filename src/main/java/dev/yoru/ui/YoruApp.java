@@ -12,7 +12,6 @@ import java.nio.file.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
-import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.List;
 import static dev.yoru.ui.Theme.*;
@@ -35,22 +34,20 @@ public final class YoruApp extends JPanel implements Shell {
     private final ZoneId zone=ZoneId.systemDefault();
     private final JPanel content=new JPanel(new BorderLayout());
     private String page="Today";
-    private JLabel timerLabel,statusLabel,encounterLabel;
     private boolean reducedMotion;
     private LocalDate displayDate=LocalDate.now();
     private LocalDate week;
     private final MusicPlayer music=new MusicPlayer();
     private final DateTimeFormatter dateTime=DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-    private UUID heatActivity;
     /** Window for the focus-distribution chart, in days; 0 means all time. */
     private int mixDays=7;
     /** The game, from Play to Close. It outlives a rebuilt window, as the game itself does. */
     private final GameController game;
     private final GamePage gamePage=new GamePage(this);
     private final CollectionPage collectionPage=new CollectionPage(this);
+    private final TodayPage todayPage=new TodayPage(this);
+    private final SettingsPage settingsPage=new SettingsPage(this);
     private javax.swing.Timer ticker;
-    private BuddyCard buddyCard;
-    private TrainerScene trainerScene;
     private final Map<String,JButton> navigation = new LinkedHashMap<>();
     private boolean closed;
     /** What the bar needs to show every tab whole; measured when the bar is built. */
@@ -170,10 +167,7 @@ public final class YoruApp extends JPanel implements Shell {
             if(!displayDate.equals(LocalDate.now())){displayDate=LocalDate.now();showPage(page);}
             var running=tracker.active();
             boolean animate=running!=null && !reducedMotion;
-            if (buddyCard != null) buddyCard.tick(animate);
-            if (trainerScene != null) trainerScene.advance(animate,
-                running==null?0:Duration.between(running.start(),Instant.now()).getSeconds());
-            if(timerLabel!=null&&page.equals("Today"))updateTimer();
+            todayPage.tick(animate,running,page.equals("Today"));
             // Synced here rather than from the clock-in and clock-out buttons, so
             // a session recovered when the vault opens — which passes through
             // neither — still starts the music.
@@ -241,6 +235,8 @@ public final class YoruApp extends JPanel implements Shell {
         closed=true;
         gamePage.leave();
         music.close();
+        // The session's encounter tables go with it (#12).
+        game.encounters().forget();
         ticker.stop();
         var window=SwingUtilities.getWindowAncestor(this);
         if(window!=null)window.dispose();
@@ -268,22 +264,32 @@ public final class YoruApp extends JPanel implements Shell {
     @Override public Component owner() { return this; }
     @Override public boolean reducedMotion() { return reducedMotion; }
     @Override public void show(String next) { showPage(next); }
+    @Override public ZoneId zone() { return zone; }
+    @Override public String activityName(UUID id) { return name(id); }
+    @Override public void reducedMotion(boolean on) { reducedMotion=on; }
+    @Override public void quitForUpdate(Runnable afterVaultClosed) { closeForUpdate(afterVaultClosed); }
     private String name(UUID id) {
         return tracker.state().activities().stream().filter(a->a.id().equals(id)).map(Activity::name).findFirst().orElse("Activity");
     }
+    /** The page on screen's scroll pane, so a rebuild of the same page can keep its place. */
+    private JScrollPane pageScroll;
+
     private void showPage(String next) {
+        // A rebuild of the page already on screen keeps its place. Saves, edits
+        // and moves all rebuild the page, and each one used to throw the reader
+        // back to the top (#8).
+        Point keep=next.equals(page)&&pageScroll!=null?pageScroll.getViewport().getViewPosition():null;
         // The game keeps running on every tab; only its picture stops while
         // another page is on screen. It stops when it is closed, not before.
         gamePage.leave();
         page=next;
-        buddyCard=null;trainerScene=null;encounterLabel=null;
+        todayPage.leave();
         markNavigation();
-        timerLabel=null;
         content.removeAll();
         var heading=new JPanel(new BorderLayout());
         heading.setOpaque(false);
         heading.setBorder(new EmptyBorder(0,0,SPACE_XL,0));
-        heading.add(label("~/ "+rowFor(page).id(),TYPE_LABEL,CYAN),BorderLayout.WEST);
+        // No breadcrumb: the pages are flat, and the title below already names the page (#9).
         heading.add(label(LocalDate.now()+" · "+zone,TYPE_CAPTION,MUTED),BorderLayout.EAST);
         content.add(heading,BorderLayout.NORTH);
         JPanel view=switch(page) {
@@ -293,14 +299,14 @@ public final class YoruApp extends JPanel implements Shell {
             case "Collection"->collectionPage.view();
             case "Habits"->HabitsPanel.view(tracker, () -> showPage("Habits"));
             case "Tasks"->new TasksPanel(tracker, () -> showPage("Tasks"), () -> closed);
-            case "Settings"->settings();
-            default->today();
+            case "Settings"->settingsPage.view();
+            default->todayPage.view();
         }
         ;
         String galleryChoice=WaifuCatalog.forTheme(tracker.state().settings());
         if (galleryChoice!=null && !page.equals("Today")) {
             var illustrated=stack();
-            illustrated.add(new MoonlightGallery(galleryChoice));
+            illustrated.add(new MoonlightGallery(galleryChoice,page));
             gap(illustrated,SPACE_LG);
             illustrated.add(view);
             view=illustrated;
@@ -316,8 +322,20 @@ public final class YoruApp extends JPanel implements Shell {
         scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scroll.getVerticalScrollBar().setUnitIncrement(SPACE_XL);
         content.add(scroll);
+        pageScroll=scroll;
         content.revalidate();
         content.repaint();
+        if(keep!=null)scrollTo(keep);
+    }
+
+    /** Puts the page on screen back where it was, or as far down as it still reaches. */
+    void scrollTo(Point keep) {
+        if(pageScroll==null)return;
+        content.validate();
+        var viewport=pageScroll.getViewport();
+        var shown=viewport.getView();
+        int furthest=Math.max(0,(shown==null?0:shown.getPreferredSize().height)-viewport.getHeight());
+        viewport.setViewPosition(new Point(0,Math.max(0,Math.min(keep.y,furthest))));
     }
     /**
      * The tab strip at its natural width: every tab's longest label plus its two
@@ -380,243 +398,6 @@ public final class YoruApp extends JPanel implements Shell {
         if(phase&&page.equals("Game")||page.equals("Today")||page.equals("Collection")) showPage(page);
     }
 
-    private JPanel today() {
-        var p=stack();
-        long open=tracker.state().tasks().stream().filter(t->!t.done()).count();
-        p.add(pageHeaderFor("Today","LOCAL VAULT · "+plural((int)open,"open task").toUpperCase(Locale.ROOT)));
-
-        // Two columns while there is room for both, stacked when there is not:
-        // the companion card used to be a fixed 315 px in an EAST slot, which
-        // broke the page below about 900 px rather than reflowing.
-        String portrait=WaifuCatalog.forTheme(tracker.state().settings());
-        if (portrait!=null && !WaifuCatalog.imagesFor(portrait).isEmpty()) {
-            p.add(new Hero(focusCard(),new WaifuPanel(portrait)));
-            gap(p,SPACE_LG);
-            p.add(companionColumn());
-        } else {
-            // No companion chosen: Today is the timer and the partner. Choosing
-            // one, and any recommendation of one, lives in Settings (#3).
-            p.add(new Hero(focusCard(),companionColumn()));
-        }
-        gap(p,SPACE_XL);
-
-        var daily=Analytics.daily(tracker.state(),null,zone,Instant.now());
-        LocalDate today=LocalDate.now();
-        long weekSeconds=0;
-        for(int i=0;i<7;i++)weekSeconds+=daily.getOrDefault(today.minusDays(i),0L);
-        var stats=new JPanel(new GridLayout(1,3,SPACE_LG,0));
-        stats.setAlignmentX(0);
-        stats.setOpaque(false);
-        stats.add(stat("TODAY",Analytics.duration(daily.getOrDefault(today,0L))));
-        stats.add(stat("LAST 7 DAYS",Analytics.report(weekSeconds)));
-        stats.add(stat("CURRENT STREAK",plural(Analytics.streak(daily,today),"day")));
-        p.add(stats);
-        gap(p,SPACE_LG);
-        p.add(schedulePreview());
-        gap(p,SPACE_LG);
-        p.add(heatCard(today));
-        gap(p,SPACE_LG);
-        p.add(activitiesCard(today));
-        gap(p,SPACE_XL);
-        return p;
-    }
-
-    /**
-     * The focus session: the picker, the clock and the one control that starts
-     * it.
-     *
-     * With no activities there is nothing to clock into, so the card says so and
-     * offers the only thing that helps. Before this the picker was simply empty
-     * and the clock button silently opened the new-activity dialog instead of
-     * starting a session — a control that did something other than what it said.
-     */
-    private JPanel focusCard() {
-        var focus=card();
-        focus.add(sectionHeader("FOCUS SESSION"));
-        gap(focus,SPACE_LG);
-        var activities=tracker.state().activities();
-        var active=tracker.active();
-        if(activities.isEmpty()) {
-            focus.add(emptyState("No activities yet.","Create one to start a session.",
-                button("+ Activity",this::addActivity)));
-            return focus;
-        }
-        var choose=plainCombo(new JComboBox<Activity>(activities.toArray(Activity[]::new)));
-        // The card's width, not a number of its own: capped at 480 the picker
-        // stopped 74 px short of the clock and the column below it, and two right
-        // edges that nearly agree read as a mistake. The height stays on the
-        // control ladder (PAD_V either side of a 16 px line).
-        choose.setMaximumSize(new Dimension(Integer.MAX_VALUE,SPACE_XXL));
-        choose.setAlignmentX(0);
-        choose.getAccessibleContext().setAccessibleName("Activity to track");
-        if(active!=null)
-            for(int i=0;i<choose.getItemCount();i++)if(choose.getItemAt(i).id().equals(active.activityId()))choose.setSelectedIndex(i);
-        choose.setEnabled(active==null);
-        focus.add(choose);
-        gap(focus,SPACE_LG);
-        timerLabel=label("00:00:00",TYPE_TIMER,TEXT);
-        focus.add(timerLabel);
-        gap(focus,SPACE_SM);
-        statusLabel=bodyLabel("");
-        focus.add(statusLabel);
-        updateTimer();
-        gap(focus,SPACE_LG);
-        // The trainer sits with the clock, since the clock is what drives it.
-        trainerScene=new TrainerScene(tracker.state().settings().trainer()==TrainerId.MAY?"may":"brendan");
-        focus.add(trainerScene);
-        if (!trainerScene.hasTrainerArtwork()) {
-            gap(focus,SPACE_SM);
-            focus.add(bodyLabel("Trainer artwork is missing. Import your existing scene artwork in Settings to restore walking and running."));
-            focus.add(button("Restore scene artwork", () -> showPage("Settings")));
-        }
-        gap(focus,SPACE_LG);
-        var controls=row();
-        controls.add(accentButton(active==null?"▶  Clock in":"■  Clock out",()-> {
-            if(tracker.active()==null) perform(()->tracker.start(((Activity)choose.getSelectedItem()).id()));
-            else clockOut();
-        }));
-        controls.add(button("+ Activity",this::addActivity));
-        controls.add(button("+ Log time",()->timeDialog(false)));
-        if(active!=null)controls.add(button("Edit timer",()->editTime(active,null)));
-        focus.add(controls);
-        return focus;
-    }
-
-    /**
-     * The companion, and the one line about the game that is not its business.
-     *
-     * The encounter countdown used to live inside the partner card under a name
-     * that promised time together. The card is about the time you have studied;
-     * what the game owes you is a caption underneath it.
-     */
-    private JPanel companionColumn() {
-        // A card like the one on the left, so the hero pair reads as two columns
-        // of equal standing — and the encounters caption is a line on the floor
-        // of that card, inside its padding and on the card title's left edge,
-        // rather than a caption floating in the gutter under a shorter card.
-        var column=card();
-        buddyCard=new BuddyCard(tracker,zone,this::toggleClock,this::addActivity,
-            ()->showPage("Collection"),()->showPage("Game"));
-        // Its own height and no more: the slack above the caption belongs to the
-        // floor, so the companion never grows a gap between its blocks.
-        buddyCard.setMaximumSize(new Dimension(Integer.MAX_VALUE,buddyCard.getPreferredSize().height));
-        column.add(buddyCard);
-        glue(column);
-        encounterLabel=subtitle("");
-        column.add(encounterLabel);
-        updateEncounterLine();
-        return column;
-    }
-
-    /** The companion's one action: clock out if timing, otherwise clock in on the last activity used. */
-    private void toggleClock() {
-        if(tracker.active()!=null) { clockOut(); return; }
-        var activities=tracker.state().activities();
-        if(activities.isEmpty()) { addActivity(); return; }
-        var sessions=tracker.state().sessions();
-        UUID last=sessions.isEmpty()?null:sessions.getLast().activityId();
-        UUID id=last!=null&&activities.stream().anyMatch(a->a.id().equals(last))?last:activities.getFirst().id();
-        perform(()->tracker.start(id));
-    }
-
-    /** The 52-week heat map, or the first-run state when there is nothing to draw. */
-    private JPanel heatCard(LocalDate today) {
-        var heat=card();
-        var top=row();
-        top.add(sectionHeader("ACTIVITY · 52 WEEKS"));
-        var filter=plainCombo(new JComboBox<String>());
-        filter.addItem("All activities");
-        tracker.state().activities().forEach(a->filter.addItem(a.name()));
-        if(heatActivity!=null)filter.setSelectedItem(name(heatActivity));
-        filter.getAccessibleContext().setAccessibleName("Heat map activity filter");
-        filter.addActionListener(e-> {
-            int index=filter.getSelectedIndex();heatActivity=index==0?null:tracker.state().activities().get(index-1).id();showPage("Today");
-        }
-        );
-        top.add(filter);
-        heat.add(top);
-        var days=Analytics.daily(tracker.state(),heatActivity,zone,Instant.now());
-        // An empty 52x7 grid reads as a broken chart rather than as a first run.
-        if(days.values().stream().noneMatch(seconds->seconds>0)) {
-            gap(heat,SPACE_LG);
-            heat.add(emptyState("No time recorded yet.","Your first session fills this in.",null));
-            return heat;
-        }
-        heat.add(new Heatmap(days,today,tracker.state().settings().dailyGoalHours()));
-        heat.add(heatLegend(today));
-        return heat;
-    }
-
-    /**
-     * The heat ramp, keyed: the six tiers, the over-goal rainbow, and what the
-     * colours mean.
-     *
-     * Both charts colour by time recorded, so both carry the same key — the
-     * chart without one left a reader guessing what the lightest and the darkest
-     * chip stood for. The chips are outlined because the lightest tier is very
-     * nearly the card it sits on.
-     */
-    private JPanel heatLegend(LocalDate day) {
-        var legend=row();
-        legend.add(label("LESS",TYPE_CAPTION,MUTED));
-        for(Color c:HEAT) legend.add(swatch(c));
-        var rainbow=swatch(Heatmap.overGoal(day));
-        rainbow.setToolTipText("Goal beaten");
-        legend.add(rainbow);
-        legend.add(label("MORE · scaled to your "+tracker.state().settings().dailyGoalHours()
-            +"h goal · rainbow = goal beaten",TYPE_CAPTION,MUTED));
-        return legend;
-    }
-
-    /**
-     * One chip of the heat ramp.
-     *
-     * The hairline is what makes the lightest tier a chip: Sakura's first heat
-     * step is #F3E2E8 on a #FFF8FA card, and with no edge it read as a swatch
-     * that had not been drawn rather than the pale end of the scale.
-     */
-    private static JPanel swatch(Color fill) {
-        var chip=new JPanel();
-        chip.setBackground(fill);
-        chip.setPreferredSize(new Dimension(SPACE_LG,SPACE_LG));
-        chip.setBorder(new LineBorder(LINE,HAIRLINE));
-        return chip;
-    }
-
-    /** Every activity with today's time and the two controls that change it. */
-    private JPanel activitiesCard(LocalDate today) {
-        var categories=card();
-        categories.add(sectionHeader("TRACKED ACTIVITIES"));
-        gap(categories,SPACE_MD);
-        if(tracker.state().activities().isEmpty()) {
-            categories.add(emptyState("No activities yet.","Create one to start a session.",null));
-            return categories;
-        }
-        // One grid for the whole list, shared with the Data page: the controls
-        // sit in their own column rather than after each row's text, so they line
-        // up down the card instead of stepping along with the label lengths.
-        var table=ActivityManager.activityTable();
-        int row=0;
-        for(var a:tracker.state().activities()) {
-            long sec=Analytics.daily(tracker.state(),a.id(),zone,Instant.now()).getOrDefault(today,0L);
-            // Management sits with the picker's own list, by identity: the buttons
-            // carry the activity's id, so renaming one can never move another's time.
-            var rename=button("Rename",()->ActivityManager.rename(this,tracker,a,()->showPage("Today")));
-            rename.setName("activity.rename."+a.id());
-            // "Delete", not "Remove": this is the control that can destroy the
-            // recorded time, and the dialog it opens says so.
-            var remove=button("Delete",()->ActivityManager.remove(this,tracker,a,()->showPage("Today")));
-            remove.setName("activity.remove."+a.id());
-            boolean timing=!ActivityManager.canRemove(tracker,a.id());
-            remove.setEnabled(!timing);
-            remove.setToolTipText(timing?"Clock out before deleting this activity":"Delete this activity");
-            ActivityManager.activityRow(table,row++,label(a.name(),TYPE_PROSE,TEXT),
-                label(Analytics.duration(sec)+(a.targetMinutes()==0?" · open-ended":" · target "+a.targetMinutes()+"m"),TYPE_BODY,MUTED),
-                ActivityManager.targetButton(this,tracker,a,()->showPage("Today")),rename,remove);
-        }
-        categories.add(table);
-        return categories;
-    }
     @Override public void paint(Graphics graphics) {
         var g = (Graphics2D) graphics.create();
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -625,101 +406,7 @@ public final class YoruApp extends JPanel implements Shell {
         g.dispose();
     }
 
-    /**
-     * Two cards side by side, or stacked when the window is too narrow for both.
-     *
-     * The threshold is met by a layout swap rather than a fixed width on one of
-     * the children, so the pair reflows instead of overflowing.
-     */
-    private static final class Hero extends JPanel {
-        private static final int STACK_BELOW=760;
-        private final JComponent left,right;
-        private boolean stacked;
-        Hero(JComponent left,JComponent right) {
-            this.left=left; this.right=right;
-            setOpaque(false);
-            setAlignmentX(0);
-            apply(false);
-            addComponentListener(new ComponentAdapter() {
-                @Override public void componentResized(ComponentEvent e) { apply(getWidth()<STACK_BELOW); }
-            });
-        }
-        private void apply(boolean stack) {
-            if(getComponentCount()>0&&stack==stacked)return;
-            stacked=stack;
-            removeAll();
-            if(stack) {
-                // A vertical box, not a 2x1 grid: a grid forces both rows to the
-                // same height, so the shorter card was padded with empty space
-                // instead of being the size its own content asks for.
-                setLayout(new BoxLayout(this,BoxLayout.Y_AXIS));
-                holdToOwnHeight(left);
-                holdToOwnHeight(right);
-                add(left);
-                add(Box.createVerticalStrut(SPACE_LG));
-                add(right);
-            } else {
-                setLayout(new GridLayout(1,2,SPACE_LG,0));
-                add(left); add(right);
-            }
-            revalidate(); repaint();
-        }
-
-        /** In the vertical box each card takes its own height; the box pads nothing. */
-        private static void holdToOwnHeight(JComponent card) {
-            card.setMaximumSize(new Dimension(Integer.MAX_VALUE,card.getPreferredSize().height));
-        }
-    }
-
-    private JPanel schedulePreview() {
-        var box = card();
-        var top = row();
-        top.add(sectionHeader("TODAY · SCHEDULE"));
-        top.add(button("Expand calendar ↗", () -> showPage("Schedule")));
-        top.add(button("+ Plan block", () -> timeDialog(true)));
-        box.add(top);
-        var day = LocalDate.now();
-        var blocks = tracker.state().blocks().stream().filter(b -> b.start().isBefore(day.plusDays(1).atStartOfDay(zone).toInstant())
-                && b.end().isAfter(day.atStartOfDay(zone).toInstant())).sorted(Comparator.comparing(ScheduleBlock::start)).toList();
-        if (blocks.isEmpty()) {
-            gap(box,SPACE_LG);
-            box.add(emptyState("No blocks planned today.","Drag on the Schedule grid, or plan one here.",null));
-        }
-        for (var b : blocks.stream().limit(3).toList()) {
-            var line = new JPanel(new BorderLayout(SPACE_XL, 0));
-            line.setOpaque(false); line.setBorder(listRow());
-            line.add(label(b.start().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")) + " — "
-                    + b.end().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")), TYPE_BODY, GOLD_TEXT), BorderLayout.WEST);
-            line.add(label(name(b.activityId()), TYPE_BODY, TEXT), BorderLayout.CENTER);
-            line.add(label(String.format("%.0f%% matched",100*Analytics.adherence(tracker.state(),b,Instant.now())), TYPE_CAPTION, MUTED), BorderLayout.EAST);
-            box.add(line);
-        }
-        if (blocks.size()>3) box.add(label("+ " + (blocks.size()-3) + " more in calendar",TYPE_CAPTION,MUTED));
-        return box;
-    }
-
-    private JPanel stat(String title,String value) {
-        var p=card();
-        p.add(label(title,TYPE_CAPTION,MUTED));
-        gap(p,SPACE_MD);
-        p.add(label(value,TYPE_FIGURE,TEXT));
-        return p;
-    }
-    private void updateTimer() {
-        var a=tracker.active();
-        timerLabel.setText(a==null?"00:00:00":Analytics.duration(Duration.between(a.start(),Instant.now()).getSeconds()));
-        updateEncounterLine();
-        statusLabel.setText(a==null?"OPEN-ENDED · ready when you are":"● CLOCKED IN · "+name(a.activityId()));
-    }
-    /** How close the next encounter is, as a caption under the companion it will join. */
-    private void updateEncounterLine() {
-        if(encounterLabel==null)return;
-        var state=tracker.state();
-        long waiting=Encounters.available(state);
-        encounterLabel.setText(waiting>0?plural((int)waiting,"encounter")+" waiting in Collection"
-            :Encounters.towardNext(state)/60+" / 30m to the next encounter");
-    }
-    private void addActivity() {
+    @Override public void addActivity() {
         var nameField=new JTextField(24);
         var target=new JTextField("0",8);
         var form=stack();
@@ -743,19 +430,8 @@ public final class YoruApp extends JPanel implements Shell {
         form.add(templates);
         if(Dialogs.confirm(this,form,"New activity","Create"))perform(()->tracker.addActivity(nameField.getText(),Integer.parseInt(target.getText().strip())));
     }
-    private void clockOut() {
-        var end=new DateTimeField(Instant.now(),zone,"End");var form=stack();
-        form.add(label("Finish now, or select when you actually stopped.",TYPE_LABEL,TEXT));gap(form,SPACE_MD);form.add(end);
-        var now=new JCheckBox("Use the exact current time",true);now.setOpaque(false);now.setForeground(TEXT);form.add(now);
-        if(Dialogs.confirm(this,form,"Clock out","Clock out"))perform(()->{
-            // Said out loud. A session vanishing with no explanation looks like
-            // the app lost it, which is the one thing this must not feel like.
-            if(!tracker.stop(now.isSelected()?Instant.now():end.value()))
-                Dialogs.info(this,"That session was under the minimum, so it was not recorded.\n\n"
-                    +"Change the minimum in Settings if short sessions should count.");
-        });
-    }
-    private void timeDialog(boolean plan) { editTime(null,null,plan); }
+    @Override public void timeDialog(boolean plan) { editTime(null,null,plan); }
+    @Override public void editTime(Session session) { editTime(session,null); }
     private void editTime(Session session,ScheduleBlock block) { editTime(session,block,block!=null); }
     /** One editor for manual sessions, a live timer, and planned blocks. */
     private void editTime(Session session,ScheduleBlock block,boolean plan) {
@@ -1032,8 +708,6 @@ public final class YoruApp extends JPanel implements Shell {
         // are already on screen.
         p.add(ActivityManager.activities(tracker,this,()->showPage("Data")));
         gap(p,SPACE_LG);
-        p.add(vaultCard());
-        gap(p,SPACE_LG);
 
         var days=Analytics.daily(tracker.state(),null,zone,Instant.now());
         var chart=card();
@@ -1075,7 +749,7 @@ public final class YoruApp extends JPanel implements Shell {
             }
             chart.add(bars);
             gap(chart,SPACE_MD);
-            chart.add(heatLegend(LocalDate.now()));
+            chart.add(TodayPage.heatLegend(LocalDate.now(),tracker.state().settings().dailyGoalHours()));
         }
         p.add(chart);
 
@@ -1220,9 +894,9 @@ public final class YoruApp extends JPanel implements Shell {
      * it. A vault is a name — nothing on this page shows a path or asks for
      * one, because Yoru chose the folder and keeps everything in it.
      */
-    private JPanel vaultCard() {
+    @Override public JPanel vaultCard() {
         var c=card();
-        c.add(sectionHeader("VAULTS"));
+        c.add(sectionHeader("VAULT"));
         gap(c,SPACE_MD);
         String name=vaultName!=null?vaultName:vault==null?null:vault.name();
         if(store==null||name==null) {
@@ -1474,7 +1148,7 @@ public final class YoruApp extends JPanel implements Shell {
     }
 
     /** Applies a settings change, rebuilding the window when the palette moved. */
-    private void applySettings(java.util.function.UnaryOperator<Settings> change) {
+    @Override public void applySettings(java.util.function.UnaryOperator<Settings> change) {
         try {
             var previous=tracker.state().settings();
             var next=change.apply(previous);
@@ -1503,6 +1177,9 @@ public final class YoruApp extends JPanel implements Shell {
      */
     private void rebuildTo(String next) {
         var window=SwingUtilities.getWindowAncestor(this);
+        // A theme change rebuilds the whole window and lands back on Settings,
+        // where the palette was picked partway down; the new window keeps that place (#9).
+        Point keep=next.equals(page)&&pageScroll!=null?pageScroll.getViewport().getViewPosition():null;
         ticker.stop();
         gamePage.leave();
         music.close();
@@ -1517,104 +1194,21 @@ public final class YoruApp extends JPanel implements Shell {
             frame.revalidate();
             frame.repaint();
             fresh.showPage(next);
+            if(keep!=null)fresh.scrollTo(keep);
         }
-    }
-
-    private JPanel themeCard(ThemeId id) {
-        var palette=Theme.palette(id);
-        boolean chosen=tracker.state().settings().theme()==id;
-        var box=stack();
-        box.setOpaque(true);
-        box.setBackground(palette.panel());
-        // One border thickness for both states: a 2 px border on the chosen tile
-        // shifted every control inside it by a pixel.
-        box.setBorder(new CompoundBorder(new LineBorder(chosen?CYAN:LINE),new EmptyBorder(SPACE_LG,SPACE_LG,SPACE_LG,SPACE_LG)));
-        var name=label(id.name().charAt(0)+id.name().substring(1).toLowerCase(),TYPE_HEADING,palette.text());
-        box.add(name);
-        gap(box,SPACE_SM);
-        // Two rows reserved rather than measured: a wrapping text area inside a
-        // box layout has no width to wrap against until it is laid out, and the
-        // second line was being clipped away.
-        var blurb=new JTextArea(Theme.describe(id),2,0);
-        blurb.setEditable(false); blurb.setOpaque(false); blurb.setFocusable(false);
-        blurb.setLineWrap(true); blurb.setWrapStyleWord(true);
-        blurb.setFont(captionFont()); blurb.setForeground(palette.muted());
-        blurb.setAlignmentX(0);
-        box.add(blurb);
-        gap(box,SPACE_MD);
-        var swatches=new JPanel(new GridLayout(1,0,SPACE_XS,0));
-        swatches.setOpaque(false);
-        swatches.setAlignmentX(0);
-        swatches.setMaximumSize(new Dimension(Integer.MAX_VALUE,SPACE_MD));
-        // Each chip is outlined, so the lightest tier is still a shape on a light
-        // card: Sakura's first step is #F3E2E8 on a #FFF8FA panel, which read as
-        // a missing swatch rather than the pale end of the ramp.
-        for(Color c:palette.heat()) {
-            var swatch=new JPanel();
-            swatch.setBackground(c);
-            swatch.setPreferredSize(new Dimension(SPACE_MD,SPACE_MD));
-            swatch.setBorder(new LineBorder(LINE,HAIRLINE));
-            swatches.add(swatch);
-        }
-        box.add(swatches);
-        gap(box,SPACE_MD);
-        // The active tile keeps a filled accent "Active" button rather than a
-        // disabled one, so the chosen theme is the most prominent thing here.
-        var pick=chosen
-            ?accentButton("Active",()->{})
-            // A theme is only a theme: choosing Moonlight used to switch on the
-            // Nightfall companion as well, which is a choice Settings asks for (#3).
-            :button("Use this",()->applySettings(s->new Settings(id,s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),s.waifu())));
-        pick.setName("settings.theme."+id.name());
-        if(chosen)pick.setToolTipText("This theme is already in use");
-        box.add(pick);
-        return box;
     }
 
     /** Accepts a folder, a .zip or a single PNG, from the picker or a drop. */
-    private void installArtwork(java.io.File chosen) {
+    @Override public void installArtwork(java.io.File chosen) {
         ArtworkImport.start(this,chosen.toPath(),()->showPage(page),this::error);
     }
 
-    private void importMusic() {
-        var chooser=new JFileChooser();
-        chooser.setDialogTitle("Choose a folder, a .zip, or one audio file");
-        chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
-        if(chooser.showOpenDialog(this)!=JFileChooser.APPROVE_OPTION)return;
-        perform(()->{
-            var report=dev.yoru.assets.MusicLibrary.install(chooser.getSelectedFile().toPath());
-            Dialogs.info(this,report.summary());
-            showPage("Settings");
-        });
-    }
-
-    void importArtwork() {
+    @Override public void importArtwork() {
         var chooser=new JFileChooser();
         chooser.setDialogTitle("Choose your Emerald game, artwork folder or .zip");
         chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
         if(chooser.showDialog(this,"Add artwork")==JFileChooser.APPROVE_OPTION)
             installArtwork(chooser.getSelectedFile());
-    }
-
-    /**
-     * The Settings value behind a WAIFU picker row: Off, a portrait id, or rotate.
-     * Row 0 is Off and the last row is Rotate, so the ids in between line up
-     * with the roster one for one.
-     */
-    private static String waifuValue(int index) {
-        if(index==0)return null;
-        var roster=WaifuCatalog.all();
-        if(index==roster.size()+1)return WaifuCatalog.ROTATE;
-        return roster.get(index-1).id();
-    }
-
-    /** The picker row for a stored value, so the combo shows what is set now. */
-    private static int waifuIndex(String choice) {
-        if(choice==null)return 0;
-        if(WaifuCatalog.ROTATE.equals(choice))return WaifuCatalog.all().size()+1;
-        var roster=WaifuCatalog.all();
-        for(int i=0;i<roster.size();i++)if(roster.get(i).id().equals(choice))return i+1;
-        return 0;   // a value no longer in the roster reads as Off, not an error
     }
 
     /** Dropping onto any part of the window imports, so the path is hard to miss. */
@@ -1636,245 +1230,7 @@ public final class YoruApp extends JPanel implements Shell {
         });
     }
 
-    /** Kept for the window's life, so a check or a download survives the page rebuilding around it. */
-    private UpdatesCard updates;
-
-    private JPanel settings() {
-        var settings=tracker.state().settings();
-        var p=stack();
-        p.add(pageHeaderFor("Settings","APPEARANCE · TRACKING · DATA"));
-        if(updates==null)updates=new UpdatesCard(dev.yoru.update.Version.running(),dev.yoru.update.Updates.current(),
-            ()->new dev.yoru.update.ReleaseFeed().latest(),new UpdatesCard.Host() {
-                public boolean gameRunning() { return game.running(); }
-                public void quitThen(Runnable afterVaultClosed) { closeForUpdate(afterVaultClosed); }
-                public java.awt.Component owner() { return YoruApp.this; }
-            });
-        p.add(updates);
-        gap(p,SPACE_XL);
-
-        var appearance=card();
-        appearance.add(sectionHeader("APPEARANCE"));
-        gap(appearance,SPACE_SM);
-        appearance.add(bodyLabel("Themes are stored in your vault, so they travel with the workspace."));
-        gap(appearance,SPACE_LG);
-        var themes=new JPanel(new GridLayout(0,2,SPACE_MD,SPACE_MD));
-        themes.setOpaque(false);
-        themes.setAlignmentX(0);
-        for(var id:ThemeId.values()) themes.add(themeCard(id));
-        appearance.add(themes);
-        gap(appearance,SPACE_LG);
-        var trainerRow=row();
-        trainerRow.add(label("TRAINER SPRITE",TYPE_CAPTION,MUTED));
-        for(var t:TrainerId.values()) {
-            String name=t.name().charAt(0)+t.name().substring(1).toLowerCase();
-            var pick=button(name,()->applySettings(s->new Settings(s.theme(),t,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),s.waifu())));
-            trainerRow.add(selected(pick,settings.trainer()==t));
-        }
-        appearance.add(trainerRow);
-        var motion=new JCheckBox("Reduce animation for this session",reducedMotion);
-        motion.setOpaque(false);
-        motion.setForeground(TEXT);
-        motion.addActionListener(e->reducedMotion=motion.isSelected());
-        appearance.add(motion);
-        p.add(appearance);
-        gap(p,SPACE_XL);
-
-        var tracking=card();
-        tracking.add(sectionHeader("TRACKING"));
-        gap(tracking,SPACE_LG);
-        var goal=new JSpinner(new SpinnerNumberModel(settings.dailyGoalHours(),1,16,1));
-        // A preferred size as well as a maximum: a BasicSpinnerUI sizes its
-        // editor from the field's own columns, which leaves the value clipped.
-        goal.setPreferredSize(new Dimension(90,SPACE_XXL));
-        goal.setMaximumSize(new Dimension(90,SPACE_XXL));
-        goal.setAlignmentX(0);
-        Theme.plainSpinner(goal);
-        var goalCaption=label("DAILY GOAL (HOURS)",TYPE_CAPTION,MUTED);
-        goalCaption.setLabelFor(goal);
-        goal.getAccessibleContext().setAccessibleName("Daily goal in hours");
-        tracking.add(goalCaption);
-        tracking.add(goal);
-        gap(tracking,SPACE_SM);
-        tracking.add(bodyLabel("Heat map colours scale to this. Beating it shows the rainbow tier."));
-        gap(tracking,SPACE_LG);
-        var floor=new JSpinner(new SpinnerNumberModel(settings.minSessionSeconds()/60,0,60,1));
-        // A preferred size as well as a maximum: a BasicSpinnerUI sizes its
-        // editor from the field's own columns, which leaves the value clipped.
-        floor.setPreferredSize(new Dimension(90,SPACE_XXL));
-        floor.setMaximumSize(new Dimension(90,SPACE_XXL));
-        floor.setAlignmentX(0);
-        Theme.plainSpinner(floor);
-        var floorCaption=label("MINIMUM SESSION (MINUTES)",TYPE_CAPTION,MUTED);
-        floorCaption.setLabelFor(floor);
-        floor.getAccessibleContext().setAccessibleName("Minimum session in minutes");
-        tracking.add(floorCaption);
-        tracking.add(floor);
-        gap(tracking,SPACE_SM);
-        tracking.add(bodyLabel("Clocking out under this records nothing at all."));
-        gap(tracking,SPACE_LG);
-        var weekStart=plainCombo(new JComboBox<>(DayOfWeek.values()));
-        weekStart.setName("settings.weekStart");
-        weekStart.setSelectedItem(settings.weekStartsOn());
-        weekStart.setMaximumSize(new Dimension(160,SPACE_XXL));
-        weekStart.setAlignmentX(0);
-        weekStart.setRenderer(new DefaultListCellRenderer(){
-            @Override public Component getListCellRendererComponent(JList<?> list,Object value,int index,boolean sel,boolean focus){
-                var c=(JLabel)super.getListCellRendererComponent(list,value,index,sel,focus);
-                if(value instanceof DayOfWeek d)c.setText(d.getDisplayName(java.time.format.TextStyle.FULL,Locale.ENGLISH));
-                c.setFont(bodyFont());c.setBackground(sel?LINE:PANEL);c.setForeground(TEXT);
-                return c;
-            }
-        });
-        var weekCaption=label("WEEK STARTS ON",TYPE_CAPTION,MUTED);
-        weekCaption.setLabelFor(weekStart);
-        weekStart.getAccessibleContext().setAccessibleName("Week starts on");
-        tracking.add(weekCaption);
-        tracking.add(weekStart);
-        gap(tracking,SPACE_SM);
-        tracking.add(bodyLabel("Used by the week calendar and the task calendar."));
-        gap(tracking,SPACE_LG);
-        tracking.add(button("Save tracking settings",()->applySettings(s->new Settings(s.theme(),s.trainer(),
-            (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem(),s.waifu()))));
-        p.add(tracking);
-        gap(p,SPACE_XL);
-
-        var audio=card();
-        audio.add(sectionHeader("STUDY MUSIC"));
-        gap(audio,SPACE_SM);
-        audio.add(bodyLabel("Your own files, played while the timer runs. Yoru ships no audio."));
-        gap(audio,SPACE_MD);
-        var library=dev.yoru.assets.MusicLibrary.survey();
-        audio.add(label(library.summary(),TYPE_BODY,library.empty()?MUTED:TEXT));
-        gap(audio,SPACE_SM);
-        // Said before anyone picks a folder, not after they find nothing imported.
-        audio.add(bodyLabel("Format: "+dev.yoru.assets.MusicLibrary.supportedFormats()
-            +". MP3 needs a decoder Yoru does not ship."));
-        gap(audio,SPACE_MD);
-        var playing=new JCheckBox("Play music while the timer runs",MusicPlayer.enabled());
-        // No font override: every check box takes the one the foundation sets.
-        playing.setOpaque(false);playing.setForeground(TEXT);
-        playing.setAlignmentX(0);playing.setName("music.enabled");
-        playing.addActionListener(e->MusicPlayer.enabled(playing.isSelected()));
-        audio.add(playing);
-        gap(audio,SPACE_MD);
-        var volume=label("VOLUME · "+MusicPlayer.volume()+"%",TYPE_CAPTION,MUTED);
-        audio.add(volume);
-        var level=new JSlider(0,100,MusicPlayer.volume());
-        level.setOpaque(false);level.setAlignmentX(0);
-        // The border's padding is part of the height, so the slider keeps the
-        // shared control height rather than growing by it.
-        level.setMaximumSize(new Dimension(240,SPACE_XXL));
-        level.setName("music.volume");
-        // A slider with no ticks, no readout, no name and no focus ring is a
-        // control the keyboard cannot describe or find; all four arrive together.
-        Theme.plainSlider(level);
-        level.setPaintTicks(true);
-        level.setMajorTickSpacing(25);
-        level.setMinorTickSpacing(5);
-        level.getAccessibleContext().setAccessibleName("Volume");
-        level.addChangeListener(e->{
-            MusicPlayer.volume(level.getValue());
-            volume.setText("VOLUME · "+level.getValue()+"%");
-        });
-        audio.add(level);
-        gap(audio,SPACE_MD);
-        var audioActions=row();
-        audioActions.add(button("Add music…",this::importMusic));
-        audioActions.add(button("Delete all music",()->{
-            var warning=stack();
-            warning.add(label("Delete every track from Yoru's music library?",TYPE_HEADING,TEXT));gap(warning,SPACE_MD);
-            warning.add(label("Your original files are untouched; only Yoru's copies are deleted.",TYPE_BODY,MUTED));
-            if(!Dialogs.confirmDestructive(this,warning,"Delete music","Delete"))return;
-            perform(()->{int gone=dev.yoru.assets.MusicLibrary.clear();
-                Dialogs.info(this,plural(gone,"track")+" deleted.");showPage("Settings");});
-        }));
-        audio.add(audioActions);
-        p.add(audio);
-        gap(p,SPACE_XL);
-
-        var artwork=card();
-        artwork.add(sectionHeader("ARTWORK"));
-        gap(artwork,SPACE_SM);
-        artwork.add(bodyLabel("Add your Emerald game to extract all 386 normal and shiny sprites, or import your own PNG artwork."));
-        gap(artwork,SPACE_MD);
-        var survey=SpriteAssets.survey();
-        var currentGame=GameFiles.rom();
-        artwork.add(ArtworkStatus.rows(survey,currentGame!=null,this::importArtwork,
-            ()->{if(GameFiles.rom()!=null)installArtwork(GameFiles.rom().toFile());}));
-        gap(artwork,SPACE_MD);
-        artwork.add(bodyLabel("Drop your .gba, folder or .zip anywhere on this window, or:"));
-        gap(artwork,SPACE_SM);
-        var artworkActions=row();
-        artworkActions.add(button("Add artwork…",this::importArtwork));
-        if(currentGame!=null)artworkActions.add(button("Extract from current game",()->installArtwork(currentGame.toFile())));
-        artworkActions.add(button("Open library folder",()->{
-            try {
-                java.nio.file.Files.createDirectories(dev.yoru.assets.ArtworkLibrary.root());
-                if(Desktop.isDesktopSupported()) Desktop.getDesktop().open(dev.yoru.assets.ArtworkLibrary.root().toFile());
-            } catch(Exception e) { error(e); }
-        }));
-        artwork.add(artworkActions);
-        gap(artwork,SPACE_MD);
-        // The file-naming rules are a caption, not two lines of prose; the "?"
-        // carries the detail for anyone who needs it.
-        var naming=label("PNG files named 1–386, shiny and overworld sheets optional.",TYPE_CAPTION,MUTED);
-        naming.setToolTipText("Names may be zero-padded and nested in folders; anything else is skipped.");
-        artwork.add(naming);
-        p.add(artwork);
-        gap(p,SPACE_XL);
-
-        var waifu=card();
-        waifu.add(sectionHeader("WAIFU"));
-        gap(waifu,SPACE_SM);
-        waifu.add(bodyLabel("Companion artwork belongs to Moonlight. It appears beside your timer and across its pages; your Pokémon and study tools remain available. Other themes keep this choice saved but hide the artwork."));
-        gap(waifu,SPACE_MD);
-        // One picker for every choice, so there is nothing to remember: the
-        // combo shows what is set now and writes what is picked next.
-        var waifuPick=plainCombo(new JComboBox<String>());
-        waifuPick.addItem("Theme default · Nightfall");
-        for(var w:WaifuCatalog.all())waifuPick.addItem(w.name());
-        waifuPick.addItem("Rotate");
-        waifuPick.setSelectedIndex(waifuIndex(settings.waifu()));
-        waifuPick.setMaximumSize(new Dimension(Integer.MAX_VALUE,SPACE_XXL));
-        waifuPick.setAlignmentX(0);
-        waifuPick.getAccessibleContext().setAccessibleName("Waifu portrait");
-        waifuPick.addActionListener(e->{
-            String choice=waifuValue(waifuPick.getSelectedIndex());
-            // Deferred so the picker finishes its own event before the page it
-            // sits on is rebuilt around the change.
-            SwingUtilities.invokeLater(()->applySettings(s->new Settings(s.theme(),s.trainer(),
-                s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),choice)));
-        });
-        waifu.add(waifuPick);
-        gap(waifu,SPACE_MD);
-        // Said once so the art's provenance is never in question.
-        waifu.add(label("The portraits ship with Yoru, so the choice travels with your vault.",
-            TYPE_CAPTION,MUTED));
-        p.add(waifu);
-        gap(p,SPACE_XL);
-
-        // Integrations are not shipping in 1.0, so the card keeps its promise and
-        // loses its entry point until they do.
-        var integrations=card();
-        integrations.add(sectionHeader("INTEGRATIONS"));
-        gap(integrations,SPACE_MD);
-        integrations.add(bodyLabel("Anki, LeetCode and Apple Health are planned, not connected."));
-        p.add(integrations);
-        gap(p,SPACE_XL);
-
-        var reset=card();
-        reset.add(sectionHeader("RESET DATA",GOLD));
-        gap(reset,SPACE_MD);
-        reset.add(label("Reset everything or choose individual sections.",TYPE_LABEL,TEXT));
-        gap(reset,SPACE_SM);
-        reset.add(bodyLabel("An encrypted backup is saved beside your vault before the reset."));
-        gap(reset,SPACE_LG);
-        reset.add(button("Choose data to reset…",this::resetDialog));
-        p.add(reset);
-        return p;
-    }
-
-    private void resetDialog() {
+    @Override public void chooseReset() {
         var form=stack();var all=new JCheckBox("All data");all.setOpaque(false);all.setForeground(GOLD_TEXT);form.add(all);
         var choices=new LinkedHashMap<Tracker.ResetPart,JCheckBox>();
         for(var part:Tracker.ResetPart.values()) {var check=new JCheckBox(part.label);check.setOpaque(false);check.setForeground(TEXT);choices.put(part,check);form.add(check);}
@@ -1885,7 +1241,7 @@ public final class YoruApp extends JPanel implements Shell {
         if(parts.contains(Tracker.ResetPart.GAME)&&game.running()){Dialogs.info(this,"Close the game before resetting its save.");return;}
         String selected=choices.entrySet().stream().filter(e->parts.contains(e.getKey())).map(e->"• "+e.getValue().getText()).collect(java.util.stream.Collectors.joining("\n"));
         if(!Dialogs.confirmDestructive(this,"Reset these sections?\n\n"+selected+"\n\nA backup will be saved first. This also removes an active timer if sessions are selected.","Confirm reset","Reset"))return;
-        perform(()->{tracker.reset(parts);heatActivity=null;});
+        perform(()->{tracker.reset(parts);todayPage.forgetActivityFilter();});
     }
     /**
      * First run with no artwork: say so once, and offer to fix it (#16).
