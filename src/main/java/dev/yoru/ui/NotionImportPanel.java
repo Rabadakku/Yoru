@@ -35,7 +35,6 @@ final class NotionImportPanel extends JPanel {
 
     private static final String NONE = "(not imported)";
     private static final String[] HEADINGS = {"Add","Title","Due","Status","Tag","Page text"};
-    private static final int NOTES_COLUMN = 5;
 
     private final Tracker tracker;
     private final JTextField source = new JTextField(36);

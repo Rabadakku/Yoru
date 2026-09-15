@@ -10,7 +10,6 @@ import dev.yoru.game.StudyEncounter;
 import dev.yoru.game.StudyGift;
 import java.io.IOException;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /**
