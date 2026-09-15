@@ -1,6 +1,36 @@
 # Development handoff
 
-## Release candidate 1.0.9 — September 14, 2026
+## Release candidate 1.0.10 — September 14, 2026
+
+Branch `claude/close-out`, from v1.0.9. The full isolated suite passes; each
+issue's comment lists commits and limits.
+
+- #7: `EncryptedVault.expired` keeps the ten newest reset backups, each recent
+  day's first, and any dated in the future; small deletions now back up first.
+  `GameLifecycleTest` covers Close during a start and saves behind a slow disk.
+  `NativeLifecycleCheck` is the opt-in check against a real core.
+- #6: `ArtworkLibrary.lastFailure` feeds a Failed state in Settings; route
+  visitor sheets are extras, not scenery. Decoder tests cover vertical flips
+  and a decoy table; one budget holds across nested archives.
+- #8: `CollectionPage` leads with `PartyStrip`; `Arrangement` carries a move
+  between the party and `StorageScreen`; `CollectionLayoutTest` covers layout,
+  missing data and rebuilds.
+- #9: bold 28 px titles, `Theme.CardPanel` rounded cards, no breadcrumb, the
+  agenda before statistics, the partner card without a second clock, Settings
+  in four sections; `VisualSystemTest`.
+- #23: the Waifu theme (from `codex/audit-recovery` 7b26473), five portraits at
+  768 × 1152 within the 8 MB budget, a thumbnail picker and page-varied galleries.
+  A vault saved with the Waifu theme cannot be opened by 1.0.9 or earlier.
+- #12: `TodayPage` and `SettingsPage` through `Shell`; `EncounterTables` per game
+  controller; `ArtworkStaging` and `ArtworkGenerations` behind `ArtworkLibrary`;
+  unused code removed. Page renders were compared before and after each move.
+- #10: the #4 regression test fails on the build before its fix; README lists
+  the checks run by hand.
+
+Not verified: a 200% text-scaling review (#9), a clean-machine install, and a
+full campaign against a real core.
+
+## Released 1.0.9 — September 14, 2026
 
 Branch `claude/open-issues`, from v1.0.8. Notes: `RELEASE-1.0.9.md`. The full
 isolated suite passes; each issue's handoff comment lists commits and limits.
