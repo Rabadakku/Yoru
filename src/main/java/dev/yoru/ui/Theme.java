@@ -5,7 +5,6 @@ import javax.swing.border.*;
 import javax.swing.plaf.BorderUIResource;
 import javax.swing.text.JTextComponent;
 import java.awt.*;
-import java.awt.image.BufferedImage;
 
 /**
  * Palette, type, spacing and the shared controls.
