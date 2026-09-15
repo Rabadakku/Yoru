@@ -55,10 +55,9 @@ final class BuddyCard extends JPanel {
     private final Mood mood;
     private boolean active;
 
-    BuddyCard(Tracker tracker,ZoneId zone,Runnable clockToggle,Runnable addActivity,
-              Runnable openCollection,Runnable openGame) {
+    BuddyCard(Tracker tracker,ZoneId zone,Runnable openCollection,Runnable openGame) {
         // Contents only: the card this sits in is the surface (see
-        // YoruApp.companionColumn). Drawing a second fill and hairline here put a
+        // TodayPage.companionColumn). Drawing a second fill and hairline here put a
         // frame inside the frame and pushed this content 24 px off the card
         // title's left edge, where the caption under it lives.
         setLayout(new BoxLayout(this,BoxLayout.Y_AXIS));
@@ -89,29 +88,27 @@ final class BuddyCard extends JPanel {
         mood=moodOf(recording,sessions,state.activities().size(),todaySeconds,streak);
 
         // Block one: who this is. The old partner card never said.
-        add(who(companion,lead!=null,name));
+        add(who(companion,lead!=null,name,lead==null?null:GameView.detail(lead),lead==null?null:saved(state,now,zone)));
+        add(Box.createVerticalStrut(Theme.SPACE_SM));
         add(rule());
+        add(Box.createVerticalStrut(Theme.SPACE_SM));
         // Block two: what you have done together.
         add(fact("Together",together==0?"Nothing yet":Analytics.report(together)));
         add(fact("Streak",Theme.plural(streak,"day")));
         add(fact("Today",todaySeconds==0?"Nothing yet":Analytics.report(todaySeconds)));
         add(fact("Sessions",Integer.toString(sessions)));
+        add(Box.createVerticalStrut(Theme.SPACE_SM));
         add(rule());
+        add(Box.createVerticalStrut(Theme.SPACE_SM));
         // Block three: one sentence, and the things to do about it.
         stateLine=Theme.bodyLabel(stateText(mood,sessions,streak));
         stateLine.setName("buddy.state");
         add(stateLine);
         add(Box.createVerticalStrut(Theme.SPACE_MD));
+        // The clock lives on the focus card beside this one (#9): a second
+        // Clock in here competed with it, two primaries for one action. The
+        // partner keeps the way back to the game and the party it comes from.
         var actions=Theme.row();
-        if(mood==Mood.FIRST_RUN) {
-            actions.add(Theme.button("+ Activity",addActivity));
-        } else if(recording) {
-            actions.add(Theme.accentButton("■  Clock out",clockToggle));
-        } else {
-            actions.add(Theme.accentButton("Clock in",clockToggle));
-        }
-        // The way back to the game and to the party it draws the buddy from.
-        // A plain button, so the clock stays the one primary action.
         var navigate=Theme.button(lead==null?"Open the game":"Open collection",
             lead==null?openGame:openCollection);
         navigate.getAccessibleContext().setAccessibleName(lead==null
@@ -143,7 +140,7 @@ final class BuddyCard extends JPanel {
     }
 
     /** The companion and its two-line title, side by side. */
-    private static JPanel who(JComponent companion,boolean hasLead,String name) {
+    private static JPanel who(JComponent companion,boolean hasLead,String name,String species,String saved) {
         // The labels sit beside the portrait rather than under it, so the card
         // reads as a picture with a caption and not as a header with a logo.
         var text=Theme.stack();
@@ -152,6 +149,19 @@ final class BuddyCard extends JPanel {
             Theme.TYPE_HEADING,Theme.TEXT);
         heading.setName("buddy.who");
         text.add(heading);
+        // The species and whether the vault holds the save: what the partner is
+        // supportive with (#9), under its name rather than in another card.
+        if(species!=null) {
+            Theme.gap(text,Theme.SPACE_XS);
+            var detail=Theme.label(species,Theme.TYPE_CAPTION,Theme.MUTED);
+            detail.setName("buddy.species");
+            text.add(detail);
+        }
+        if(saved!=null) {
+            var line=Theme.label(saved,Theme.TYPE_CAPTION,Theme.MUTED);
+            line.setName("buddy.saved");
+            text.add(line);
+        }
         if(!hasLead) {
             Theme.gap(text,Theme.SPACE_XS);
             var detail=Theme.bodyLabel("Choose your starter in the game.");
@@ -210,6 +220,12 @@ final class BuddyCard extends JPanel {
         return line;
     }
 
+    /** When the vault last kept the game's save, or null when it holds none. */
+    private static String saved(State state,Instant now,ZoneId zone) {
+        var at=GameView.read(state).savedAt();
+        return at==null?null:"Saved in your vault · "+Ago.describe(at,now,zone);
+    }
+
     /** Lets a block fill the card's width inside a vertical box layout. */
     private static void stretch(JComponent c) {
         c.setMaximumSize(new Dimension(Integer.MAX_VALUE,c.getPreferredSize().height));
@@ -238,7 +254,7 @@ final class BuddyCard extends JPanel {
      * draws it.
      *
      * The user's own artwork when there is any for the species, preserving its
-     * aspect ratio; its National Dex number when there is not; and a question
+     * aspect ratio; a plain shape when there is not; and a question
      * mark when the vault holds no save yet. The breathing, the hop and the
      * sway are the field box's own motion, and the shiny sparkles are the
      * field box's own ticks — the frame advances only while the timer runs, so
@@ -260,7 +276,7 @@ final class BuddyCard extends JPanel {
             setOpaque(false);
             // The portrait's own size — the field box's, and a contract
             // BuddyCardTest pins — never the height of the card around it. The
-            // card takes the height its column gives it (YoruApp.companionColumn
+            // card takes the height its column gives it (TodayPage.companionColumn
             // caps it), so this number no longer sets the hero row's height.
             setPreferredSize(new Dimension(260,168));
             setMinimumSize(new Dimension(150,140));
@@ -272,7 +288,7 @@ final class BuddyCard extends JPanel {
                 :(this.shiny?"Shiny ":"")+this.name+", your companion");
             getAccessibleContext().setAccessibleDescription(this.national==0
                 ?"Choose your starter in the game."
-                :sprite==null?"Artwork unavailable; showing National Dex number."
+                :sprite==null?"Artwork missing; showing a plain shape."
                 :"The lead of your party.");
         }
 
@@ -325,13 +341,19 @@ final class BuddyCard extends JPanel {
                     int sw=Math.max(1,(int)Math.round(sprite.getWidth()*scale));
                     int sh=Math.max(1,(int)Math.round(sprite.getHeight()*scale));
                     g.drawImage(sprite,cx-sw/2+sway,base-sh+bob+hop,sw,sh,null);
-                } else {
+                } else if(national==0) {
                     g.setColor(Theme.TEXT);
-                    // The Dex number stands in for the picture, so it is the
-                    // card's headline figure and takes the figure role.
                     g.setFont(Theme.mono(Theme.TYPE_FIGURE));
-                    String text=national==0?"?":"#"+national;
-                    g.drawString(text,cx-g.getFontMetrics().stringWidth(text)/2+sway,base-14+bob+hop);
+                    g.drawString("?",cx-g.getFontMetrics().stringWidth("?")/2+sway,base-14+bob+hop);
+                } else {
+                    // A plain shape where the picture would be, never the Dex
+                    // number: "#252" read as the partner's name (#9), and the
+                    // name is already written beside the portrait.
+                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+                    g.setColor(Theme.MUTED);
+                    int top=base-size+bob+hop;
+                    g.fillOval(cx-size/6+sway,top+size/8,size/3,size/3);
+                    g.fillRoundRect(cx-size/4+sway,top+size/2,size/2,size/2-8,size/4,size/4);
                 }
 
                 if(shiny) {

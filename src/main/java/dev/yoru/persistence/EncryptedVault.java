@@ -11,6 +11,8 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.security.*;
 import java.util.*;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
     private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=12, MAX=100_000;
     private final Path path;
@@ -409,11 +411,78 @@ public final class EncryptedVault implements Repository {
     private static Instant instant(DataInputStream in)throws IOException {
         return Instant.ofEpochSecond(in.readLong(),in.readInt());
     }
+    /** The newest backups, kept however old: enough to undo a run of recent edits. */
+    static final int RECENT_BACKUPS = 10;
+    /** Days back that keep their first backup, so a whole day's edits can be undone. */
+    static final int DAILY_BACKUPS = 30;
+
+    /**
+     * Copies the vault aside before a change that deletes or replaces something.
+     *
+     * Every copy used to be kept, so a backup before each small deletion would
+     * have grown the folder without bound (#7). Each new backup now prunes the
+     * older ones by {@link #expired}. A prune that fails is left for the next
+     * backup: the copy that was asked for has already been written.
+     */
     public void backup() throws IOException {
         Path backup=Path.of(path+".reset-"+System.currentTimeMillis()+"-"+UUID.randomUUID()+".bak");
         Files.copy(path,backup);
         try { Files.setPosixFilePermissions(backup,PosixFilePermissions.fromString("rw-------")); }
         catch(UnsupportedOperationException ignored) { }
+        for (Path old : expired(resetBackups(path), Instant.now(), ZoneId.systemDefault())) {
+            try { Files.deleteIfExists(old); }
+            catch (IOException ignored) { }
+        }
+    }
+
+    /**
+     * This vault's reset backups, by the moment each was taken, read from its
+     * name rather than the file's clock. Migration backups and anything whose
+     * name does not parse are not listed, so they are never pruned.
+     */
+    static Map<Path, Instant> resetBackups(Path vault) throws IOException {
+        String prefix = vault.getFileName() + ".reset-";
+        var found = new HashMap<Path, Instant>();
+        try (var files = Files.list(vault.toAbsolutePath().getParent())) {
+            for (Path file : (Iterable<Path>) files::iterator) {
+                String name = file.getFileName().toString();
+                if (!name.startsWith(prefix) || !name.endsWith(".bak") || !Files.isRegularFile(file)) continue;
+                String rest = name.substring(prefix.length());
+                int dash = rest.indexOf('-');
+                if (dash <= 0) continue;
+                try { found.put(file, Instant.ofEpochMilli(Long.parseLong(rest.substring(0, dash)))); }
+                catch (NumberFormatException ignored) { }
+            }
+        }
+        return found;
+    }
+
+    /**
+     * The backups a retention pass removes: all but the {@link #RECENT_BACKUPS}
+     * newest, the first backup of each of the last {@link #DAILY_BACKUPS} days,
+     * and any dated after {@code now}, since a clock that moved backwards is no
+     * reason to lose one.
+     *
+     * The first of a day rather than the last, because it holds the vault as
+     * the day began: an import followed by a run of deletions can still be
+     * undone to before the import once the deletions have pushed it out of the
+     * newest ten.
+     */
+    static List<Path> expired(Map<Path, Instant> taken, Instant now, ZoneId zone) {
+        var newestFirst = new ArrayList<>(taken.keySet());
+        newestFirst.sort(Comparator.comparing((Path p) -> taken.get(p)).reversed().thenComparing(Path::toString));
+        var keep = new HashSet<Path>(newestFirst.subList(0, Math.min(RECENT_BACKUPS, newestFirst.size())));
+        LocalDate firstDay = now.atZone(zone).toLocalDate().minusDays(DAILY_BACKUPS - 1);
+        var firstOfDay = new HashMap<LocalDate, Path>();
+        for (Path p : newestFirst) {
+            Instant when = taken.get(p);
+            if (when.isAfter(now)) { keep.add(p); continue; }
+            LocalDate day = when.atZone(zone).toLocalDate();
+            // Newest first, so the last one put for a day is its earliest.
+            if (!day.isBefore(firstDay)) firstOfDay.put(day, p);
+        }
+        keep.addAll(firstOfDay.values());
+        return newestFirst.stream().filter(p -> !keep.contains(p)).toList();
     }
     /**
      * Re-encrypts this vault under a new unlock secret, keeping everything in it.

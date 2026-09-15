@@ -16,6 +16,7 @@ javac --release 22 -encoding UTF-8 -cp build/classes -d build/classes @build/tes
 java -ea -cp build/classes dev.yoru.ui.IsolationTest
 java -ea -cp build/classes dev.yoru.CoreTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.UiTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.VisualSystemTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ExpansionTest
 
 java -ea -cp build/classes dev.yoru.HabitsTest
@@ -31,6 +32,7 @@ java -ea -cp build/classes dev.yoru.PrivacyTest
 java -ea -cp build/classes dev.yoru.LegacyVaultTest
 java -ea -cp build/classes dev.yoru.persistence.VaultStoreTest
 java -ea -cp build/classes dev.yoru.persistence.PasswordTest
+java -ea -cp build/classes dev.yoru.persistence.BackupRetentionTest
 java -ea -cp build/classes dev.yoru.update.UpdateTest
 java -ea -cp build/classes dev.yoru.update.MacInstallTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.DialogFocusTest
@@ -56,6 +58,8 @@ java -ea -cp build/classes dev.yoru.game.StatsTest
 java -ea -cp build/classes dev.yoru.game.EncounterTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.GameInputTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.GameSaveFailureTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.GameLifecycleTest
+java -ea -cp build/classes dev.yoru.ui.EncounterTablesTest
 java -ea -cp build/classes dev.yoru.game.GameDeliveryTest
 java -ea -cp build/classes dev.yoru.game.LegacyGiftsTest
 java -ea -cp build/classes dev.yoru.game.StorageEditTest
@@ -72,6 +76,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ScheduleUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskCalendarTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.FocusMixTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.StorageTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.CollectionLayoutTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SaveStatusUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.UpdatesUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.LegacyGiftUiTest

@@ -290,10 +290,13 @@ public final class Tracker {
     public void deleteSession(UUID id) throws IOException {
         if(state.sessions().stream().noneMatch(s->s.id().equals(id)))throw new IllegalArgumentException("Session no longer exists.");
         if(active()!=null&&active().id().equals(id))throw new IllegalArgumentException("Clock out before deleting.");
+        // Small deletions are backed up like large ones now that backups are pruned (#7).
+        repository.backup();
         commit(state.withCore(state.activities(),state.sessions().stream().filter(s->!s.id().equals(id)).toList(),state.blocks()));
     }
     public void deleteBlock(UUID id) throws IOException {
         if(state.blocks().stream().noneMatch(b->b.id().equals(id)))throw new IllegalArgumentException("Block no longer exists.");
+        repository.backup();
         commit(state.withCore(state.activities(),state.sessions(),state.blocks().stream().filter(b->!b.id().equals(id)).toList()));
     }
 
@@ -672,6 +675,7 @@ public final class Tracker {
         var tasks=state.tasks().stream().map(t->id.equals(t.tagId())
             ? new Task(t.id(),t.activityId(),null,t.title(),t.notes(),t.due(),t.status(),t.source(),t.createdAt(),t.order(),t.plannedFor())
             : t).toList();
+        repository.backup();
         // Untag first: removing a tag a task still points at would not validate.
         commit(state.withTasks(tasks)
             .withTags(state.tags().stream().filter(t->!t.id().equals(id)).toList()));
@@ -683,6 +687,7 @@ public final class Tracker {
 
     public void deleteTask(UUID id) throws IOException {
         var task=task(id);
+        repository.backup();
         commit(state.withTasks(state.tasks().stream().filter(t->!t.id().equals(task.id())).toList()));
     }
 

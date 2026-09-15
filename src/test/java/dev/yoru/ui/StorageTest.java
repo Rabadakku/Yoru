@@ -72,8 +72,6 @@ public final class StorageTest {
             .get(javax.swing.KeyStroke.getKeyStroke(key)) != null;
     }
 
-    private static int partyX() { return StorageScreen.PAD + StorageScreen.boxWidth() + StorageScreen.PARTY_GAP + 4; }
-
     /** A click lands on the square under it, and outside the grid on nothing. */
     private static void hitTestingFindsTheSquare() {
         var screen = new StorageScreen(save(), 2, mon -> { }, box -> { });
@@ -85,13 +83,11 @@ public final class StorageTest {
         check(screen.slotAt(gx + StorageScreen.COLUMNS * cell - 1, gy + StorageScreen.ROWS * cell - 1) == Gen3Save.PER_BOX - 1,
             "the bottom-right square is the box's last slot");
         check(screen.slotAt(gx - 1, gy + 4) < 0 && screen.slotAt(gx + 4, gy - 1) < 0, "outside the grid is no square");
-        check(screen.slotAt(gx + StorageScreen.COLUMNS * cell + 1, gy + 4) < 0, "and so is the gap before the party");
-        // The grid starts below the wallpaper's decorative band, as in the game.
-        check(screen.slotAt(gx + 4, StorageScreen.HEADER + StorageScreen.PAD + 4) < 0,
-            "the band across the top of the wallpaper is not a square");
-        check(screen.partyAt(partyX(), StorageScreen.partyY() + 4) == 0, "the party column's first cell is party slot 0");
-        check(StorageScreen.partyY() + Gen3Save.PARTY_LIMIT * StorageScreen.CELL <= screen.getPreferredSize().height,
-            "the party column fits inside the screen");
+        check(screen.slotAt(gx + StorageScreen.COLUMNS * cell + 1, gy + 4) < 0, "and so is the margin beside it");
+        // The grid starts below the wallpaper's band, where the box's name sits, as in the game.
+        check(screen.slotAt(gx + 4, StorageScreen.PAD + 4) < 0, "the band across the top of the wallpaper is not a square");
+        check(StorageScreen.gridY() + StorageScreen.ROWS * cell <= screen.getPreferredSize().height && cell >= 44,
+            "the grid fits inside the screen, in squares at least 44 px across (#8)");
     }
 
     /** Clicking shows what the save holds there: a boxed Pokémon, a party member, or nothing. */
@@ -104,25 +100,31 @@ public final class StorageTest {
         check(picked.size() == 1 && picked.get(0) != null && picked.get(0).nationalDex() == BOXED,
             "clicking the boxed Pokémon selects it");
         check(screen.selected() == picked.get(0), "and the screen marks it");
-        click(screen, partyX(), StorageScreen.partyY() + cell + 4);
-        check(picked.size() == 2 && picked.get(1).nationalDex() == 25, "the party's second cell is its second member");
         click(screen, StorageScreen.gridX() + 4, StorageScreen.gridY() + 4);
-        check(picked.size() == 3 && picked.get(2) == null && screen.selected() == null, "an empty square selects nothing");
-        click(screen, partyX(), StorageScreen.partyY() + 5 * cell + 4);
-        check(picked.size() == 3, "an empty party cell is not a click on anything");
+        check(picked.size() == 2 && picked.get(1) == null && screen.selected() == null, "an empty square selects nothing");
+
+        // The party is its own row of buttons now (#8).
+        var party = new PartyStrip(save().party(), new Arrangement((from, to) -> { }), picked::add);
+        party.slot(1).doClick();
+        check(picked.size() == 3 && picked.get(2).nationalDex() == 25, "the party's second button is its second member");
+        check(!party.slot(5).isEnabled(), "an empty party slot is not a control while not arranging");
+        party.slot(5).doClick();
+        check(picked.size() == 3, "and clicking it does nothing");
     }
 
     /** The arrows change box and wrap rather than stopping at the ends, telling the page each time. */
     private static void arrowsTurnTheBox() {
         var turned = new ArrayList<Integer>();
         var screen = new StorageScreen(save(), 0, mon -> { }, turned::add);
-        var back = screen.previousArrow();
-        click(screen, back.x + 2, back.y + 2);
+        screen.turn(-1);
         check(screen.box() == Gen3Save.BOXES - 1, "going back from the first box wraps to the last, got " + screen.box());
-        var forward = screen.nextArrow();
-        click(screen, forward.x + 2, forward.y + 2);
+        screen.turn(1);
         check(screen.box() == 0, "and forward wraps back round");
         check(turned.equals(List.of(Gen3Save.BOXES - 1, 0)), "and the page hears which box is open, got " + turned);
+        screen.showBox(5);
+        check(screen.box() == 5 && turned.getLast() == 5, "the box selector opens a box directly");
+        screen.showBox(5);
+        check(turned.size() == 3, "and choosing the open box again turns nothing");
     }
 
     private static BufferedImage render(StorageScreen screen) {
@@ -158,7 +160,7 @@ public final class StorageTest {
         System.clearProperty("yoru.art.dir");
         SpriteAssets.refresh();
         var bare = render(new StorageScreen(save, 0, mon -> { }, box -> { }));
-        int gx = StorageScreen.PAD, gy = StorageScreen.HEADER + StorageScreen.PAD;
+        int gx = StorageScreen.PAD, gy = StorageScreen.PAD;
         check(countOf(bare, Theme.PANEL, gx + 4, gy + 4, gx + StorageScreen.boxWidth(), gy + StorageScreen.boxHeight()) > 1000,
             "with no wallpaper the box falls back to the themed panel");
 
@@ -207,7 +209,10 @@ public final class StorageTest {
         // Pick up the boxed Pokémon, then place it in the party's first empty cell.
         click(screen, srcX, srcY);
         check(screen.picked() != null && screen.picked().nationalDex() == BOXED, "the boxed Pokémon is picked up");
-        click(screen, partyX(), StorageScreen.partyY() + 2 * cell + 4);
+        // Set it down in the party's first empty slot: another component, the same arrangement.
+        var party = new PartyStrip(save().party(), screen.arrangement(), mon -> { });
+        check(party.slot(2).isEnabled(), "an empty party slot is a destination while arranging");
+        party.slot(2).doClick();
         check(requests.size() == 1 && requests.get(0).equals("Place[party=false, box=" + BOX + ", slot=" + SLOT
             + "] -> Place[party=true, box=-1, slot=2]"), "the page hears from and to, got " + requests);
         check(screen.picked() == null, "and the pickup is cleared after placing");
@@ -248,32 +253,35 @@ public final class StorageTest {
         check(after.boxed(after.storage(), BOX, toSlot) != null, "and the neighbour slot holds it");
     }
 
-    /** The arranging mode draws its hint, and the picked marker, where the eye looks. */
+    /**
+     * Arranging says what to do in words, and rings where a held Pokémon came
+     * from in the readable gold (#8). The hint used to be painted into the box's
+     * header in small capitals, which a screen reader never heard.
+     */
     private static void arrangingStateIsVisible() {
         Theme.apply(ThemeId.MIDNIGHT);
-        var screen = new StorageScreen(save(), BOX, mon -> { }, box -> { }, (from, to) -> { });
-        int gx = StorageScreen.PAD, gy = StorageScreen.HEADER + StorageScreen.PAD;
-        // The hint shares the box's header row now, so that is where the eye
-        // looks for it — and the arrow it used to be crammed under must stay
-        // clear of it.
-        var arrow = screen.previousArrow();
-        check(countOf(render(screen), Theme.CYAN, gx, StorageScreen.PAD, gx + StorageScreen.boxWidth(), gy) == 0,
-            "no hint while not arranging");
+        var screen = new StorageScreen(saveWithTwoBoxed(), BOX, mon -> { }, box -> { }, (from, to) -> { });
+        var arrangement = screen.arrangement();
+        check(arrangement.instruction().isEmpty(), "no instruction while not arranging");
         screen.setArranging(true);
-        var hinting = render(screen);
-        int hinted = countOf(hinting, Theme.CYAN, gx, StorageScreen.PAD, gx + StorageScreen.boxWidth(), gy);
-        check(hinted > 0, "the arranging hint is drawn");
-        check(countOf(hinting, Theme.CYAN, arrow.x, arrow.y, arrow.x + arrow.width, arrow.y + arrow.height) == 0,
-            "the arranging hint is drawn over the box's back arrow");
+        check(arrangement.instruction().equals("Choose a Pokémon, then choose its destination."),
+            "arranging starts by saying what to do: " + arrangement.instruction());
+        check(screen.getAccessibleContext().getAccessibleDescription().contains("Choose a Pokémon"),
+            "and a screen reader hears it with the square");
         int cell = StorageScreen.CELL;
-        click(screen, StorageScreen.gridX() + (SLOT % StorageScreen.COLUMNS) * cell + 4,
-            StorageScreen.gridY() + (SLOT / StorageScreen.COLUMNS) * cell + 4);
-        int moving = countOf(render(screen), Theme.GOLD, gx + StorageScreen.boxWidth() - 200, StorageScreen.PAD,
-            gx + StorageScreen.boxWidth(), StorageScreen.PAD + 22);
-        check(moving > 0, "the picked marker is drawn in the header");
+        int sx = StorageScreen.gridX() + (SLOT % StorageScreen.COLUMNS) * cell;
+        int sy = StorageScreen.gridY() + (SLOT / StorageScreen.COLUMNS) * cell;
+        click(screen, sx + 4, sy + 4);
+        check(arrangement.instruction().startsWith("Moving ") && arrangement.instruction().contains("box " + (BOX + 1) + ", slot " + (SLOT + 1)),
+            "a pickup names who is moving and from where: " + arrangement.instruction());
+        // The cursor's accent ring sits on the same square until the arrows move it off.
+        press(screen, "storage.right");
+        check(countOf(render(screen), Theme.GOLD_TEXT, sx, sy, sx + cell, sy + cell) > 0, "the source square is ringed in gold");
         // Escape drops the pickup through the window-level binding.
         screen.getActionMap().get("storage.cancel").actionPerformed(null);
-        check(screen.picked() == null, "Escape drops the pickup");
+        check(screen.picked() == null && arrangement.instruction().startsWith("Choose"),
+            "Escape drops the pickup, and the instruction starts again");
+        check(countOf(render(screen), Theme.GOLD_TEXT, sx, sy, sx + cell, sy + cell) == 0, "and the gold ring goes with it");
     }
 
     /**
@@ -301,17 +309,17 @@ public final class StorageTest {
         check(screen.getAccessibleContext().getAccessibleName().contains("BOX " + (BOX + 1)),
             "and the name says which box, got " + screen.getAccessibleContext().getAccessibleName());
 
-        // Occupied squares are children of the grid, then the party: what a
-        // screen reader can walk, rather than only the square the keyboard is on.
+        // Occupied squares are children of the grid: what a screen reader can
+        // walk, rather than only the square the keyboard is on. The party has
+        // buttons of its own now (#8), so it is not among them.
         var context = screen.getAccessibleContext();
-        check(context.getAccessibleChildrenCount() == 4,
-            "two boxed Pokémon and two party members are children, got " + context.getAccessibleChildrenCount());
+        check(context.getAccessibleChildrenCount() == 2,
+            "the two boxed Pokémon are children, got " + context.getAccessibleChildrenCount());
         check(context.getAccessibleChild(0).getAccessibleContext().getAccessibleName().contains("Slot " + (SLOT + 1)),
             "the first child is the first occupied square, got "
                 + context.getAccessibleChild(0).getAccessibleContext().getAccessibleName());
-        check(context.getAccessibleChild(2).getAccessibleContext().getAccessibleName().startsWith("Party slot 1"),
-            "and the party follows the box, got "
-                + context.getAccessibleChild(2).getAccessibleContext().getAccessibleName());
+        check(context.getAccessibleName().contains("2 of " + Gen3Save.PER_BOX + " occupied"),
+            "and the box's name says how full it is, got " + context.getAccessibleName());
 
         // Right steps over the empty square between the two and lands on the next.
         press(screen, "storage.right");
@@ -376,21 +384,35 @@ public final class StorageTest {
         check(screen.cursor() == SLOT, "and taking the keyboard puts the cursor on it, got " + screen.cursor());
     }
 
+    /** The keyboard arranges across the party row and the boxes, and reaches empty destinations in both. */
     private static void keyboardArrangesPartyAndEmptyBoxes() {
         var moves = new ArrayList<dev.yoru.game.StorageEdit.Place>();
         var shown = new ArrayList<Gen3Pokemon>();
-        var screen = new StorageScreen(save(), BOX, shown::add, box -> { }, (from, to) -> {
+        var save = save();
+        var screen = new StorageScreen(save, BOX, shown::add, box -> { }, (from, to) -> {
             moves.add(from); moves.add(to);
         });
-        check(bound(screen, "F6"), "F6 switches between party and box");
+        var party = new PartyStrip(save.party(), screen.arrangement(), shown::add);
+        var reached = new ArrayList<String>();
+        screen.onSwitchArea(() -> reached.add("party"));
+        party.onSwitchArea(() -> reached.add("boxes"));
+        check(bound(screen, "F6"), "F6 on the box goes to the party");
         press(screen, "storage.switchArea");
-        press(screen, "storage.down");
-        press(screen, "storage.activate");
-        check(shown.getLast().nationalDex() == 25, "keyboard selects the second party member");
-        check(screen.getAccessibleContext().getAccessibleDescription().contains("Party, slot 2"), "party cursor announced");
+        var slotKeys = party.slot(1).getInputMap(javax.swing.JComponent.WHEN_FOCUSED);
+        check(slotKeys.get(javax.swing.KeyStroke.getKeyStroke("F6")) != null
+            && slotKeys.get(javax.swing.KeyStroke.getKeyStroke("RIGHT")) != null, "F6 and the arrows are bound on each party slot");
+        party.slot(1).getActionMap().get("party.switchArea").actionPerformed(null);
+        check(reached.equals(List.of("party", "boxes")), "F6 goes both ways, got " + reached);
+
+        party.slot(1).doClick();
+        check(shown.getLast().nationalDex() == 25, "a party slot selects its member");
+        check(party.slot(1).getAccessibleContext().getAccessibleName().startsWith("Party, slot 2 of 6: "),
+            "and names itself, got " + party.slot(1).getAccessibleContext().getAccessibleName());
+        check(party.slot(4).getAccessibleContext().getAccessibleName().endsWith(": empty"), "an empty slot says so");
+
         screen.setArranging(true);
-        press(screen, "storage.activate");
-        check(screen.picked() != null, "keyboard picks up a party member");
+        party.slot(1).doClick();
+        check(screen.picked() != null && screen.picked().nationalDex() == 25, "a party member is picked up");
         press(screen, "storage.nextBox");
         press(screen, "storage.right");
         int destination = screen.cursor();
@@ -400,14 +422,12 @@ public final class StorageTest {
         check(!moves.get(1).party() && moves.get(1).box() == BOX + 1 && moves.get(1).slot() == destination,
             "move reaches an empty square in another box");
         check(screen.picked() == null, "placement clears pickup");
-        press(screen, "storage.switchArea");
-        press(screen, "storage.activate");
-        press(screen, "storage.down");
-        press(screen, "storage.down");
-        press(screen, "storage.activate");
-        check(moves.size() == 4 && moves.get(3).party() && moves.get(3).slot() == 2,
-            "empty party destinations are keyboard reachable");
-        check(screen.getAccessibleContext().getAccessibleDescription().contains("empty"), "empty party destination announced");
+
+        party.slot(0).doClick();
+        check(party.slot(4).isEnabled(), "empty party slots are destinations while arranging");
+        party.slot(4).doClick();
+        check(moves.size() == 4 && moves.get(3).party() && moves.get(3).slot() == 4,
+            "empty party destinations are reachable, got " + moves);
     }
 
     /** The cursor is drawn where it stands, from the first frame, and follows the arrows. */

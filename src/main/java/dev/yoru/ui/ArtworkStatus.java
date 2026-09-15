@@ -11,6 +11,9 @@ import static dev.yoru.ui.Theme.*;
  * backgrounds and study scenery, each Ready, Partial or Missing, with the one
  * action that repairs it beside anything that is not Ready.
  *
+ * After an import that could not finish, anything still not ready reads Failed,
+ * with the reason under the rows, until an import succeeds.
+ *
  * It replaced a single line of counts that made a partial import look like a
  * complete one and offered the same generic buttons whatever was missing.
  * Missing artwork never hides data: Pokémon keep their names and levels, and the
@@ -19,19 +22,30 @@ import static dev.yoru.ui.Theme.*;
 final class ArtworkStatus {
     private ArtworkStatus() { }
 
+    static JPanel rows(ArtworkLibrary.Report report, boolean gameChosen, Runnable addArtwork, Runnable extractFromGame) {
+        return rows(report, null, gameChosen, addArtwork, extractFromGame);
+    }
+
     /**
+     * @param failure         the last import that could not finish, or null. What
+     *                        is still not ready then reads Failed rather than
+     *                        Missing, and the reason is written under the rows:
+     *                        an import was tried, and the library kept as it was
      * @param gameChosen      a game file is set in Game setup, wherever it lives
      * @param addArtwork      asks for a game, folder or zip
      * @param extractFromGame extracts again from the chosen game
      */
-    static JPanel rows(ArtworkLibrary.Report report, boolean gameChosen, Runnable addArtwork, Runnable extractFromGame) {
+    static JPanel rows(ArtworkLibrary.Report report, ArtworkLibrary.Failure failure, boolean gameChosen,
+                       Runnable addArtwork, Runnable extractFromGame) {
         var table = ActivityManager.activityTable();
         int row = 0;
         for (var category : report.categories()) {
             boolean game = category.key().equals("game");
             boolean ready = category.readiness() == Readiness.READY || game && gameChosen;
-            String said = game && gameChosen && category.readiness() != Readiness.READY ? "Ready · chosen in Game setup" : category.describe();
-            var status = label(said, TYPE_BODY, ready ? TEXT : category.readiness() == Readiness.PARTIAL ? GOLD_TEXT : MUTED);
+            String said = game && gameChosen && category.readiness() != Readiness.READY ? "Ready · chosen in Game setup"
+                : !ready && failure != null ? failed(category) : category.describe();
+            var status = label(said, TYPE_BODY, ready ? TEXT : failure != null ? DANGER
+                : category.readiness() == Readiness.PARTIAL ? GOLD_TEXT : MUTED);
             status.setName("artwork.status." + category.key());
             var name = label(category.name(), TYPE_LABEL, TEXT);
             name.setLabelFor(status);
@@ -39,7 +53,21 @@ final class ArtworkStatus {
                 : new JComponent[]{repair(category, gameChosen, addArtwork, extractFromGame)};
             ActivityManager.activityRow(table, row++, name, status, controls);
         }
-        return table;
+        if (failure == null) return table;
+        var rows = stack();
+        rows.add(table);
+        gap(rows, SPACE_SM);
+        var note = bodyLabel("Last import failed " + Ago.describe(failure.when(), java.time.Instant.now(),
+            java.time.ZoneId.systemDefault()) + ". " + failure.reason());
+        note.setForeground(DANGER);
+        note.setName("artwork.failure");
+        rows.add(note);
+        return rows;
+    }
+
+    /** A kind still not ready after a failed import, with what it kept when there is anything. */
+    private static String failed(Category category) {
+        return category.readiness() == Readiness.PARTIAL ? "Failed · kept " + category.detail() : "Failed";
     }
 
     /** Sprites and backgrounds come out of the game when there is one; everything else has to be supplied. */
