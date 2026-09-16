@@ -1,9 +1,14 @@
 # Yoru roadmap
 
-## Release candidate 1.0.10 — September 14, 2026
+## Released 1.0.10 — September 15, 2026
 
-Built on `claude/close-out` from v1.0.9. It carries the remaining audit issues;
-each issue's comment lists the commits, the tests and what was not verified.
+[Version 1.0.10](https://github.com/Rabadakku/Yoru/releases/tag/v1.0.10) is
+published from PR #27, built on `claude/close-out` from v1.0.9. It carried the
+remaining audit issues, and every one of them is now closed; each issue's
+comment lists the commits, the tests and what was not verified.
+
+PR #28 followed the release with the README's six screenshots, which the
+Screenshots section had always linked but which had never been committed.
 
 | Issue | State |
 |---|---|
@@ -26,7 +31,7 @@ each issue's comment lists the commits, the tests and what was not verified.
 | No personal data or game assets | `PrivacyTest`, `DistributionTest` | Passing |
 | Real libretro core | `NativeLifecycleCheck`, run by hand | 26 checks passed |
 | Keyboard focus on a real display | `DialogFocusTest` with a display | Passing |
-| Installers | `release.yml` on the version tag | Pending the release |
+| Installers | `release.yml` on the v1.0.10 tag | Built and attached: `.dmg`, `.msi`, `.deb` |
 | Clean-machine install and a full campaign | By hand | Not verified |
 
 ## Archived history

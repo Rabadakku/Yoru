@@ -1,9 +1,11 @@
 # Development handoff
 
-## Release candidate 1.0.10 — September 14, 2026
+## Released 1.0.10 — September 15, 2026
 
-Branch `claude/close-out`, from v1.0.9. The full isolated suite passes; each
-issue's comment lists commits and limits.
+Branch `claude/close-out`, from v1.0.9, merged as PR #27 and published as
+[v1.0.10](https://github.com/Rabadakku/Yoru/releases/tag/v1.0.10) with all three
+installers attached. The full isolated suite passes; each issue's comment lists
+commits and limits.
 
 - #7: `EncryptedVault.expired` keeps the ten newest reset backups, each recent
   day's first, and any dated in the future; small deletions now back up first.
@@ -29,6 +31,13 @@ issue's comment lists commits and limits.
 
 Not verified: a 200% text-scaling review (#9), a clean-machine install, and a
 full campaign against a real core.
+
+After the release, PR #28 added the six screenshots the README links under
+`docs/media/`: they had never been committed, so GitHub showed broken images.
+They are crops of `Preview` renders in Midnight at 1280 px wide, made with an
+empty `user.home` and `-Duser.timezone=UTC`, so no installed artwork, no
+preferences and no machine location can reach a published image. Regenerate
+them the same way, and look at each crop before committing it.
 
 ## Released 1.0.9 — September 14, 2026
 
