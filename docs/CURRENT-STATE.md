@@ -2,7 +2,7 @@
 
 ## After 1.0.10 — September 16, 2026
 
-Branch `claude/text-fit`, from main after the release.
+#30 was merged from `claude/text-fit`; #31 is on `claude/text-size`. Neither is released yet.
 
 - **#30: the fit test.** `TextFitTest` lengthens every name in the `Preview` fixture to the model's limit. At 1280×900 and 900×640 it checks every page for:
   - text Swing shortens without a tooltip saying all of it
@@ -15,7 +15,11 @@ Branch `claude/text-fit`, from main after the release.
   - Schedule's planned list keeps the match figure apart from the name.
 
   All 120 page renders are unchanged apart from time-dependent text.
-- **#31: open.** `Theme.textScale` scales every role. Run `TextFitTest` with `-Dtextfit.scale=2` for the 200% review; it finds 96 places today, grouped by kind in the issue.
+- **#31: text size** (`claude/text-size`).
+  - **The setting.** `TextSize` keeps 100, 125, 150 or 200% in the computer's preferences (`dev/yoru/desktop`, `text.size`), not in the vault, so no vault format changes. `YoruApp.main` applies it before the vault launcher. `Shell.textSize` saves it, reinstalls the look-and-feel faces and rebuilds the window, as a theme change does.
+  - **What grows.** `Theme.textScale` scales every role. Hand-set sizes that hold text grow through `Theme.grow` and `Theme.controlHeight`: the Tasks columns and sort box, the Settings spinners and week box, the party slots, the partner card's keys and `FocusBars`.
+  - **What wraps or shortens.** Rows of controls wrap (`Theme.wrappingRow`). Data's day totals wrap (`Theme.wrapping`). The partner card's species and save lines shorten only after the portrait has given all it can.
+  - **Tests.** `TextFitTest` checks every size at 1280×900 and at the smallest window for that size, and now also inspects wrapped task titles, combo boxes and spinners. `TextSizeTest` covers the preference and the Settings row. At 100% every page render matches `main` apart from the new Settings row and time-dependent text.
 
 ## Released 1.0.10 — September 15, 2026
 

@@ -153,12 +153,12 @@ final class BuddyCard extends JPanel {
         // supportive with (#9), under its name rather than in another card.
         if(species!=null) {
             Theme.gap(text,Theme.SPACE_XS);
-            var detail=Theme.label(species,Theme.TYPE_CAPTION,Theme.MUTED);
+            var detail=Theme.shortenable(species,Theme.TYPE_CAPTION,Theme.MUTED);
             detail.setName("buddy.species");
             text.add(detail);
         }
         if(saved!=null) {
-            var line=Theme.label(saved,Theme.TYPE_CAPTION,Theme.MUTED);
+            var line=Theme.shortenable(saved,Theme.TYPE_CAPTION,Theme.MUTED);
             line.setName("buddy.saved");
             text.add(line);
         }
@@ -173,12 +173,25 @@ final class BuddyCard extends JPanel {
         // frame beside it would truncate "WITH <NAME>" to "WITH…". A box on the
         // x axis shares a short card out this way by itself, using the two
         // minimum sizes, so no resize listener or second layout is needed.
-        var caption=new JPanel(new BorderLayout());
+        var caption=new JPanel(new BorderLayout()) {
+            // Whole while the portrait can still give way. Past that, with a
+            // larger text size, only the name stays whole and the species and
+            // save lines beneath it shorten with a tooltip (#31).
+            @Override public Dimension getMinimumSize() {
+                int whole=text.getPreferredSize().width;
+                var pair=getParent();
+                if(pair!=null&&pair.getWidth()>0) {
+                    var insets=pair.getInsets();
+                    int room=pair.getWidth()-insets.left-insets.right-companion.getMinimumSize().width-Theme.SPACE_LG;
+                    whole=Math.min(whole,Math.max(heading.getPreferredSize().width,room));
+                }
+                return new Dimension(whole,0);
+            }
+        };
         caption.setOpaque(false);
         caption.setAlignmentX(0);
         caption.setAlignmentY(0);
         caption.add(text,BorderLayout.CENTER);
-        caption.setMinimumSize(new Dimension(text.getPreferredSize().width,0));
 
         companion.setAlignmentY(0);
         var pair=new JPanel();
@@ -198,7 +211,7 @@ final class BuddyCard extends JPanel {
         line.setOpaque(false);
         line.setAlignmentX(0);
         var label=Theme.label(key,Theme.TYPE_CAPTION,Theme.MUTED);
-        label.setPreferredSize(new Dimension(KEY_WIDTH,label.getPreferredSize().height));
+        label.setPreferredSize(new Dimension(Theme.grow(KEY_WIDTH),label.getPreferredSize().height));
         line.add(label,BorderLayout.WEST);
         // Named so a test reads the same value the card shows rather than
         // re-deriving it and checking its own arithmetic.

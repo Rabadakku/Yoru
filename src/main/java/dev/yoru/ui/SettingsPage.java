@@ -54,7 +54,7 @@ final class SettingsPage {
         for(var id:ThemeId.values()) themes.add(themeCard(id));
         appearance.add(themes);
         gap(appearance,SPACE_LG);
-        var trainerRow=row();
+        var trainerRow=wrappingRow();
         trainerRow.add(label("TRAINER SPRITE",TYPE_CAPTION,MUTED));
         for(var t:TrainerId.values()) {
             String name=t.name().charAt(0)+t.name().substring(1).toLowerCase();
@@ -62,6 +62,17 @@ final class SettingsPage {
             trainerRow.add(selected(pick,settings.trainer()==t));
         }
         appearance.add(trainerRow);
+        // This computer's, not the vault's: the caption says so, since the
+        // themes above travel with the workspace (#31).
+        var sizeRow=wrappingRow();
+        sizeRow.setName("settings.textSize");
+        sizeRow.add(label("TEXT SIZE · THIS COMPUTER",TYPE_CAPTION,MUTED));
+        for(int step:TextSize.STEPS) {
+            var pick=button(step+"%",()->shell.textSize(step));
+            pick.setName("textSize."+step);
+            sizeRow.add(selected(pick,TextSize.current()==step));
+        }
+        appearance.add(sizeRow);
         var motion=new JCheckBox("Reduce animation for this session",shell.reducedMotion());
         motion.setOpaque(false);
         motion.setForeground(TEXT);
@@ -74,8 +85,8 @@ final class SettingsPage {
         var goal=new JSpinner(new SpinnerNumberModel(settings.dailyGoalHours(),1,16,1));
         // A preferred size as well as a maximum: a BasicSpinnerUI sizes its
         // editor from the field's own columns, which leaves the value clipped.
-        goal.setPreferredSize(new Dimension(90,SPACE_XXL));
-        goal.setMaximumSize(new Dimension(90,SPACE_XXL));
+        goal.setPreferredSize(new Dimension(grow(90),controlHeight()));
+        goal.setMaximumSize(new Dimension(grow(90),controlHeight()));
         goal.setAlignmentX(0);
         Theme.plainSpinner(goal);
         var goalCaption=label("DAILY GOAL (HOURS)",TYPE_CAPTION,MUTED);
@@ -89,8 +100,8 @@ final class SettingsPage {
         var floor=new JSpinner(new SpinnerNumberModel(settings.minSessionSeconds()/60,0,60,1));
         // A preferred size as well as a maximum: a BasicSpinnerUI sizes its
         // editor from the field's own columns, which leaves the value clipped.
-        floor.setPreferredSize(new Dimension(90,SPACE_XXL));
-        floor.setMaximumSize(new Dimension(90,SPACE_XXL));
+        floor.setPreferredSize(new Dimension(grow(90),controlHeight()));
+        floor.setMaximumSize(new Dimension(grow(90),controlHeight()));
         floor.setAlignmentX(0);
         Theme.plainSpinner(floor);
         var floorCaption=label("MINIMUM SESSION (MINUTES)",TYPE_CAPTION,MUTED);
@@ -104,7 +115,7 @@ final class SettingsPage {
         var weekStart=plainCombo(new JComboBox<>(DayOfWeek.values()));
         weekStart.setName("settings.weekStart");
         weekStart.setSelectedItem(settings.weekStartsOn());
-        weekStart.setMaximumSize(new Dimension(160,SPACE_XXL));
+        weekStart.setMaximumSize(new Dimension(grow(160),controlHeight()));
         weekStart.setAlignmentX(0);
         weekStart.setRenderer(new DefaultListCellRenderer(){
             @Override public Component getListCellRendererComponent(JList<?> list,Object value,int index,boolean sel,boolean focus){

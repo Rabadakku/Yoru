@@ -13,28 +13,28 @@ import java.util.Set;
 import javax.swing.*;
 
 /**
- * Every page keeps its text in view with every name at its longest and text at
- * twice its designed size (#30, and #31 for 200% text).
+ * Every page keeps its text in view with every name at its longest, at every
+ * text size Settings offers (#30, #31).
  *
  * The visual system's acceptance asks for long names and 200% text, and the
  * page renders only ever showed the fixture's short names at designed size.
  * Swing shortens a label or button that no longer fits to "…" without a word,
  * and a component pushed past the edge of whatever holds it is simply cut off.
- * Both are found here from the laid-out component tree, at the desktop size and
- * at the window's minimum, so a change that brings either back fails the suite.
+ * Both are found here from the laid-out component tree, for each size at the
+ * desktop size and at that size's smallest window, so a change that brings
+ * either back fails the suite.
  *
  * A name shortened on purpose passes when its tooltip carries the whole name,
  * because the reader can still get at it.
  *
- *   java -Djava.awt.headless=true -cp build/classes dev.yoru.ui.TextFitTest [render-dir]
+ *   java -Djava.awt.headless=true [-Dtextfit.size=200] -cp build/classes dev.yoru.ui.TextFitTest [render-dir]
  *
  * Given a directory, every page is also written there as a PNG to review by eye.
  * Invented data only.
  */
 public final class TextFitTest {
-    /** How much larger than designed the text is drawn: 1 in the suite, 2 for the 200% review. */
-    private static final float SCALE = Float.parseFloat(System.getProperty("textfit.scale", "1"));
-    private static final List<Dimension> SIZES = List.of(new Dimension(1280, 900), new Dimension(900, 640));
+    /** The desktop size every step is checked at, besides the step's own smallest window. */
+    private static final Dimension DESKTOP = new Dimension(1280, 900);
 
     // The longest names the model accepts (Model.requireName).
     private static final int ACTIVITY_NAME = 60, TAG_NAME = 40, TASK_TITLE = 160, HABIT_NAME = 60;
@@ -42,39 +42,56 @@ public final class TextFitTest {
     public static void main(String[] args) throws Exception {
         Path renders = args.length > 0 ? Path.of(args[0]) : null;
         if (renders != null) Files.createDirectories(renders);
+        // Every offered size, or one of them: -Dtextfit.size=200.
+        String only = System.getProperty("textfit.size");
+        List<Integer> steps = only == null ? TextSize.STEPS : List.of(Integer.parseInt(only));
         var problems = new LinkedHashSet<String>();
         int[] inspected = {0};
         SwingUtilities.invokeAndWait(() -> {
             try {
-                Theme.textScale = SCALE;
-                Theme.apply(ThemeId.MIDNIGHT);
-                for (var size : SIZES) {
-                    var app = Preview.trackerApp(ThemeId.MIDNIGHT, size.width, size.height, TextFitTest::lengthen);
-                    for (String page : Preview.PAGES) {
-                        var nav = Preview.button(app, page);
-                        if (nav == null) { problems.add(page + ": no navigation button"); continue; }
-                        nav.doClick();
-                        settle(app);
-                        inspected[0] += inspect(app, app, page + " at " + size.width + "×" + size.height, problems);
-                        if (renders != null)
-                            Preview.write(renders, page.toLowerCase(Locale.ROOT) + "-" + size.width, app, size.width, size.height);
-                    }
+                for (int step : steps) {
+                    TextSize.use(step);
+                    Theme.apply(ThemeId.MIDNIGHT);
+                    var desktop = Preview.trackerApp(ThemeId.MIDNIGHT, DESKTOP.width, DESKTOP.height, TextFitTest::lengthen);
+                    // Larger text widens the navigation bar, and the window's
+                    // smallest size with it: check the sizes the window can take.
+                    var smallest = desktop.windowMinimum();
+                    desktop.setSize(Math.max(DESKTOP.width, smallest.width), Math.max(DESKTOP.height, smallest.height));
+                    inspected[0] += pages(desktop, step, renders, problems);
+                    var narrow = Preview.trackerApp(ThemeId.MIDNIGHT, smallest.width, smallest.height, TextFitTest::lengthen);
+                    inspected[0] += pages(narrow, step, renders, problems);
                 }
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         });
+        String sizes = steps.stream().map(step -> step + "%").collect(java.util.stream.Collectors.joining(", "));
         if (!problems.isEmpty()) {
             problems.forEach(problem -> System.out.println("  " + problem));
-            System.out.println("FAIL: " + problems.size() + " pieces of text do not fit with long names at "
-                + Math.round(SCALE * 100) + "% text");
+            System.out.println("FAIL: " + problems.size() + " pieces of text do not fit with the longest names at " + sizes);
             // The windows built here leave Swing's threads running, so an
             // uncaught failure would hang the suite instead of stopping it.
             System.exit(1);
         }
         System.out.println("PASS: " + inspected[0] + " labels and buttons fit with the longest names at "
-            + Math.round(SCALE * 100) + "% text, at 1280×900 and 900×640");
+            + sizes + " text, at the desktop size and each size's smallest window");
         System.exit(0);
+    }
+
+    /** Checks, and optionally renders, every page of {@code app} at its current size. */
+    private static int pages(YoruApp app, int step, Path renders, Set<String> problems) throws Exception {
+        int inspected = 0;
+        int width = app.getWidth(), height = app.getHeight();
+        for (String page : Preview.PAGES) {
+            var nav = Preview.button(app, page);
+            if (nav == null) { problems.add(page + ": no navigation button"); continue; }
+            nav.doClick();
+            settle(app);
+            inspected += inspect(app, app, page + " at " + step + "%, " + width + "×" + height, problems);
+            if (renders != null)
+                Preview.write(renders, page.toLowerCase(Locale.ROOT) + "-" + step + "-" + width, app, width, height);
+        }
+        return inspected;
     }
 
     /** Every name the fixture has, lengthened to the most the model accepts. */
@@ -138,6 +155,12 @@ public final class TextFitTest {
         for (var child : root.getComponents()) {
             if (!child.isVisible()) continue;
             if (child instanceof JComponent c && c.getWidth() > 0 && c.getHeight() > 0) {
+                if (c instanceof JComboBox<?> || c instanceof JSpinner) {
+                    inspected++;
+                    String squeezed = squeezed(c);
+                    if (squeezed != null) problems.add(where + ": " + squeezed);
+                    continue;
+                }
                 String text = text(c);
                 if (text != null) {
                     inspected++;
@@ -152,17 +175,51 @@ public final class TextFitTest {
         return inspected;
     }
 
-    /** The plain text a label or button shows, or null for anything else. HTML text wraps and is left out. */
+    /**
+     * How a combo box or spinner is too small for the value it shows, or null.
+     *
+     * Its height must hold a line of its text. Its width is checked only when it
+     * was set by hand: a box that stretches with its row, like the activity
+     * picker, may show a long name shortened, and its list shows all of it.
+     */
+    private static String squeezed(JComponent c) {
+        JComponent field = c instanceof JSpinner spinner && spinner.getEditor() instanceof JSpinner.DefaultEditor editor
+            ? editor.getTextField() : c;
+        String what = c instanceof JComboBox<?> combo
+            ? "the box showing \"" + combo.getSelectedItem() + "\""
+            : "the spinner showing " + ((JSpinner) c).getValue();
+        var insets = field.getInsets();
+        var metrics = field.getFontMetrics(field.getFont());
+        int room = field.getHeight() - insets.top - insets.bottom, line = metrics.getAscent() + metrics.getDescent();
+        if (room + 1 < line) return what + " is shorter than its text (" + room + " < " + line + ")";
+        boolean handSized = c.isPreferredSizeSet() || c.isMaximumSizeSet() && c.getMaximumSize().width < Short.MAX_VALUE;
+        if (c instanceof JComboBox<?> combo && handSized) {
+            int natural = combo.getUI().getMinimumSize(combo).width;
+            if (c.getWidth() + 1 < natural) return what + " is narrower than its value (" + c.getWidth() + " < " + natural + ")";
+        }
+        return null;
+    }
+
+    /** The plain text a label or button shows, or a read-only wrapped text area, or null for anything else. HTML text wraps and is left out. */
     private static String text(JComponent c) {
-        String text = c instanceof JLabel l ? l.getText() : c instanceof AbstractButton b ? b.getText() : null;
+        String text = c instanceof JLabel l ? l.getText() : c instanceof AbstractButton b ? b.getText()
+            : c instanceof JTextArea area && !area.isEditable() && area.getLineWrap() ? area.getText() : null;
         if (text == null || text.isBlank() || text.regionMatches(true, 0, "<html>", 0, 6)) return null;
         return text;
     }
 
     /** Whether Swing shortens {@code text} to fit, or its line is taller than the room it has. */
     private static boolean cut(JComponent c, String text) {
-        // A wrapping label is cut when its lines need more height than it was given.
+        // A wrapping label or text area is cut when its lines need more height than it was given.
         if (c instanceof WrappingLabel wrapping) return wrapping.heightFor(wrapping.getWidth()) > wrapping.getHeight() + 1;
+        if (c instanceof JTextArea area) {
+            var insets = area.getInsets();
+            var root = area.getUI().getRootView(area);
+            root.setSize(area.getWidth() - insets.left - insets.right, Integer.MAX_VALUE);
+            float needed = root.getPreferredSpan(javax.swing.text.View.Y_AXIS) + insets.top + insets.bottom;
+            root.setSize(area.getWidth() - insets.left - insets.right, area.getHeight() - insets.top - insets.bottom);
+            return needed > area.getHeight() + 1;
+        }
         var insets = c.getInsets();
         var view = new Rectangle(insets.left, insets.top,
             c.getWidth() - insets.left - insets.right, c.getHeight() - insets.top - insets.bottom);

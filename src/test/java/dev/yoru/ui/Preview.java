@@ -143,7 +143,7 @@ public final class Preview {
     }
 
     /** A tracker full of representative data, in the given theme, inside a window. */
-    private static YoruApp trackerApp(ThemeId themeId, int width, int height) throws Exception {
+    static YoruApp trackerApp(ThemeId themeId, int width, int height) throws Exception {
         return trackerApp(themeId, width, height, tracker -> { });
     }
 
