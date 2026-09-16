@@ -38,11 +38,16 @@ final class WrappingLabel extends JLabel {
         return result;
     }
 
-    @Override public Dimension getPreferredSize() {
-        int width = availableWidth();
+    /** The height every line of the text needs when wrapped at {@code width}. */
+    int heightFor(int width) {
         float height = 0;
         for (var line : lines(width)) height += line.getAscent() + line.getDescent() + line.getLeading();
-        return new Dimension(width, Math.max(getFontMetrics(getFont()).getHeight(), (int)Math.ceil(height)));
+        return Math.max(getFontMetrics(getFont()).getHeight(), (int)Math.ceil(height));
+    }
+
+    @Override public Dimension getPreferredSize() {
+        int width = availableWidth();
+        return new Dimension(width, heightFor(width));
     }
 
     @Override public Dimension getMinimumSize() { return new Dimension(0, getPreferredSize().height); }
