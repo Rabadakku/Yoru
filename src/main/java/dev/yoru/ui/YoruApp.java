@@ -602,8 +602,15 @@ public final class YoruApp extends JPanel implements Shell {
             // editor all say the same thing about when a block starts.
             line.add(label(when.getDayOfWeek().getDisplayName(TextStyle.SHORT,Locale.ENGLISH)+" "
                 +when.format(DateTimeFormatter.ofPattern("HH:mm"))+" – "+b.end().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")),TYPE_CAPTION,GOLD_TEXT),BorderLayout.WEST);
-            line.add(label(name(b.activityId())+" · "
-                +String.format("%.0f%% matched",100*Analytics.adherence(tracker.state(),b,Instant.now())),TYPE_BODY,TEXT),BorderLayout.CENTER);
+            // The name gives way and the match figure stays whole: one label cut
+            // "…" through both, and the figure was the part lost.
+            var what=new JPanel();
+            what.setLayout(new BoxLayout(what,BoxLayout.X_AXIS));
+            what.setOpaque(false);
+            what.add(shortenable(name(b.activityId()),TYPE_BODY,TEXT));
+            what.add(label(" · "+String.format("%.0f%% matched",100*Analytics.adherence(tracker.state(),b,Instant.now())),TYPE_BODY,TEXT));
+            what.add(Box.createHorizontalGlue());
+            line.add(what,BorderLayout.CENTER);
             var actions=row();
             actions.add(button("Edit",()->editTime(null,b)));
             actions.add(button("Delete",()->{

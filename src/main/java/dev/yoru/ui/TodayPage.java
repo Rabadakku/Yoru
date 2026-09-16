@@ -160,7 +160,8 @@ final class TodayPage {
             focus.add(button("Restore scene artwork", () -> shell.show("Settings")));
         }
         gap(focus,SPACE_LG);
-        var controls=row();
+        // Wrapping: at the window's minimum the four controls take two lines.
+        var controls=wrappingRow();
         controls.add(accentButton(active==null?"▶  Clock in":"■  Clock out",()-> {
             if(tracker.active()==null) shell.perform(()->tracker.start(((Activity)choose.getSelectedItem()).id()));
             else clockOut();
@@ -292,7 +293,7 @@ final class TodayPage {
             boolean timing=!ActivityManager.canRemove(tracker,a.id());
             remove.setEnabled(!timing);
             remove.setToolTipText(timing?"Clock out before deleting this activity":"Delete this activity");
-            ActivityManager.activityRow(table,row++,label(a.name(),TYPE_PROSE,TEXT),
+            ActivityManager.activityRow(table,row++,shortenable(a.name(),TYPE_PROSE,TEXT),
                 label(Analytics.duration(sec)+(a.targetMinutes()==0?" · open-ended":" · target "+a.targetMinutes()+"m"),TYPE_BODY,MUTED),
                 ActivityManager.targetButton(shell.owner(),tracker,a,()->shell.show("Today")),rename,remove);
         }
