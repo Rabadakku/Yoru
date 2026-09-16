@@ -1,5 +1,22 @@
 # Development handoff
 
+## After 1.0.10 — September 16, 2026
+
+Branch `claude/text-fit`, from main after the release.
+
+- **#30: the fit test.** `TextFitTest` lengthens every name in the `Preview` fixture to the model's limit. At 1280×900 and 900×640 it checks every page for:
+  - text Swing shortens without a tooltip saying all of it
+  - components running past whatever holds them
+
+  It settles the layout before checking. A wrapping label is measured against a width its container only learns in the same pass, and a shown window lays out again when that width arrives.
+- **#30: the fixes.**
+  - `Theme.shortenable` names give way in `ActivityManager.activityTable` once its rows are too wide.
+  - `Theme.wrappingRow` (`WrapFlowLayout`) holds Today's focus controls.
+  - Schedule's planned list keeps the match figure apart from the name.
+
+  All 120 page renders are unchanged apart from time-dependent text.
+- **#31: open.** `Theme.textScale` scales every role. Run `TextFitTest` with `-Dtextfit.scale=2` for the 200% review; it finds 96 places today, grouped by kind in the issue.
+
 ## Released 1.0.10 — September 15, 2026
 
 Branch `claude/close-out`, from v1.0.9, merged as PR #27 and published as

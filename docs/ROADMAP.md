@@ -1,5 +1,15 @@
 # Yoru roadmap
 
+## After 1.0.10 — September 16, 2026
+
+On `claude/text-fit`, from main after the release. #9's acceptance asked for
+long names and 200% text, and neither had been checked.
+
+| Issue | State |
+|---|---|
+| [#30](https://github.com/Rabadakku/Yoru/issues/30) longest names | Done. `TextFitTest`, in the suite, checks every page with the longest names at both sizes. Long activity names shorten with a tooltip instead of hiding their figures, Today's focus controls wrap onto a line they make room for, and a planned block keeps its match figure. |
+| [#31](https://github.com/Rabadakku/Yoru/issues/31) text size setting | Open for the owner: where the setting lives and which steps it offers. `Theme.textScale` is the hook; at 2× the fit test still finds 96 places. |
+
 ## Released 1.0.10 — September 15, 2026
 
 [Version 1.0.10](https://github.com/Rabadakku/Yoru/releases/tag/v1.0.10) is

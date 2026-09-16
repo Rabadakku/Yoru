@@ -167,9 +167,33 @@ final class ActivityManager {
      * the same two buttons 30 px apart. One grid for every row gives the names,
      * the figures and the controls a column each, so the controls line up down
      * the whole card.
+     *
+     * When the rows are wider than the card, the names give way (#30): they take
+     * whatever the figures and controls leave, and a {@link Theme#shortenable}
+     * name shortens with "…". Otherwise the grid fell back to every cell's
+     * minimum, a long name kept all of its width, and the figures beside it were
+     * cut to "05:…" while the name itself was clipped mid-word.
      */
     static JPanel activityTable() {
-        var table = new JPanel(new GridBagLayout());
+        var table = new JPanel(new GridBagLayout()) {
+            @Override public void doLayout() {
+                var grid = (GridBagLayout) getLayout();
+                boolean tight = getWidth() < grid.preferredLayoutSize(this).width;
+                for (var child : getComponents()) {
+                    var cell = grid.getConstraints(child);
+                    if (cell.gridx == 0) {
+                        cell.weightx = tight ? 1 : 0;
+                        cell.fill = tight ? GridBagConstraints.HORIZONTAL : GridBagConstraints.NONE;
+                    } else if (cell.gridx == 1) {
+                        cell.weightx = tight ? 0 : 1;
+                    } else {
+                        continue;
+                    }
+                    grid.setConstraints(child, cell);
+                }
+                super.doLayout();
+            }
+        };
         table.setOpaque(false);
         table.setAlignmentX(0);
         return table;
@@ -188,7 +212,11 @@ final class ActivityManager {
     static void activityRow(JPanel table, int row, JComponent name, JComponent detail, JComponent... controls) {
         int width = 0;
         for (var control : controls) width = Math.max(width, control.getPreferredSize().width);
-        for (var control : controls) control.setPreferredSize(new Dimension(width, control.getPreferredSize().height));
+        for (var control : controls) {
+            control.setPreferredSize(new Dimension(width, control.getPreferredSize().height));
+            // The same width when the grid falls back to minimums, so the columns still match.
+            control.setMinimumSize(control.getPreferredSize());
+        }
         var cell = new GridBagConstraints();
         cell.gridy = row;
         cell.anchor = GridBagConstraints.WEST;
@@ -231,7 +259,7 @@ final class ActivityManager {
         int row = 0;
         for (var activity : tracker.state().activities()) {
             var usage = tracker.usage(activity.id());
-            var name = label(activity.name(), TYPE_PROSE, TEXT);
+            var name = shortenable(activity.name(), TYPE_PROSE, TEXT);
             var recorded = label(usage.sessions() + (usage.sessions() == 1 ? " session" : " sessions")
                 + " · " + Analytics.duration(usage.seconds()), TYPE_BODY, MUTED);
             // Named so the count and duration a removal quotes can be read back
