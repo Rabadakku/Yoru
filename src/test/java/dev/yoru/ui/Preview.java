@@ -33,18 +33,18 @@ import java.util.UUID;
  * minimum is the size the frame actually allows.
  */
 public final class Preview {
-    private static final String[] PAGES = {"Today","Tasks","Habits","Schedule","Collection","Game","Data","Settings"};
+    static final String[] PAGES = {"Today","Tasks","Habits","Schedule","Collection","Game","Data","Settings"};
     /** The frame's minimum, so the small render is a size the app really opens at. */
     private static final int MIN_WIDTH = 900, MIN_HEIGHT = 640;
 
-    private static JButton button(Container root, String name) {
+    static JButton button(Container root, String name) {
         for (var child : root.getComponents()) {
             if (child instanceof JButton b && (name.equals(b.getName()) || name.equals(b.getText()))) return b;
             if (child instanceof Container nested) { var found = button(nested, name); if (found != null) return found; }
         }
         return null;
     }
-    private static void layout(Container c) {
+    static void layout(Container c) {
         c.doLayout();
         for (var child : c.getComponents()) if (child instanceof Container nested) layout(nested);
     }
@@ -133,7 +133,7 @@ public final class Preview {
     }
 
     /** Paints the window into one PNG; the only place an image is produced. */
-    private static void write(Path out, String name, YoruApp app, int width, int height) throws Exception {
+    static void write(Path out, String name, YoruApp app, int width, int height) throws Exception {
         layout(app);
         var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         var g = image.createGraphics();
@@ -144,6 +144,14 @@ public final class Preview {
 
     /** A tracker full of representative data, in the given theme, inside a window. */
     private static YoruApp trackerApp(ThemeId themeId, int width, int height) throws Exception {
+        return trackerApp(themeId, width, height, tracker -> { });
+    }
+
+    /** A change made to the fixture before its window is built. */
+    interface Adjust { void accept(Tracker tracker) throws Exception; }
+
+    /** The same window, with {@code adjust} applied to the fixture first; TextFitTest lengthens every name. */
+    static YoruApp trackerApp(ThemeId themeId, int width, int height, Adjust adjust) throws Exception {
         Repository memory = new Repository() {
             State state = State.empty();
             public State load() { return state; }
@@ -229,6 +237,7 @@ public final class Preview {
         // A running session, so the animated states are what gets rendered
         // rather than everything frozen in its idle pose.
         tracker.start(study);
+        adjust.accept(tracker);
 
         var app = new YoruApp(tracker, memory);
         app.setSize(width, height);

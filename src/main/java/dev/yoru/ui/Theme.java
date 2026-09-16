@@ -213,8 +213,17 @@ final class Theme {
         install();
     }
 
-    static Font mono(int size) { return new Font(MONO_FAMILY, Font.PLAIN, size); }
-    static Font sans(int size) { return new Font(Font.SANS_SERIF, Font.PLAIN, size); }
+    /**
+     * How much larger than designed every role is drawn. Only the layout review
+     * changes it: #9 asks that pages hold together with text at 200%, and Yoru
+     * sets its own sizes, so the operating system's text size never reaches them.
+     * Set it before {@link #apply} and before the window is built.
+     */
+    static float textScale = 1f;
+
+    static Font mono(int size) { return new Font(MONO_FAMILY, Font.PLAIN, scaled(size)); }
+    static Font sans(int size) { return new Font(Font.SANS_SERIF, Font.PLAIN, scaled(size)); }
+    private static int scaled(int size) { return Math.round(size * textScale); }
 
     // Role fonts. A page asks for the role; the size lives in one place so the
     // whole app moves together if a role ever has to change.
@@ -940,6 +949,35 @@ final class Theme {
         return l;
     }
 
+    /** The narrowest a shortened name becomes: still enough of it to recognise. */
+    static final int NAME_FLOOR = 96;
+
+    /**
+     * A name that gives way when its row runs short (#30). It shortens with "…"
+     * so the figures and controls beside it keep their room, and while it is
+     * shortened its tooltip says the whole of it. A name at the model's longest
+     * otherwise pushed a row's figures out of sight and was clipped mid-word.
+     */
+    static JLabel shortenable(String text, int size, Color color) {
+        var name = new JLabel(text) {
+            @Override public Dimension getMinimumSize() {
+                if (isMinimumSizeSet()) return super.getMinimumSize();
+                var preferred = getPreferredSize();
+                return new Dimension(Math.min(preferred.width, NAME_FLOOR), preferred.height);
+            }
+            @Override public String getToolTipText() {
+                return getWidth() > 0 && getWidth() < getPreferredSize().width ? getText() : null;
+            }
+        };
+        // Registered by hand: the tooltip comes from the override, never from setToolTipText.
+        ToolTipManager.sharedInstance().registerComponent(name);
+        name.putClientProperty("html.disable", true);
+        name.setAlignmentX(0);
+        name.setFont(sans(size));
+        name.setForeground(color);
+        return name;
+    }
+
     // The four roles a page names, so no page has to choose a size or a colour
     // for the same three things again.
     /** The page's own name. */
@@ -1087,6 +1125,13 @@ final class Theme {
         var p=new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_MD,SPACE_XS));
         p.setAlignmentX(0);
         p.setOpaque(false);
+        return p;
+    }
+
+    /** A row of controls that may run onto further lines, and makes room for each of them. */
+    static JPanel wrappingRow() {
+        var p=row();
+        p.setLayout(new WrapFlowLayout(FlowLayout.LEFT,SPACE_MD,SPACE_XS));
         return p;
     }
 

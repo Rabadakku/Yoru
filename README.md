@@ -280,6 +280,10 @@ java --enable-native-access=ALL-UNNAMED -cp build/classes dev.yoru.game.InGameCh
      path/to/game.gba path/to/a-copy-of-a-save.srm path/to/empty-work-dir
 # Keyboard focus in real dialogs; skipped headless.
 java -ea -cp build/classes dev.yoru.ui.DialogFocusTest
+# Every page with the longest names at doubled text, also written out as PNGs
+# to look at. It fails until Yoru has a text size setting (#31).
+java -Djava.awt.headless=true -Duser.home=path/to/empty-dir -Dtextfit.scale=2 \
+     -cp build/classes dev.yoru.ui.TextFitTest path/to/render-dir
 ```
 
 ---
