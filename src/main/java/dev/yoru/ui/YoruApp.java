@@ -529,7 +529,8 @@ public final class YoruApp extends JPanel implements Shell {
         var p=stack();
         p.add(pageHeaderFor("Schedule","RECORDED SESSIONS · PLANNED BLOCKS · WEEKLY TEMPLATE"));
 
-        var nav=row();
+        // Wrapping: with larger text the five controls take two lines (#31).
+        var nav=wrappingRow();
         // A bare arrow is not a name: both get a tooltip and an accessible one.
         var back=button("←",()->{week=week.minusWeeks(1);showPage("Schedule");});
         back.setToolTipText("Previous week");
@@ -736,7 +737,8 @@ public final class YoruApp extends JPanel implements Shell {
                 long sec=days.getOrDefault(d,0L);
                 boolean none=sec==0;
                 var cell=stack();
-                cell.add(label(Analytics.report(sec),TYPE_CAPTION,MUTED));
+                // Wraps onto two lines when a larger text size leaves the column too narrow (#31).
+                cell.add(wrapping(Analytics.report(sec),TYPE_CAPTION,MUTED));
                 glue(cell);
                 // A day with nothing on it is a hairline on the baseline rather
                 // than the two-pixel stub of the lightest tier it used to be:
@@ -1169,6 +1171,20 @@ public final class YoruApp extends JPanel implements Shell {
     }
 
     /**
+     * A new text size, kept for this computer (#31). Like a palette, it only
+     * reaches components built after it, so the look-and-feel's faces are
+     * installed again and the window is rebuilt, on Settings where it was chosen.
+     */
+    @Override public void textSize(int percent) {
+        if(percent==TextSize.current()) return;
+        try {
+            TextSize.choose(percent);
+            Theme.apply(Theme.current());
+            rebuild();
+        } catch(RuntimeException e) { error(e); }
+    }
+
+    /**
      * A palette swap only reaches components built after it, so the window is
      * rebuilt rather than repainted. The tracker and vault carry over untouched.
      */
@@ -1279,6 +1295,9 @@ public final class YoruApp extends JPanel implements Shell {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(()-> {
+            // Before anything is built, the vault launcher included: this
+            // computer's text size reaches every window (#31).
+            TextSize.use(TextSize.saved());
             Theme.install();try {
                 var opened=VaultLauncher.open();if(opened==null)return;
                 var tracker=new Tracker(opened.vault(),Clock.systemUTC());

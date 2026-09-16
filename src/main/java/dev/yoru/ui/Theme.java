@@ -214,16 +214,24 @@ final class Theme {
     }
 
     /**
-     * How much larger than designed every role is drawn. Only the layout review
-     * changes it: #9 asks that pages hold together with text at 200%, and Yoru
-     * sets its own sizes, so the operating system's text size never reaches them.
-     * Set it before {@link #apply} and before the window is built.
+     * How much larger than designed every role is drawn: this computer's
+     * {@link TextSize}. Set it before {@link #apply} and before the window is
+     * built; a component keeps the face it was made with.
      */
     static float textScale = 1f;
 
     static Font mono(int size) { return new Font(MONO_FAMILY, Font.PLAIN, scaled(size)); }
     static Font sans(int size) { return new Font(Font.SANS_SERIF, Font.PLAIN, scaled(size)); }
     private static int scaled(int size) { return Math.round(size * textScale); }
+
+    /**
+     * A size set by hand around text, grown with the text size (#31): a column,
+     * a slot or a box that holds a value. Spacing between things stays as it is.
+     */
+    static int grow(int px) { return Math.round(px * textScale); }
+
+    /** The height a control in a row is set to: {@link #SPACE_XXL}, grown with the text. */
+    static int controlHeight() { return grow(SPACE_XXL); }
 
     // Role fonts. A page asks for the role; the size lives in one place so the
     // whole app moves together if a role ever has to change.
@@ -1005,10 +1013,13 @@ final class Theme {
         return label(text, TYPE_SECTION, GOLD.equals(colour) ? GOLD_TEXT : colour);
     }
     /** Copy inside a card. */
-    static JLabel bodyLabel(String text) {
+    static JLabel bodyLabel(String text) { return wrapping(text, TYPE_BODY, MUTED); }
+
+    /** Text in a role's size and colour that wraps to its width instead of being cut. */
+    static JLabel wrapping(String text, int size, Color color) {
         var label = new WrappingLabel(text);
-        label.setFont(bodyFont());
-        label.setForeground(MUTED);
+        label.setFont(sans(size));
+        label.setForeground(color);
         label.setAlignmentX(0);
         return label;
     }

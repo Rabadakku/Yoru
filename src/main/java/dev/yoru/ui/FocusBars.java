@@ -29,12 +29,17 @@ final class FocusBars extends JPanel {
     static final int ROW_HEIGHT = Theme.SPACE_XL + Theme.SPACE_XS, BAR_HEIGHT = Theme.SPACE_MD,
         NAME_WIDTH = Theme.SPACE_XXL * 5, TAIL_WIDTH = Theme.SPACE_XXL * 5, GAP = Theme.SPACE_MD;
 
+    // The sizes above, grown with the text size: a row holds a name and two figures (#31).
+    static int rowHeight() { return Theme.grow(ROW_HEIGHT); }
+    static int nameWidth() { return Theme.grow(NAME_WIDTH); }
+    static int tailWidth() { return Theme.grow(TAIL_WIDTH); }
+
     private final List<Row> rows;
 
     FocusBars(List<Row> rows) {
         this.rows = rows;
         setOpaque(false);
-        int height = Math.max(ROW_HEIGHT, rows.size() * ROW_HEIGHT);
+        int height = Math.max(rowHeight(), rows.size() * rowHeight());
         setPreferredSize(new Dimension(720, height));
         setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
         setAlignmentX(LEFT_ALIGNMENT);
@@ -65,7 +70,7 @@ final class FocusBars extends JPanel {
      * the bars rather than inverting them.
      */
     static int track(int width) {
-        return Math.max(40, width - NAME_WIDTH - TAIL_WIDTH - GAP * 2);
+        return Math.max(40, width - nameWidth() - tailWidth() - GAP * 2);
     }
 
     /**
@@ -101,14 +106,14 @@ final class FocusBars extends JPanel {
         int trackWidth = track(getWidth());
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
-            int y = i * ROW_HEIGHT;
-            int middle = y + ROW_HEIGHT / 2;
+            int y = i * rowHeight();
+            int middle = y + rowHeight() / 2, baseline = middle + Theme.grow(4);
 
             g.setFont(Theme.bodyFont());
             g.setColor(Theme.TEXT);
-            g.drawString(clip(g, row.name(), NAME_WIDTH - 8), 0, middle + 4);
+            g.drawString(clip(g, row.name(), nameWidth() - 8), 0, baseline);
 
-            int barX = NAME_WIDTH + GAP;
+            int barX = nameWidth() + GAP;
             g.setColor(Theme.LINE);
             g.fillRoundRect(barX, middle - BAR_HEIGHT / 2, trackWidth, BAR_HEIGHT, Theme.RADIUS, Theme.RADIUS);
             g.setColor(colourFor(i));
@@ -117,10 +122,10 @@ final class FocusBars extends JPanel {
 
             int tailX = barX + trackWidth + GAP;
             g.setColor(Theme.TEXT);
-            g.drawString(percent(row.share()), tailX, middle + 4);
+            g.drawString(percent(row.share()), tailX, baseline);
             g.setColor(Theme.MUTED);
             String time = dev.yoru.application.Analytics.duration(row.seconds());
-            g.drawString(time, tailX + 56, middle + 4);
+            g.drawString(time, tailX + Theme.grow(56), baseline);
         }
         g.dispose();
     }

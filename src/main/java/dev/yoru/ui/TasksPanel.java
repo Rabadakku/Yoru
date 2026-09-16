@@ -83,7 +83,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         var order=plainCombo(new JComboBox<>(Sort.values()));
         order.setName("task.sort");
         // One control height for the app; the width is this control's own.
-        order.setPreferredSize(new Dimension(SPACE_XXL*4,SPACE_XXL));
+        order.setPreferredSize(new Dimension(grow(SPACE_XXL*4),controlHeight()));
         order.addActionListener(e->{sort=(Sort)order.getSelectedItem();rebuildRows();});
         sortControls.setOpaque(false);
         sortControls.add(label("Sort",TYPE_CAPTION,MUTED));
@@ -364,8 +364,10 @@ final class TasksPanel extends JPanel implements Scrollable {
         @Override public void removeLayoutComponent(Component cell) { }
 
         static int[] widths(int inner) {
-            int fixed=Arrays.stream(COLUMNS).sum();
+            // The fixed columns hold text, so they grow with the text size (#31).
             var out=COLUMNS.clone();
+            for(int i=0;i<out.length;i++) out[i]=grow(out[i]);
+            int fixed=Arrays.stream(out).sum();
             out[TITLE_COLUMN]=Math.max(SPACE_XXL*4,inner-fixed-SPACE_MD*(COLUMNS.length-1));
             return out;
         }
@@ -752,7 +754,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         Object[][] rows=new Object[proposed.size()][4];
         for(int i=0;i<proposed.size();i++){var t=proposed.get(i);rows[i]=new Object[]{true,t.title(),t.due()==null?"":DateText.date(t.due()),t.notes()};}
         var model=new DefaultTableModel(rows,new String[]{"Add","Task title","Due (e.g. Sep 14)","Notes / evidence"}){public Class<?> getColumnClass(int c){return c==0?Boolean.class:String.class;}};
-        var table=new JTable(model);plainTable(table);table.setRowHeight(SPACE_XXL);table.setFont(bodyFont());
+        var table=new JTable(model);plainTable(table);table.setRowHeight(controlHeight());table.setFont(bodyFont());
         table.setBackground(PANEL);table.setForeground(TEXT);
         // TEXT on LINE measures 7.0-10.1:1 on all four themes; the accent it
         // replaced on the same fill was 2.4:1 on the two light ones, where a

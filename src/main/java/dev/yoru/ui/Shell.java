@@ -51,6 +51,9 @@ interface Shell {
     /** Sets reduced motion for this session. */
     void reducedMotion(boolean on);
 
+    /** Draws this computer's text at {@code percent} of its designed size, rebuilding the window. */
+    void textSize(int percent);
+
     /** Asks for a game, artwork folder or zip, and imports it. */
     void importArtwork();
 
