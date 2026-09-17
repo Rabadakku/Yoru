@@ -9,6 +9,7 @@ Neither is released yet.
 | Issue | State |
 |---|---|
 | [#30](https://github.com/Rabadakku/Yoru/issues/30) longest names | Done. `TextFitTest`, in the suite, checks every page with the longest names at both sizes. Long activity names shorten with a tooltip instead of hiding their figures, Today's focus controls wrap onto a line they make room for, and a planned block keeps its match figure. |
+| Companion artwork removed | Done, at the owner's request. The Waifu theme, its five bundled portraits, the Settings picker, the Today panel and the page galleries are gone, and Yoru now ships no images at all. A vault that names the withdrawn theme opens as Moonlight; `LegacyVaultTest` opens a real 1.0.10 vault to prove it. |
 | [#31](https://github.com/Rabadakku/Yoru/issues/31) text size setting | Done. Settings → Appearance offers 100, 125, 150 and 200%, kept per computer so vaults stay readable by older versions. Each page holds every size at the desktop size and at that size's smallest window, which grows with the navigation bar. `TextFitTest` checks all four. |
 
 ## Released 1.0.10 — September 15, 2026

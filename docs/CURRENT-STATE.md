@@ -2,7 +2,20 @@
 
 ## After 1.0.10 — September 16, 2026
 
-#30 was merged from `claude/text-fit`; #31 is on `claude/text-size`. Neither is released yet.
+#30 was merged from `claude/text-fit`; #31 and the companion-artwork removal are
+on `claude/text-size` and `claude/code-review`. None of it is released yet.
+
+- **Companion artwork removed** (owner's request). `ThemeId.WAIFU`, `Settings.waifu`,
+  `WaifuCatalog`, `WaifuPanel`, `MoonlightGallery`, the five bundled portraits and
+  the `tools/waifu` scripts are gone; `src/main/resources` is now empty and the jar
+  ships no images, which `DistributionTest` and `PrivacyTest` now require.
+  - **Opening older workspaces.** `ThemeId.known` maps the withdrawn name to
+    Moonlight and anything else unknown to the default, for both vault formats.
+    Vault schema 13 stops writing the portrait choice; a schema 12 file still has
+    those bytes, so the reader steps over them — without that every record after
+    them is read at the wrong offset. `LegacyVaultTest` opens a vault written by
+    the 1.0.10 build itself (base64 fixture) and checks the settings after the
+    skipped bytes, not just the theme.
 
 - **#30: the fit test.** `TextFitTest` lengthens every name in the `Preview` fixture to the model's limit. At 1280×900 and 900×640 it checks every page for:
   - text Swing shortens without a tooltip saying all of it

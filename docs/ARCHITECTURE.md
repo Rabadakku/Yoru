@@ -124,7 +124,6 @@ the vault's controls and quitting for an update.
 | `StorageScreen`, `PartyStrip`, `Arrangement` | The Collection's box grid, party row and the move shared between them. |
 | `ScheduleGrid` | The week: hour rules, recorded sessions, planned blocks, drag to create/move/resize. |
 | `TrainerScene`, `BuddyCard` | The trainer walking beside the timer, and the partner card beside it. |
-| `WaifuCatalog`, `WaifuPanel`, `MoonlightGallery` | The Waifu theme's bundled portraits, the Today card and the other pages' gallery. |
 | `SpriteAssets` | Bounded, cached sprite decoding. |
 
 ### Swing constraints, learned the hard way

@@ -233,7 +233,7 @@ public final class Preview {
         // Sunday-first here, matching the tracker Yoru is replacing, so the
         // preview actually exercises a non-default week start (#26), and the
         // theme card shows this render's theme as the selected one.
-        tracker.settings(new Settings(themeId, TrainerId.BRENDAN, 4, 300, java.time.DayOfWeek.SUNDAY, themeId==ThemeId.WAIFU?"nightfall":null));
+        tracker.settings(new Settings(themeId, TrainerId.BRENDAN, 4, 300, java.time.DayOfWeek.SUNDAY));
         // A running session, so the animated states are what gets rendered
         // rather than everything frozen in its idle pose.
         tracker.start(study);

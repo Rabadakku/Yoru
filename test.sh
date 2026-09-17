@@ -86,7 +86,6 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PackagedArtworkT
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ArtworkStatusTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ActivityUiTest
 
-java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.WaifuUiTest
 
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.BuddySceneTest
 

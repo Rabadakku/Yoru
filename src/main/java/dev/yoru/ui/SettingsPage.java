@@ -12,8 +12,8 @@ import javax.swing.border.LineBorder;
 import static dev.yoru.ui.Theme.*;
 
 /**
- * The Settings page: appearance and the waifu picker, tracking and study music,
- * the game and its artwork, the vault, and updates.
+ * The Settings page: appearance, tracking and study music, the game and its
+ * artwork, the vault, and updates.
  *
  * Moved out of YoruApp (#12), as the Today page was. It builds the page, and
  * reaches the window through {@link Shell} for what belongs to the window:
@@ -22,8 +22,6 @@ import static dev.yoru.ui.Theme.*;
  * controls and its reset; and quitting for an update.
  */
 final class SettingsPage {
-    private static final int WAIFU_THUMB_WIDTH=72,WAIFU_THUMB_HEIGHT=108;
-
     private final Shell shell;
     /** Kept for the window's life, so a check or a download survives the page rebuilding around it. */
     private UpdatesCard updates;
@@ -58,7 +56,7 @@ final class SettingsPage {
         trainerRow.add(label("TRAINER SPRITE",TYPE_CAPTION,MUTED));
         for(var t:TrainerId.values()) {
             String name=t.name().charAt(0)+t.name().substring(1).toLowerCase();
-            var pick=button(name,()->shell.applySettings(s->new Settings(s.theme(),t,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),s.waifu())));
+            var pick=button(name,()->shell.applySettings(s->new Settings(s.theme(),t,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn())));
             trainerRow.add(selected(pick,settings.trainer()==t));
         }
         appearance.add(trainerRow);
@@ -134,7 +132,7 @@ final class SettingsPage {
         tracking.add(bodyLabel("Used by the week calendar and the task calendar."));
         gap(tracking,SPACE_LG);
         tracking.add(button("Save tracking settings",()->shell.applySettings(s->new Settings(s.theme(),s.trainer(),
-            (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem(),s.waifu()))));
+            (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem()))));
 
         var audio=card();
         audio.add(sectionHeader("TRACKING · STUDY MUSIC"));
@@ -217,20 +215,6 @@ final class SettingsPage {
         naming.setToolTipText("Names may be zero-padded and nested in folders; anything else is skipped.");
         artwork.add(naming);
 
-        var waifu=card();
-        waifu.add(sectionHeader("APPEARANCE · WAIFU"));
-        gap(waifu,SPACE_SM);
-        waifu.add(bodyLabel("Companion artwork belongs to the Waifu theme. It appears beside your timer and across its pages; your Pokémon and study tools remain available. Moonlight and the other themes keep this choice saved but hide the artwork."));
-        gap(waifu,SPACE_MD);
-        // The choices as pictures rather than names in a list (#23): the
-        // portraits are the reason to choose, so the picker shows them.
-        waifu.add(waifuPicker(settings.waifu()));
-        gap(waifu,SPACE_MD);
-        // Said once so the art's provenance is never in question.
-        waifu.add(label("The portraits ship with Yoru, so the choice travels with your vault.",
-            TYPE_CAPTION,MUTED));
-
-
         var reset=card();
         reset.add(sectionHeader("VAULT · RESET DATA",GOLD));
         gap(reset,SPACE_MD);
@@ -244,7 +228,7 @@ final class SettingsPage {
         // controls used to sit on the Data page. Updates are about the app
         // rather than the workspace, so they come last. The planned-integrations
         // card, which offered nothing to do, is gone.
-        for(var section:new JComponent[]{appearance,waifu,tracking,audio,artwork,shell.vaultCard(),reset,updates}) {
+        for(var section:new JComponent[]{appearance,tracking,audio,artwork,shell.vaultCard(),reset,updates}) {
             p.add(section);
             gap(p,SPACE_XL);
         }
@@ -295,7 +279,7 @@ final class SettingsPage {
             ?accentButton("Active",()->{})
             // A theme is only a theme: choosing Moonlight used to switch on the
             // Nightfall companion as well, which is a choice Settings asks for (#3).
-            :button("Use this",()->shell.applySettings(s->new Settings(id,s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),s.waifu())));
+            :button("Use this",()->shell.applySettings(s->new Settings(id,s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn())));
         pick.setName("settings.theme."+id.name());
         if(chosen)pick.setToolTipText("This theme is already in use");
         box.add(pick);
@@ -314,44 +298,4 @@ final class SettingsPage {
         });
     }
 
-    /**
-     * The waifu choices as small pictures (#23): the theme's default, every
-     * portrait in the roster, and Rotate. The stored choice is marked the way
-     * every other segmented choice is, and picking one writes it at once.
-     * A stored id no longer in the roster reads as the default, which is
-     * what the art shows for it.
-     */
-    private JPanel waifuPicker(String stored) {
-        // Flush with the card's text, as Theme.flushRow is: a FlowLayout's own
-        // gaps indented the first picture and opened a band above the row.
-        var picker=new JPanel(new FlowLayout(FlowLayout.LEFT,0,0));
-        picker.setName("settings.waifu");
-        picker.setOpaque(false);
-        picker.setAlignmentX(0);
-        boolean known=WaifuCatalog.ROTATE.equals(stored)||WaifuCatalog.all().stream().anyMatch(w->w.id().equals(stored));
-        var choices=new ArrayList<JButton>();
-        choices.add(waifuChoice("default",null,"Theme default",WaifuCatalog.load("nightfall"),!known));
-        for(var w:WaifuCatalog.all())
-            choices.add(waifuChoice(w.id(),w.id(),w.name().replace(" · illustrated",""),WaifuCatalog.load(w.id()),w.id().equals(stored)));
-        choices.add(waifuChoice("rotate",WaifuCatalog.ROTATE,"Rotate",null,WaifuCatalog.ROTATE.equals(stored)));
-        for(var choice:choices) {
-            if(picker.getComponentCount()>0) picker.add(Box.createHorizontalStrut(SPACE_MD));
-            picker.add(choice);
-        }
-        return picker;
-    }
-
-    private JButton waifuChoice(String key,String value,String name,java.awt.image.BufferedImage portrait,boolean chosen) {
-        // Deferred so the button finishes its own event before the page it sits
-        // on is rebuilt around the change.
-        var choice=selected(button(name,()->SwingUtilities.invokeLater(()->shell.applySettings(s->new Settings(s.theme(),s.trainer(),
-            s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn(),value)))),chosen);
-        choice.setName("settings.waifu."+key);
-        if(portrait!=null)
-            choice.setIcon(new ImageIcon(portrait.getScaledInstance(WAIFU_THUMB_WIDTH,WAIFU_THUMB_HEIGHT,Image.SCALE_SMOOTH)));
-        choice.setHorizontalTextPosition(SwingConstants.CENTER);
-        choice.setVerticalTextPosition(SwingConstants.BOTTOM);
-        choice.getAccessibleContext().setAccessibleName(name+" portrait"+(chosen?", chosen":""));
-        return choice;
-    }
 }

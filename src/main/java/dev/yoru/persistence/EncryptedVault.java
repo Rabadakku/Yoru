@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=12, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=13, MAX=100_000;
     private final Path path;
     private final FileChannel channel;
     private final FileLock lock;
@@ -190,9 +190,6 @@ public final class EncryptedVault implements Repository {
                 out.writeUTF(settings.theme().name()); out.writeUTF(settings.trainer().name());
                 out.writeInt(settings.dailyGoalHours()); out.writeInt(settings.minSessionSeconds());
                 out.writeUTF(settings.weekStartsOn().name());
-                // Schema 12 added the decorative folder; absent means no panel.
-                out.writeBoolean(settings.waifu() != null);
-                if (settings.waifu() != null) out.writeUTF(settings.waifu());
                 var campaign = state.campaign();
                 out.writeLong(campaign.seed()); out.writeLong(campaign.encountersUsed()); out.writeLong(campaign.rewardedSeconds());
                 out.writeInt(state.rewards().size());
@@ -290,7 +287,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 12.
+     * Reads any schema from 1 to 13.
      *
      * Every field older vaults lack arrives as a sensible empty. Schemas 2 to 10
      * kept a collection of their own after the tasks and gym records after the
@@ -356,15 +353,16 @@ public final class EncryptedVault implements Repository {
             if(schema>=5) {
                 for(int n=count(in);n>0;n--) tags.add(new Tag(uuid(in),in.readUTF(),in.readInt()));
                 if(schema<=10) for(int n=count(in);n>0;n--) { uuid(in); in.readInt(); instant(in); }   // practice-gym records
-                var theme=ThemeId.valueOf(in.readUTF());var trainer=TrainerId.valueOf(in.readUTF());
+                var theme=ThemeId.known(in.readUTF());var trainer=TrainerId.valueOf(in.readUTF());
                 int goal=in.readInt(),floor=in.readInt();
                 // Schema 6 and earlier had no week-start preference; those vaults
                 // keep the Monday the app has always assumed.
                 var weekStart=schema>=7?java.time.DayOfWeek.valueOf(in.readUTF()):java.time.DayOfWeek.MONDAY;
-                // Schema 12 added the waifu choice; older vaults read as no panel
-                // rather than being reset, exactly as the week start was read forward.
-                var waifu=schema>=12&&in.readBoolean()?in.readUTF():null;
-                settings=new Settings(theme,trainer,goal,floor,weekStart,waifu);
+                // Schema 12 alone carried a companion-portrait choice. The
+                // feature is gone, so its bytes are read and dropped; without that
+                // every record after them would be read at the wrong offset.
+                if(schema==12&&in.readBoolean()) in.readUTF();
+                settings=new Settings(theme,trainer,goal,floor,weekStart);
             }
             var campaign = schema >= 11 ? new Campaign(in.readLong(), in.readLong(), in.readLong())
                 : collection != null ? collection.campaign() : Campaign.start(0);
