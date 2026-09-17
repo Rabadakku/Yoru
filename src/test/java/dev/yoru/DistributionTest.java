@@ -11,10 +11,9 @@ import java.util.jar.JarFile;
  * the game files. "We did not mean to include them" is not a guarantee, so this
  * opens the jar the build actually produced and looks.
  *
- * The one exception is the app's own bundled portraits under
- * {@code dev/yoru/waifu/}: original art made for Yoru, not the owner's files and
- * not game sprites, so they are meant to ship. Everything else with an image
- * suffix — or a save, ROM, vault or key — is still a mistake, not a feature.
+ * Nothing with an image suffix belongs in the jar — nor a save, ROM, vault or
+ * key. Yoru bundled its own companion portraits until 1.0.11, which is why the
+ * jar once carried images at all; it ships none now.
  *
  * The failure this prevents is quiet and expensive: a jar handed to someone else
  * with a few hundred sprites inside it, which is a licence problem rather than a
@@ -31,13 +30,6 @@ public final class DistributionTest {
                 ".vault",".local-key",".bak",
                 ".mp3",".ogg",".wav");
     private static final List<String> FORBIDDEN_PREFIXES=List.of("art/","game-files/","shiny/","pc/");
-    /** The app's own bundled portraits — original art that is meant to ship. */
-    private static final String BUNDLED_WAIFU = "dev/yoru/waifu/";
-
-    /** A bundled portrait is the one kind of image the jar is supposed to carry. */
-    private static boolean bundledWaifu(String name) {
-        return name.startsWith(BUNDLED_WAIFU) && name.endsWith(".png");
-    }
 
     public static void main(String[] args)throws Exception{
         Path jar=Path.of(args.length>0?args[0]:"build/yoru.jar");
@@ -45,16 +37,14 @@ public final class DistributionTest {
 
         var offenders=new ArrayList<String>();
         var classes=new HashSet<String>();
-        long bytes=0,portraitBytes=0;
+        long bytes=0;
         try(var file=new JarFile(jar.toFile())) {
             for(var entries=file.entries();entries.hasMoreElements();) {
                 var entry=entries.nextElement();
                 String name=entry.getName();
                 if(entry.isDirectory()) continue;
-                if(bundledWaifu(name))portraitBytes+=Math.max(0,entry.getSize());
-                else bytes+=Math.max(0,entry.getSize());
+                bytes+=Math.max(0,entry.getSize());
                 if(name.endsWith(".class")) classes.add(name);
-                if(bundledWaifu(name)) continue;   // the app's own art is a feature, not a leak
                 String lower=name.toLowerCase(Locale.ROOT);
                 for(String suffix:FORBIDDEN_SUFFIXES) if(lower.endsWith(suffix)) offenders.add(name);
                 for(String prefix:FORBIDDEN_PREFIXES) if(lower.startsWith(prefix)) offenders.add(name);
@@ -67,13 +57,6 @@ public final class DistributionTest {
 
         check(offenders.isEmpty(),"A shipped jar must carry no leaked artwork, game files or vaults — found "+offenders);
         check(!classes.isEmpty(),"The jar carries the application");
-
-        // The whitelist is exact: a portrait is allowed only as a PNG in the
-        // one bundled directory, never as a sprite, save or other suffix.
-        check(bundledWaifu("dev/yoru/waifu/hikari.png"),"a bundled portrait is allowed");
-        check(!bundledWaifu("dev/yoru/waifu/hikari.jpg"),"only PNG portraits are bundled");
-        check(!bundledWaifu("emerald/route101.png"),"a game sprite is not a bundled portrait");
-        check(!bundledWaifu("dev/yoru/waifu/save.sav"),"a save is never a portrait");
 
         // The application is all of itself, not a partial build.
         for(String required:new String[]{
@@ -90,7 +73,6 @@ public final class DistributionTest {
         // Sized like code. A jar carrying 386 sprites would be several megabytes,
         // so this catches a bundling accident even if it dodges the name checks.
         check(bytes<4_000_000,"The jar is code-sized, not asset-sized — uncompressed "+bytes+" bytes");
-        check(portraitBytes<8_000_000,"Original companion art stays within its separate package budget");
 
         // And it degrades honestly with no artwork at all, which is how it ships.
         var report=new dev.yoru.assets.ArtworkLibrary.Report(0,0,0,0,0);

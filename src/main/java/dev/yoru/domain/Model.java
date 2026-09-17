@@ -45,7 +45,22 @@ public final class Model {
     }
 
     /** Named separately from dev.yoru.ui.Theme, which resolves one of these to colours. */
-    public enum ThemeId { MIDNIGHT, EMBER, SAKURA, LINEN, MOONLIGHT, WAIFU }
+    public enum ThemeId {
+        MIDNIGHT, EMBER, SAKURA, LINEN, MOONLIGHT;
+
+        /**
+         * The theme a saved workspace names, or the nearest one that still exists.
+         *
+         * A workspace saved with the withdrawn Waifu theme (1.0.10 only) would
+         * otherwise fail to open on its name alone. It reads as Moonlight, the
+         * palette it was split from; anything else unknown reads as the default.
+         */
+        public static ThemeId known(String name) {
+            if ("WAIFU".equals(name)) return MOONLIGHT;
+            try { return valueOf(name); }
+            catch (IllegalArgumentException | NullPointerException unknown) { return MIDNIGHT; }
+        }
+    }
     /** Overworld sprite set. Not called Character — that shadows java.lang.Character. */
     public enum TrainerId { BRENDAN, MAY }
     /**
@@ -62,15 +77,10 @@ public final class Model {
     public enum HabitKind { DAILY, TIME_SINCE }
 
     public record Settings(ThemeId theme, TrainerId trainer, int dailyGoalHours, int minSessionSeconds,
-                           DayOfWeek weekStartsOn, String waifu) {
+                           DayOfWeek weekStartsOn) {
         /** Kept for callers that predate the week-start preference. */
         public Settings(ThemeId theme, TrainerId trainer, int dailyGoalHours, int minSessionSeconds) {
-            this(theme,trainer,dailyGoalHours,minSessionSeconds,DayOfWeek.MONDAY,null);
-        }
-        /** Kept for callers that predate the waifu panel. */
-        public Settings(ThemeId theme, TrainerId trainer, int dailyGoalHours, int minSessionSeconds,
-                        DayOfWeek weekStartsOn) {
-            this(theme,trainer,dailyGoalHours,minSessionSeconds,weekStartsOn,null);
+            this(theme,trainer,dailyGoalHours,minSessionSeconds,DayOfWeek.MONDAY);
         }
         public Settings {
             Objects.requireNonNull(theme); Objects.requireNonNull(trainer);
@@ -79,11 +89,8 @@ public final class Model {
                 throw new IllegalArgumentException("Daily goal must be between 1 and 16 hours.");
             if(minSessionSeconds<0 || minSessionSeconds>3600)
                 throw new IllegalArgumentException("Minimum session must be between 0 and 60 minutes.");
-            // A waifu choice is a preference, not data: a blank one and none at
-            // all are the same choice, so the panel stays off.
-            if(waifu!=null && waifu.isBlank()) waifu=null;
         }
-        public static Settings defaults() { return new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY,null); }
+        public static Settings defaults() { return new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY); }
         /** The start of the week containing this date, under this preference. */
         public LocalDate weekOf(LocalDate date) {
             return date.with(java.time.temporal.TemporalAdjusters.previousOrSame(weekStartsOn));

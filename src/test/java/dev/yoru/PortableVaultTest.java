@@ -79,7 +79,7 @@ public final class PortableVaultTest {
                     new Habit(UUID.randomUUID(),"Time since last soda",HabitKind.TIME_SINCE,"Asia/Tokyo",
                         Set.of(),List.of(Instant.parse("2026-08-01T00:00:00Z"),Instant.parse("2026-08-20T06:30:00Z")))),
             List.of(tag),
-            new Settings(ThemeId.SAKURA,TrainerId.MAY,7,120,DayOfWeek.MONDAY,"waifu-fixture"),
+            new Settings(ThemeId.SAKURA,TrainerId.MAY,7,120,DayOfWeek.MONDAY),
             new Campaign(0x9E3779B97F4A7C15L,12,21600),
             List.of(pending,delivered),
             new GameSave(dev.yoru.game.Gen3Fixture.save(2,4),Instant.parse("2026-09-07T08:00:00Z")));
@@ -131,18 +131,19 @@ public final class PortableVaultTest {
         check(json.contains("\"startTime\": \"09:00\""),"Clock times are written as readable HH:MM");
         check(restored.settings().theme()==ThemeId.SAKURA,"Settings survive");
         check(restored.settings().minSessionSeconds()==120,"A non-default session floor survives");
-        check(restored.settings().waifu().equals("waifu-fixture"),"The waifu choice survives the round trip");
-        check(json.contains("\"waifu\": \"waifu-fixture\""),"The waifu choice is written as readable text");
+        check(!json.contains("waifu"),"The withdrawn companion choice is no longer written");
         check(restored.tasks().getFirst().tagId().equals(original.tags().getFirst().id()),"Task tagging survives");
 
         // An empty vault is a valid vault.
         var empty=State.empty();
         check(PortableVault.parse(PortableVault.export(empty,when)).equals(empty),"An empty vault round-trips");
 
-        // A file exported before the waifu setting existed still imports: the
-        // panel is off, which is the same thing as never having chosen a portrait.
-        check(PortableVault.parse(json.replace("\"waifu\"","\"unused\"")).settings().waifu()==null,
-            "An export from before the waifu setting imports with no waifu choice");
+        // An export written by 1.0.10 still imports: its companion choice is a
+        // field this version does not know, and its theme no longer exists.
+        var illustrated=json.replace("\"theme\": \"SAKURA\"","\"theme\": \"WAIFU\"")
+            .replace("\"trainer\":","\"waifu\": \"nightfall\",\n    \"trainer\":");
+        check(PortableVault.parse(illustrated).settings().theme()==ThemeId.MOONLIGHT,
+            "An export naming the withdrawn Waifu theme imports as Moonlight");
 
         // Refusals name the field. This is the tool people reach for when a vault
         // already looks wrong; "Invalid JSON" would not help anyone.
@@ -150,7 +151,11 @@ public final class PortableVaultTest {
         refuses(json.replace("\"activities\"","\"activitys\""),"activities","A missing section is named");
         refuses(json.replace("\"targetMinutes\": 30","\"targetMinutes\": \"thirty\""),"targetMinutes","A wrong type is named");
         refuses(json.replace("\"name\": \"Study\"","\"name\": 5"),"name","A wrong type in a record is named");
-        refuses(json.replace("\"theme\": \"SAKURA\"","\"theme\": \"NEON\""),"NEON","An unknown enum value is named");
+        refuses(json.replace("\"trainer\": \"MAY\"","\"trainer\": \"NEON\""),"NEON","An unknown enum value is named");
+        // Except the theme: a palette is a preference, not data, so an unknown
+        // one falls back instead of refusing the whole workspace.
+        check(PortableVault.parse(json.replace("\"theme\": \"SAKURA\"","\"theme\": \"NEON\"")).settings().theme()==ThemeId.MIDNIGHT,
+            "An unknown theme imports as the default rather than refusing the file");
         refuses(json.replace("\"status\": \"DOING\"","\"status\": \"BLOCKED\""),"BLOCKED","An unknown task status is named");
         refuses(json.replace("\"colour\": \"#90D8DA\"","\"colour\": \"periwinkle\""),"colour","A malformed colour is named");
         refuses(json.replace("\"earnedAt\": \"2026-09-01T08:00:00Z\"","\"earnedAt\": \"the first\""),"earnedAt","A malformed instant is named");

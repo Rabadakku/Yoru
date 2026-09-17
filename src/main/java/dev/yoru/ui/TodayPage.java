@@ -73,16 +73,7 @@ final class TodayPage {
         // Two columns while there is room for both, stacked when there is not:
         // the companion card used to be a fixed 315 px in an EAST slot, which
         // broke the page below about 900 px rather than reflowing.
-        String portrait=WaifuCatalog.forTheme(tracker.state().settings());
-        if (portrait!=null && !WaifuCatalog.imagesFor(portrait).isEmpty()) {
-            p.add(new Hero(focusCard(),new WaifuPanel(portrait)));
-            gap(p,SPACE_LG);
-            p.add(companionColumn());
-        } else {
-            // No companion chosen: Today is the timer and the partner. Choosing
-            // one, and any recommendation of one, lives in Settings (#3).
-            p.add(new Hero(focusCard(),companionColumn()));
-        }
+        p.add(new Hero(focusCard(),companionColumn()));
         gap(p,SPACE_XL);
 
         var daily=Analytics.daily(tracker.state(),null,zone,Instant.now());

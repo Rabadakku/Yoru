@@ -86,9 +86,9 @@ public final class VisualSystemTest {
         check(!labels(app).contains("VAULT"), "the vault's controls have left the Data page");
 
         open(app, "Settings");
-        var sections = labels(app).stream().filter(List.of("APPEARANCE", "APPEARANCE · WAIFU", "TRACKING",
+        var sections = labels(app).stream().filter(List.of("APPEARANCE", "TRACKING",
             "TRACKING · STUDY MUSIC", "GAME & ARTWORK", "VAULT", "VAULT · RESET DATA", "UPDATES", "INTEGRATIONS")::contains).toList();
-        check(sections.equals(List.of("APPEARANCE", "APPEARANCE · WAIFU", "TRACKING", "TRACKING · STUDY MUSIC",
+        check(sections.equals(List.of("APPEARANCE", "TRACKING", "TRACKING · STUDY MUSIC",
             "GAME & ARTWORK", "VAULT", "VAULT · RESET DATA", "UPDATES")),
             "Settings reads appearance, tracking, game and artwork, then the vault, with updates last: " + sections);
         var themes = (JPanel) named(app, "settings.themes");

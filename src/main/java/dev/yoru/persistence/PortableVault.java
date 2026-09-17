@@ -62,7 +62,6 @@ public final class PortableVault {
         m.put("weekStartsOn", s.weekStartsOn().name());
         // Null when no decorative folder is set; an export taken before this
         // setting existed imports the same way, because the reader tolerates it.
-        m.put("waifu", s.waifu());
         return m;
     }
 
@@ -204,12 +203,13 @@ public final class PortableVault {
             list(root, "habits", PortableVault::readHabit),
             list(root, "tags", PortableVault::readTag),
             new Settings(
-                enumeration(ThemeId.class, text(settings, "theme")),
+                // Not enumeration(): a workspace exported with the withdrawn
+                // Waifu theme still opens, as the palette it was split from.
+                ThemeId.known(text(settings, "theme")),
                 enumeration(TrainerId.class, text(settings, "trainer")),
                 (int) integer(settings, "dailyGoalHours"),
                 (int) integer(settings, "minSessionSeconds"),
-                enumeration(java.time.DayOfWeek.class, text(settings, "weekStartsOn")),
-                optionalText(settings, "waifu")),
+                enumeration(java.time.DayOfWeek.class, text(settings, "weekStartsOn"))),
             campaign, rewards, game);
     }
 

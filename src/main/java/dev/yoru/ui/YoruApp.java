@@ -303,14 +303,6 @@ public final class YoruApp extends JPanel implements Shell {
             default->todayPage.view();
         }
         ;
-        String galleryChoice=WaifuCatalog.forTheme(tracker.state().settings());
-        if (galleryChoice!=null && !page.equals("Today")) {
-            var illustrated=stack();
-            illustrated.add(new MoonlightGallery(galleryChoice,page));
-            gap(illustrated,SPACE_LG);
-            illustrated.add(view);
-            view=illustrated;
-        }
         var scroll=new JScrollPane(view);
         scroll.setBorder(null);
         scroll.getViewport().setBackground(BG);
