@@ -46,6 +46,11 @@ public final class ExpansionTest {
         check(t.state().pendingRewards().size()==1,"the caught encounter waits for the game");
         var task=new Task(UUID.randomUUID(),activity,"Read chapter 2","Check figures",LocalDate.of(2026,9,12),false,"syllabus.pdf");
         check(t.addTasks(List.of(task))==1,"task added");check(t.addTasks(List.of(new Task(UUID.randomUUID(),activity,"READ CHAPTER 2","",task.due(),false,"copy.pdf")))==0,"deduplication");
+        // A batch skips what it already holds; one task typed by hand is meant,
+        // so it is added even when it matches. The dialog used to close silently.
+        t.addTask(new Task(UUID.randomUUID(),activity,"READ CHAPTER 2","",task.due(),false,"typed by hand"));
+        check(t.state().tasks().size()==2,"a task typed by hand is added even when it matches one already stored");
+        t.deleteTask(t.state().tasks().get(1).id());
         t.updateTask(new Task(task.id(),activity,task.title(),task.notes(),task.due(),true,task.source()));check(t.state().tasks().getFirst().done(),"task completed");
         t.start(activity);check(t.state().tasks().size()==1&&t.state().rewards().size()==1,"tracking preserves tasks and rewards");
         check(Encounters.available(t.state())==0,"running time not banked");

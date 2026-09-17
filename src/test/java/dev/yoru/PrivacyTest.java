@@ -20,10 +20,10 @@ import java.util.regex.Pattern;
  * never leave the machine.
  *
  * The generic checks run everywhere: email addresses, home-directory paths,
- * personal file types and images outside the release media folder (or the
- * app's own bundled portraits). The owner's own identifiers cannot be written
- * here without publishing them, so they live in {@code .privacy-denylist} —
- * gitignored, one term per line — and are checked whenever that file exists.
+ * personal file types and images outside the release media folder. The owner's
+ * own identifiers cannot be written here without publishing them, so they live
+ * in {@code .privacy-denylist} — gitignored, one term per line — and are
+ * checked whenever that file exists.
  */
 public final class PrivacyTest {
     private static int checks;

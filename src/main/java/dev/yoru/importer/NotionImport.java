@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -111,9 +112,13 @@ public final class NotionImport {
         require(sheet, mapping.tags(), "class or tag");
         var out = new ArrayList<Candidate>();
         for (var row : sheet.rows()) {
-            String title = bound(row.cell(mapping.title()), MAX_TITLE);
+            // The page is matched on the whole title, not the shortened one: a
+            // title past the limit ends in "…", which no page heading repeats,
+            // and the heading and property lines then landed in the notes.
+            String whole = printable(row.cell(mapping.title()));
+            String title = bound(whole, MAX_TITLE);
             if (title.isEmpty()) continue;
-            out.add(new Candidate(row.number(), title, body(row.page(), title, sheet.headers()),
+            out.add(new Candidate(row.number(), title, body(row.page(), whole, sheet.headers()),
                 due(row, mapping), status(row.cell(mapping.status())), tagNames(row.cell(mapping.tags()))));
         }
         return List.copyOf(out);
@@ -122,9 +127,10 @@ public final class NotionImport {
     /**
      * Turns the chosen candidates into records, ready for one Tracker write.
      *
-     * Duplicates — the same title, deadline and activity link as a task already
-     * there — are dropped here and again by the tracker, so re-importing the
-     * same export adds nothing twice. Tags are reused by name; only the ones
+     * Duplicates — the same title, deadline and class as a task already there —
+     * are dropped here and again by the tracker, so re-importing the same export
+     * adds nothing twice. The class is part of it: two classes can set an
+     * assignment with the same name on the same day, and both are real work. Tags are reused by name; only the ones
      * that do not exist yet are returned, and a task carries one tag because
      * that is what a Yoru task has.
      */
@@ -161,7 +167,7 @@ public final class NotionImport {
             }
             var task = new Task(UUID.randomUUID(), null, tagId, candidate.title(), candidate.notes(),
                 candidate.due(), candidate.status(), label, createdAt, order++);
-            if (known.stream().anyMatch(existing -> existing.sameEntryAs(task))) continue;
+            if (known.stream().anyMatch(existing -> existing.sameImportEntryAs(task))) continue;
             known.add(task);
             accepted.add(task);
         }
@@ -191,9 +197,16 @@ public final class NotionImport {
         if (csv == null)
             throw new IOException("That export has no CSV in it. In Notion, export the database as Markdown & CSV.");
         var pages = new LinkedHashMap<String, String>();
+        // Pages are matched to rows by title. Two pages with the same title —
+        // "Reading" for two classes — cannot be told apart that way, so neither
+        // row gets notes rather than both getting the first page's.
+        var ambiguous = new HashSet<String>();
         for (var entry : files.entrySet())
-            if (entry.getKey().toLowerCase(Locale.ROOT).endsWith(".md"))
-                pages.putIfAbsent(pageKey(entry.getKey()), new String(entry.getValue(), StandardCharsets.UTF_8));
+            if (entry.getKey().toLowerCase(Locale.ROOT).endsWith(".md")) {
+                String key = pageKey(entry.getKey());
+                if (pages.putIfAbsent(key, new String(entry.getValue(), StandardCharsets.UTF_8)) != null) ambiguous.add(key);
+            }
+        for (String key : ambiguous) pages.remove(key);
         return parseCsv(new String(files.get(csv), StandardCharsets.UTF_8), fileName(csv), pages);
     }
 
@@ -274,9 +287,15 @@ public final class NotionImport {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
                 if (entry.isDirectory() || ignored(entry.getName())) continue;
+                // Only the two kinds Yoru reads are read at all: attachments are
+                // skipped rather than loaded into memory and counted against the
+                // limit. A 1000-row export is one CSV and 1000 pages, which the
+                // old count of 1000 files refused at exactly the documented size.
+                String lower = entry.getName().toLowerCase(Locale.ROOT);
+                if (!lower.endsWith(".csv") && !lower.endsWith(".md")) continue;
                 byte[] data = zip.readNBytes(MAX_EXPORT_BYTES + 1);
                 total += data.length;
-                if (data.length > MAX_EXPORT_BYTES || total > MAX_EXPORT_BYTES || files.size() >= 1000)
+                if (data.length > MAX_EXPORT_BYTES || total > MAX_EXPORT_BYTES || files.size() >= 2 * MAX_ROWS + 4)
                     throw new IOException("That export holds more than Yoru will read. Export the database in smaller batches.");
                 files.put(entry.getName(), data);
             }
@@ -369,16 +388,28 @@ public final class NotionImport {
 
     private static final Pattern TIME_OF_DAY = Pattern.compile("\\s+\\d{1,2}:\\d{2}.*$");
 
+    /**
+     * The date forms Notion writes, all resolved strictly.
+     *
+     * Strictly, because the default rounds an impossible date into a real one:
+     * 2/30/2026 arrived as 28 February rather than being refused with its row
+     * number, which is what the preview promises. ("uuuu" rather than "yyyy" is
+     * what strict resolution needs: the year of an era is ambiguous without it.)
+     */
     private static final List<DateTimeFormatter> DATE_FORMATS = List.of(
         DateTimeFormatter.ISO_LOCAL_DATE,
-        DateTimeFormatter.ofPattern("yyyy/M/d", Locale.ENGLISH),
-        DateTimeFormatter.ofPattern("M/d/yyyy", Locale.ENGLISH),
-        DateTimeFormatter.ofPattern("M/d/yy", Locale.ENGLISH),
-        DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH),
-        DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH),
-        DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH),
-        DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH),
-        DateTimeFormatter.ofPattern("yyyy.M.d", Locale.ENGLISH));
+        strict("uuuu/M/d"),
+        strict("M/d/uuuu"),
+        strict("M/d/uu"),
+        strict("MMMM d, uuuu"),
+        strict("MMM d, uuuu"),
+        strict("d MMMM uuuu"),
+        strict("d MMM uuuu"),
+        strict("uuuu.M.d"));
+
+    private static DateTimeFormatter strict(String pattern) {
+        return DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH).withResolverStyle(ResolverStyle.STRICT);
+    }
 
     private static LocalDate due(Row row, Mapping mapping) throws IOException {
         String value = row.cell(mapping.due());
@@ -403,7 +434,7 @@ public final class NotionImport {
         if (cell.isEmpty()) return List.of();
         var names = new LinkedHashMap<String, String>();
         for (String part : cell.split(",")) {
-            String name = bound(part.replaceAll("\\p{Cntrl}", "").strip(), MAX_TAG);
+            String name = bound(printable(part), MAX_TAG);
             if (!name.isEmpty()) names.putIfAbsent(name.toLowerCase(Locale.ROOT), name);
             if (names.size() >= MAX_TAGS_PER_ROW) break;
         }
@@ -441,6 +472,24 @@ public final class NotionImport {
     /** Keeps a value inside a model's bound, visibly, rather than refusing the whole import. */
     private static String bound(String value, int max) {
         if (value.length() <= max) return value;
-        return value.substring(0, max - 1).stripTrailing() + "…";
+        int end = max - 1;
+        // Never between the halves of a surrogate pair: an emoji at the limit
+        // was stored as a lone half, which is not a character at all.
+        if (Character.isHighSurrogate(value.charAt(end - 1))) end--;
+        return value.substring(0, end).stripTrailing() + "…";
+    }
+
+    /**
+     * A cell as text a task can hold: no control characters, no runs of spaces.
+     *
+     * The model refuses a title with a tab or a line break in it, so one such
+     * cell threw part-way through the import, naming no row and importing
+     * nothing. A title is bounded rather than refused, and this is the same
+     * idea: what cannot be stored is cleaned up, not fatal.
+     */
+    private static String printable(String value) {
+        var out = new StringBuilder(value.length());
+        value.codePoints().forEach(c -> out.appendCodePoint(Character.isISOControl(c) ? ' ' : c));
+        return out.toString().replaceAll("\\s+", " ").strip();
     }
 }

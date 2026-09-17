@@ -300,7 +300,22 @@ public final class Tracker {
         commit(state.withCore(state.activities(),state.sessions(),state.blocks().stream().filter(b->!b.id().equals(id)).toList()));
     }
 
-    /** Entire reviewed batch commits together. Duplicate title/due/category entries are ignored. */
+    /**
+     * One task, typed by hand, always added.
+     *
+     * Not {@link #addTasks}: that skips a task matching one already stored,
+     * which is right for a re-import and wrong here. Typing "laundry" when a
+     * finished "Laundry" was already in the vault saved nothing, said nothing,
+     * and closed the dialog as though it had worked.
+     */
+    public void addTask(Task task) throws IOException {
+        if (task.activityId() != null) requireActivity(task.activityId());
+        var next = new ArrayList<>(state.tasks());
+        next.add(task);
+        commit(state.withTasks(next));
+    }
+
+    /** Entire reviewed batch commits together. Duplicate title, due date and activity entries are ignored. */
     public int addTasks(List<Task> batch) throws IOException {
         if (batch.size() > 1000) throw new IllegalArgumentException("Import at most 1000 tasks at once.");
         var next = new ArrayList<>(state.tasks());
@@ -338,7 +353,9 @@ public final class Tracker {
         int added = 0;
         for (Task task : batch) {
             if (task.activityId() != null) requireActivity(task.activityId());
-            if (next.stream().noneMatch(existing -> existing.sameEntryAs(task))) { next.add(task); added++; }
+            // By class as well as title and deadline: two classes may set an
+            // assignment of the same name on the same day (#import).
+            if (next.stream().noneMatch(existing -> existing.sameImportEntryAs(task))) { next.add(task); added++; }
         }
         commit(state.withTags(tags).withTasks(next));
         return added;
@@ -346,8 +363,25 @@ public final class Tracker {
 
     /** Whether a task with this title and deadline is already recorded, by the same rule addTasks skips on. */
     public boolean alreadyHas(String title, LocalDate due) {
+        return alreadyHas(title, due, null);
+    }
+
+    /**
+     * The same question for one class: whether that class already has this task.
+     *
+     * The review list ticks a row when the vault does not hold it. Without the
+     * class, one "Quiz 1" left every other class's quiz of that name unticked
+     * and called it "already in Yoru".
+     */
+    public boolean alreadyHas(String title, LocalDate due, String tagName) {
+        var tagId = tagName == null ? null : state.tags().stream()
+            .filter(t -> t.name().equalsIgnoreCase(tagName)).map(Tag::id).findFirst().orElse(null);
         return state.tasks().stream().anyMatch(t -> t.activityId() == null
-            && t.title().equalsIgnoreCase(title) && Objects.equals(t.due(), due));
+            && t.title().equalsIgnoreCase(title) && Objects.equals(t.due(), due)
+            // A row with no class matches whatever is stored; a row with one
+            // matches an untagged task, or a task under that same class. A class
+            // the vault has never seen matches nothing that is filed under one.
+            && (tagName == null || t.tagId() == null || (tagId != null && tagId.equals(t.tagId()))));
     }
 
     public void updateTask(Task task) throws IOException {
@@ -586,6 +620,9 @@ public final class Tracker {
     public void deleteRepeat(UUID id) throws IOException {
         if(state.recurring().stream().noneMatch(r->r.id().equals(id)))
             throw new IllegalArgumentException("That repeating block no longer exists.");
+        // Backed up like every other deletion (#7): a repeat deleted by mistake
+        // was the one thing no backup held.
+        repository.backup();
         commit(state.withRecurring(state.recurring().stream().filter(r->!r.id().equals(id)).toList()));
     }
 
@@ -622,7 +659,10 @@ public final class Tracker {
         // Clearing activities unlinks tasks from them; the tasks themselves survive.
         if(activities)tasks=tasks.stream().map(x->new Task(x.id(),null,x.tagId(),x.title(),x.notes(),
             x.due(),x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor())).toList();
-        boolean clearTags=parts.contains(ResetPart.TAGS)||parts.contains(ResetPart.TASKS);
+        // Tags are their own section. Clearing tasks used to clear them too,
+        // which the dialog never said and a new term never wanted: the classes
+        // survive the assignments filed under them.
+        boolean clearTags=parts.contains(ResetPart.TAGS);
         if(clearTags)tasks=tasks.stream().map(x->new Task(x.id(),x.activityId(),null,x.title(),x.notes(),
             x.due(),x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor())).toList();
         var next=new State(

@@ -230,6 +230,18 @@ public final class Model {
             return title.equalsIgnoreCase(other.title()) && Objects.equals(due, other.due())
                 && Objects.equals(activityId, other.activityId());
         }
+        /**
+         * Whether an imported row is this task again.
+         *
+         * {@link #sameEntryAs} also compares the activity link, which an import
+         * never sets: it records the class as a tag. Two classes that share an
+         * assignment title and a deadline are different work, so a row filed
+         * under a class is the same entry only as a task under that class.
+         */
+        public boolean sameImportEntryAs(Task other) {
+            return sameEntryAs(other)
+                && (tagId == null || other.tagId() == null || tagId.equals(other.tagId()));
+        }
         /** The day this wants attention: the plan if there is one, else the deadline. */
         public LocalDate workOn() { return plannedFor != null ? plannedFor : due; }
         /** Planning to start it after it is due is worth saying out loud. */

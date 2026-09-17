@@ -80,6 +80,6 @@ public final class DistributionTest {
         check(report.summary().toLowerCase(Locale.ROOT).contains("dex numbers"),
             "The empty state says what happens instead, not just that something is missing");
 
-        System.out.println("PASS: "+checks+" distribution checks (bundled art only, no game files, no tests, runnable)");
+        System.out.println("PASS: "+checks+" distribution checks (no artwork, no game files, no tests, runnable)");
     }
 }
