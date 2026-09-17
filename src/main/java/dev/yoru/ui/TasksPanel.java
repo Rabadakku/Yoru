@@ -713,7 +713,7 @@ final class TasksPanel extends JPanel implements Scrollable {
                     tag.getSelectedItem() instanceof Tag t?t.id():null,
                     title.getText(),notes.getText(),due.value(),
                     (TaskStatus)status.getSelectedItem(),nextOrder(),planned.value());
-                if(existing==null)tracker.addTasks(List.of(task));else tracker.updateTask(task);
+                if(existing==null)tracker.addTask(task);else tracker.updateTask(task);
                 rebuildRows();
                 return;
             }catch(Exception e){error(e);}

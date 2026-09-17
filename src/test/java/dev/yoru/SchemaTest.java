@@ -91,6 +91,8 @@ public final class SchemaTest {
         reopened.addTag("Japanese",0xD8B074);
         reopened.reset(EnumSet.of(Tracker.ResetPart.TASKS));
         check(reopened.state().tasks().isEmpty(),"tasks reset");
+        check(reopened.state().tags().stream().anyMatch(x->x.name().equals("Japanese")),
+            "a tasks reset keeps the tags, which are their own section");
         check(reopened.state().settings().theme()==ThemeId.LINEN,"reset keeps settings it was not asked to clear");
         check(reopened.state().rewards().size()==2,"reset keeps the rewards");
         check(reopened.state().game()!=null,"reset keeps the game save");
@@ -101,6 +103,6 @@ public final class SchemaTest {
         try(var walk=Files.walk(dir)) {
             for(var p:walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p);
         }
-        System.out.println("PASS: "+checks+" schema 12 checks (tags, status, campaign, rewards, game save, settings, reset scoping)");
+        System.out.println("PASS: "+checks+" schema 13 checks (tags, status, campaign, rewards, game save, settings, reset scoping)");
     }
 }

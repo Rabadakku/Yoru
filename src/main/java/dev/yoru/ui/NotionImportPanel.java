@@ -176,7 +176,7 @@ final class NotionImportPanel extends JPanel {
                 model.setRowCount(0);
                 // A row keeps a tick set by hand; otherwise one already in Yoru starts unticked.
                 for (var candidate : shown)
-                    model.addRow(new Object[]{ choices.getOrDefault(candidate.row(),!tracker.alreadyHas(candidate.title(),candidate.due())),
+                    model.addRow(new Object[]{ choices.getOrDefault(candidate.row(),!tracker.alreadyHas(candidate.title(),candidate.due(),firstTag(candidate))),
                         candidate.title(), candidate.due() == null ? "" : candidate.due().toString(), candidate.status().name(),
                         tagLabel(candidate.tags()), firstLine(candidate.notes()) });
             } finally { refreshing = false; }
@@ -225,7 +225,7 @@ final class NotionImportPanel extends JPanel {
         int untitled = sheet.rows().size()-shown.size();
         if (untitled > 0) text.append(" · ").append(untitled).append(" without a title skipped");
         int duplicates = 0;
-        for (var candidate : shown) if (tracker.alreadyHas(candidate.title(),candidate.due())) duplicates++;
+        for (var candidate : shown) if (tracker.alreadyHas(candidate.title(),candidate.due(),firstTag(candidate))) duplicates++;
         if (duplicates > 0) text.append(" · ").append(duplicates).append(" already in Yoru, unticked");
         int withNotes = 0;
         for (var candidate : shown) if (!candidate.notes().isBlank()) withNotes++;
@@ -240,6 +240,11 @@ final class NotionImportPanel extends JPanel {
         }
         text.append(" · ").append(fresh.size()).append(fresh.size()==1 ? " new tag" : " new tags");
         return text.toString();
+    }
+
+    /** The class a row is filed under, which decides whether the vault already holds it. */
+    private static String firstTag(NotionImport.Candidate candidate) {
+        return candidate.tags().isEmpty() ? null : candidate.tags().getFirst();
     }
 
     /** Only the first class is imported, because that is all a Yoru task has room for. */

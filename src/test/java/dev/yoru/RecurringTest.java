@@ -28,8 +28,10 @@ public final class RecurringTest {
 
     private static final class Memory implements Repository {
         State state=State.empty();
+        int backups;
         public State load(){return state;}
         public void save(State next){state=next;}
+        public void backup(){backups++;}
         public void close(){}
     }
 
@@ -123,6 +125,24 @@ public final class RecurringTest {
         check(Duration.between(normal.start(),normal.end()).equals(Duration.ofMinutes(75)),
             "Every other week that block is its full length");
         t.deleteRepeat(gap.id());
+
+        // A rule lying wholly inside the skipped hour would end before it began:
+        // 02:15-03:00 moves to 03:15-03:00 on 8 March 2026. The grid draws
+        // nothing for an inverted block, so the week leaves it out rather than
+        // handing every caller a block whose end precedes its start.
+        var inside=t.repeat(calculus,DayOfWeek.SUNDAY,LocalTime.of(2,15),LocalTime.of(3,0));
+        check(Analytics.occurrences(t.state(),LocalDate.parse("2026-03-02"),zone).stream()
+                .noneMatch(o->o.recurringId().equals(inside.id())),
+            "A block inside the hour that vanishes does not occur that week");
+        var ordinary=Analytics.occurrences(t.state(),LocalDate.parse("2026-03-09"),zone).stream()
+            .filter(o->o.recurringId().equals(inside.id())).findFirst().orElseThrow();
+        check(Duration.between(ordinary.start(),ordinary.end()).equals(Duration.ofMinutes(45)),
+            "And is its full length on every other week");
+        for(var o:Analytics.occurrences(t.state(),LocalDate.parse("2026-03-02"),zone))
+            check(o.end().isAfter(o.start()),"No occurrence ever ends before it starts");
+        int backupsBefore=repo.backups;
+        t.deleteRepeat(inside.id());
+        check(repo.backups==backupsBefore+1,"Deleting a repeat backs the vault up first, like every other deletion");
 
         // Vaults: schema 6 round trip, and schema 5 vaults still open.
         Path dir=Files.createTempDirectory("yoru-recurring-");
