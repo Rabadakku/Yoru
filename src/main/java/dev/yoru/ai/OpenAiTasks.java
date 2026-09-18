@@ -10,7 +10,16 @@ import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.util.*;
 
-/** Optional BYOK adapter. Only explicitly selected file bytes leave the device. */
+/**
+ * Task proposals read back from an AI reply.
+ *
+ * What 1.0 uses is the paste path: {@link #pastePrompt} gives the prompt to run
+ * in a chat of the person's own, and the reply they paste back is validated here
+ * before anyone reviews it. The file-upload API adapter ({@code extract} and
+ * what it builds) has no caller: the Tasks page's API import was removed in
+ * #47, and the code is kept for the integrations planned after 1.0. No build
+ * sends anything to a provider.
+ */
 public final class OpenAiTasks {
     public static final String DEFAULT_MODEL = "gpt-5.6-luna";
     private static final URI ENDPOINT = URI.create("https://api.openai.com/v1/responses");
