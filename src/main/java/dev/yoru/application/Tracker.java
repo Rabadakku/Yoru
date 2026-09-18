@@ -41,6 +41,9 @@ public final class Tracker {
         Objects.requireNonNull(next, "Nothing to restore.");
         repository.backup();
         commit(next);
+        // A restored vault is a different vault: its game save was not the one
+        // last edited, so the next edit is backed up rather than assumed covered.
+        lastEdit=null;
     }
 
     public Session active() {
@@ -72,6 +75,9 @@ public final class Tracker {
         var previous=repository;
         repository=next;
         state=loaded;
+        // The closed vault's decrypted game save is not this vault's business,
+        // and up to a megabyte of it stayed reachable through this field.
+        lastEdit=null;
         release(previous);
     }
 
@@ -134,8 +140,7 @@ public final class Tracker {
      * and the backup is what a failed write is recovered from.
      */
     public void renameActivity(UUID id,String name) throws IOException {
-        var existing=state.activities().stream().filter(a->a.id().equals(id)).findFirst()
-            .orElseThrow(()->new IllegalArgumentException("That activity no longer exists."));
+        var existing=activity(id);
         var renamed=existing.renamed(name);
         if(renamed.name().equals(existing.name())) return;
         if(state.activities().stream().anyMatch(a->!a.id().equals(id)&&a.name().equalsIgnoreCase(renamed.name())))
@@ -154,8 +159,7 @@ public final class Tracker {
      * and nothing is written when the target is already the one asked for.
      */
     public void retargetActivity(UUID id,int targetMinutes) throws IOException {
-        var existing=state.activities().stream().filter(a->a.id().equals(id)).findFirst()
-            .orElseThrow(()->new IllegalArgumentException("That activity no longer exists."));
+        var existing=activity(id);
         var retargeted=existing.retargeted(targetMinutes);
         if(retargeted.equals(existing)) return;
         var list=new ArrayList<>(state.activities());
@@ -175,8 +179,7 @@ public final class Tracker {
      * declined removal leaves no trace at all.
      */
     public void removeActivity(UUID id,boolean keepTime) throws IOException {
-        var target=state.activities().stream().filter(a->a.id().equals(id)).findFirst()
-            .orElseThrow(()->new IllegalArgumentException("That activity no longer exists."));
+        var target=activity(id);
         var running=active();
         if(running!=null&&running.activityId().equals(id))
             throw new IllegalArgumentException("Clock out before removing \""+target.name()+"\": it is timing right now.");
@@ -213,7 +216,7 @@ public final class Tracker {
         // Checking the floor first turned "you clocked out before you clocked in"
         // into a silent delete, which CoreTest caught.
         var finished=new Session(current.id(),current.activityId(),current.start(),end);
-        if(Duration.between(current.start(),end).getSeconds()<state.settings().minSessionSeconds()) {
+        if(Analytics.tooShort(state,current.start(),end)) {
             list.remove(current);
             commit(state.withCore(state.activities(),list,state.blocks()));
             return false;
@@ -231,7 +234,7 @@ public final class Tracker {
 
     private void requireLongEnough(Instant start,Instant end) {
         if(end==null) return;
-        if(Duration.between(start,end).getSeconds()<state.settings().minSessionSeconds())
+        if(Analytics.tooShort(state,start,end))
             throw new IllegalArgumentException("Sessions under "+floor()
                 +" are not recorded. Change the minimum in Settings, or delete this one instead.");
     }
@@ -243,10 +246,8 @@ public final class Tracker {
      * like a reset; a run that removes nothing writes nothing at all.
      */
     public int purgeShortSessions() throws IOException {
-        var keep=state.sessions().stream()
-            .filter(s->s.end()==null
-                ||Duration.between(s.start(),s.end()).getSeconds()>=state.settings().minSessionSeconds())
-            .toList();
+        var now=clock.instant();
+        var keep=state.sessions().stream().filter(s->Analytics.counts(s,state,now)).toList();
         int removed=state.sessions().size()-keep.size();
         if(removed>0) {
             repository.backup();
@@ -315,7 +316,7 @@ public final class Tracker {
         commit(state.withTasks(next));
     }
 
-    /** Entire reviewed batch commits together. Duplicate title, due date and activity entries are ignored. */
+    /** Entire reviewed batch commits together. Entries with the title, deadline and activity of a stored task are skipped. */
     public int addTasks(List<Task> batch) throws IOException {
         if (batch.size() > 1000) throw new IllegalArgumentException("Import at most 1000 tasks at once.");
         var next = new ArrayList<>(state.tasks());
@@ -473,6 +474,11 @@ public final class Tracker {
         starts.remove(periodStart);
         repository.backup();
         replaceHabit(new Habit(h.id(),h.name(),h.kind(),h.zone(),h.checkIns(),starts));
+    }
+    /** The activity with this id, or a refusal that says it is gone. */
+    private Activity activity(UUID id) {
+        return state.activities().stream().filter(a->a.id().equals(id)).findFirst()
+            .orElseThrow(()->new IllegalArgumentException("That activity no longer exists."));
     }
     private Habit habit(UUID id) { return state.habits().stream().filter(h->h.id().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("Tracker no longer exists.")); }
     private void replaceHabit(Habit h) throws IOException {

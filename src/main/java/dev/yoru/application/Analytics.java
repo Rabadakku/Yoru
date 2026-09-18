@@ -55,7 +55,18 @@ public final class Analytics {
      * finished yet, so judging its length would be premature.
      */
     public static boolean counts(Session session,State state,Instant now) {
-        return session.end()==null || session.seconds(now)>=state.settings().minSessionSeconds();
+        return session.end()==null || !tooShort(state,session.start(),session.end());
+    }
+
+    /**
+     * Whether a stretch of time is under the vault's minimum session.
+     *
+     * The one place the floor is compared, so clocking out, logging time,
+     * purging and every total agree by construction rather than by five copies
+     * of the same subtraction staying in step.
+     */
+    public static boolean tooShort(State state,Instant start,Instant end) {
+        return Duration.between(start,end).getSeconds()<state.settings().minSessionSeconds();
     }
 
     public static Map<LocalDate,Long> daily(State state,UUID activity,ZoneId zone,Instant now) {
@@ -94,7 +105,8 @@ public final class Analytics {
         return Math.min(1,(double)actual/Duration.between(b.start(),b.end()).getSeconds());
     }
     public static String duration(long seconds) {
-        return String.format("%02d:%02d:%02d",Math.max(0,seconds)/3600,Math.max(0,seconds)/60%60,Math.max(0,seconds)%60);
+        long whole=Math.max(0,seconds);
+        return String.format("%02d:%02d:%02d",whole/3600,whole/60%60,whole%60);
     }
 
     /**
@@ -122,10 +134,10 @@ public final class Analytics {
         if(seconds<=0) return 0;
         long goal=Math.max(1,dailyGoalHours)*3600L;
         if(seconds>=goal) return HEAT_OVER_GOAL;
-        // Five bands below the goal, so a quarter-goal day is visibly different
-        // from a near-goal one at any goal size.
-        int band=(int)(seconds*5/goal)+1;
-        return Math.min(5,band);
+        // One band per tier below the goal, so a quarter-goal day is visibly
+        // different from a near-goal one at any goal size. Under the goal the
+        // division cannot reach the top band, so nothing needs clamping.
+        return (int)(seconds*(HEAT_TIERS-1)/goal)+1;
     }
 
     /**

@@ -1,7 +1,10 @@
 package dev.yoru.plugins;
 import java.time.Instant;
 import java.util.*;
-/** Future out-of-process adapter contract. No third-party code is loaded by v0.1. */
+/**
+ * The contract planned for out-of-process import adapters after 1.0 (see the
+ * roadmap). Nothing implements or loads it, and no third-party code runs.
+ */
 public interface ImportProvider {
     record Manifest(String id,int apiVersion,Set<String> requestedCapabilities) {
         public Manifest {
