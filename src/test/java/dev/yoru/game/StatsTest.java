@@ -67,14 +67,16 @@ public final class StatsTest {
     }
 
     /**
-     * The nature multiplier is the game's own arithmetic, so a stat whose product
-     * runs past sixteen bits is not divided from its wrapped remainder — which
-     * would read as a stat of single digits rather than hundreds.
+     * Retail Emerald keeps the nature product in sixteen bits, so a raised stat
+     * above 595 (or a lowered one above 728) would wrap there. No Emerald stat
+     * gets that high — Shuckle's 559 Defense is the most a nature touches — so
+     * Yoru keeps the whole product, as pokeemerald's BUGFIX build does, rather
+     * than dividing a wrapped remainder into a stat of single digits.
      */
     private static void theNatureMultiplierDoesNotWrap() {
         // Adamant (3) raises Attack and lowers Sp. Atk; Modest (15) raises Sp. Atk
         // and lowers Attack. 600 * 110 / 100 is 660 and 600 * 90 / 100 is 540;
-        // keeping the product to 16 bits would have given 4 and 539.
+        // a sixteen-bit product would have made the raised one 4.
         check(Gen3Pokemon.byNature(3, 600, 1) == 660,
             "a raised stat is not truncated, got " + Gen3Pokemon.byNature(3, 600, 1));
         check(Gen3Pokemon.byNature(3, 600, 4) == 540,

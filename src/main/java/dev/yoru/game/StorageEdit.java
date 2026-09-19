@@ -81,7 +81,7 @@ public final class StorageEdit {
             if (target == null) party.remove(from.slot());
             else { party.set(from.slot(), Gen3Pokemon.toParty(target, 0)); partyGain.merge(identity(target), 1, Integer::sum); partyDerivedFrom.put(identity(target), target); }
         } else if (!from.party()) {
-            int index = Math.min(to.slot(), party.size());
+            int index = to.slot();
             int fromAt = Gen3Save.slotOffset(from.box(), from.slot());
             if (target == null) {
                 party.add(index, Gen3Pokemon.toParty(moving, 0));
@@ -104,7 +104,7 @@ public final class StorageEdit {
         } else {
             // Onto the empty cell past the last member: a move to the end.
             var picked = party.remove(from.slot());
-            party.add(Math.min(to.slot(), party.size()), picked);
+            party.add(picked);
         }
 
         requireOneAbleToBattle(partyBefore, party);
@@ -201,7 +201,7 @@ public final class StorageEdit {
 
     /** Who a Pokémon is, apart from where it stands: the fields a move must preserve. */
     private static String identity(Gen3Pokemon mon) {
-        return mon == null ? null : mon.personality + ":" + mon.otId + ":" + mon.nationalDex() + ":" + mon.experience;
+        return mon.personality + ":" + mon.otId + ":" + mon.nationalDex() + ":" + mon.experience;
     }
 
     private static String identity(byte[] record) { return identity(Gen3Pokemon.decode(record, 0)); }
@@ -250,8 +250,7 @@ public final class StorageEdit {
         }
         byte[] s1a = a.section(1), s1b = b.section(1);
         for (int i = 0; i < Gen3Save.CHECKSUMMED[1]; i++)
-            if (s1a[i] != s1b[i] && !(i >= Gen3Save.PARTY_COUNT_AT
-                && i < Gen3Save.PARTY_AT + Gen3Save.PARTY_LIMIT * Gen3Pokemon.PARTY_SIZE))
+            if (s1a[i] != s1b[i] && !(i >= Gen3Save.PARTY_COUNT_AT && i < Gen3Save.PARTY_END))
                 throw new IllegalStateException("Section 1 changed at byte " + i + " outside the party.");
         byte[] storageA = a.storage(), storageB = b.storage();
         // A move writes only the box slots. The four header bytes (the box the

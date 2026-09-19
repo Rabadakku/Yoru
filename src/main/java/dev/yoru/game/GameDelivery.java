@@ -283,8 +283,7 @@ public final class GameDelivery {
     private static boolean mayChange(int section, int at) {
         return switch (section) {
             case 0 -> within(at, Gen3Save.DEX_OWNED_AT, Gen3Save.DEX_BYTES) || within(at, Gen3Save.DEX_SEEN_AT, Gen3Save.DEX_BYTES);
-            case 1 -> within(at, Gen3Save.PARTY_COUNT_AT, Gen3Save.PARTY_AT + Gen3Save.PARTY_LIMIT * Gen3Pokemon.PARTY_SIZE
-                    - Gen3Save.PARTY_COUNT_AT)
+            case 1 -> within(at, Gen3Save.PARTY_COUNT_AT, Gen3Save.PARTY_END - Gen3Save.PARTY_COUNT_AT)
                 || within(at, Gen3Save.SEEN1_AT, Gen3Save.DEX_BYTES);
             case 4 -> within(at, Gen3Save.SEEN2_AT - 3 * Gen3Save.SB1_PER_SECTION, Gen3Save.DEX_BYTES);
             default -> false;
