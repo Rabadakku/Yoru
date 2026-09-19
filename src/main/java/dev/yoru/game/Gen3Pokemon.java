@@ -39,6 +39,8 @@ import java.nio.ByteOrder;
 public final class Gen3Pokemon {
 
     public static final int BOX_SIZE = 80, PARTY_SIZE = 100, DATA_SIZE = 48, SUBSTRUCTURE = 12;
+    /** The trainer name field at 0x14: seven bytes, with no room for a terminator after a seventh character. */
+    static final int OT_NAME_BYTES = 7;
 
     /** Substructure identities, in the order the game names them. */
     private static final int GROWTH = 0, ATTACKS = 1, EVS = 2, MISC = 3;
@@ -71,6 +73,14 @@ public final class Gen3Pokemon {
     public int otId;
     public String nickname = "";
     public String otName = "";
+    /**
+     * The trainer name's stored bytes, when they are known exactly; {@link #encode}
+     * then writes these rather than {@link #otName}. The game decides whose a
+     * Pokémon is by comparing them with the player's own name byte for byte
+     * (IsOtherTrainer), and text cannot carry every byte a name can hold.
+     * Decoding leaves this unset: only a gift built from a save's trainer has it.
+     */
+    byte[] otNameBytes;
     public int language = 2;          // English
     public int markings;
     /**
@@ -139,7 +149,8 @@ public final class Gen3Pokemon {
         // Bits 1 and 2 are derived, as SetBoxMonData derives them in the game.
         int derived = (flags & ~0x06) | (species != 0 ? 0x02 : 0) | (isEgg() ? 0x04 : 0);
         buffer.put(0x13, (byte) derived);
-        Gen3Text.write(otName, out, 0x14, 7);
+        if (otNameBytes != null) System.arraycopy(otNameBytes, 0, out, 0x14, OT_NAME_BYTES);
+        else Gen3Text.write(otName, out, 0x14, OT_NAME_BYTES);
         buffer.put(0x1B, (byte) markings);
 
         var data = writeSubstructures();

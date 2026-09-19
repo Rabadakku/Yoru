@@ -197,6 +197,21 @@ public final class StorageEditTest {
         try { StorageEdit.renameBox(before, 3, "CAFÉ"); }
         catch (IllegalArgumentException e) { refused = true; }
         check(refused, "a character the game cannot store is refused");
+
+        // A typed apostrophe is stored as the game's own, which reads back curly;
+        // the rename's own check must still recognise the name it wrote.
+        var quoted = Gen3Save.read(StorageEdit.renameBox(before, 3, "DON'T"));
+        check(quoted.boxName(quoted.storage(), 3).equals("DON’T"), "an apostrophe reads back as the game draws it");
+        check((quoted.storage()[Gen3Save.BOX_NAMES_AT + 3 * Gen3Save.BOX_NAME_BYTES + 3] & 0xFF) == 0xB4,
+            "stored as the game's apostrophe, 0xB4");
+
+        // A pasted NUL is a character the game cannot store like any other, and
+        // is refused before anything is written rather than failing the check after.
+        String refusal = null;
+        try { StorageEdit.renameBox(before, 3, "A\0B"); }
+        catch (IllegalArgumentException e) { refusal = e.getMessage(); }
+        check(refusal != null && refusal.startsWith("The game has no character"),
+            "a NUL in a box name is refused up front, got " + refusal);
     }
 
     /** A wallpaper change touches exactly one byte and wraps by the game's count. */

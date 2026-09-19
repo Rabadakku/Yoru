@@ -16,16 +16,24 @@ final class Gen3Text {
 
     static final int TERMINATOR = 0xFF, SPACE = 0x00;
 
-    /** Index is the byte value; the entry is the character it stands for. */
+    /**
+     * Index is the byte value; the entry is the character it stands for.
+     *
+     * '\0' marks a byte with no character here: {@link #read} shows it as '?',
+     * and {@link #encode} must never match it. Every other entry is distinct,
+     * so a name read from a save writes back as the same bytes. The ellipsis
+     * and the quotes are the game's own curly glyphs (pokeemerald's charmap):
+     * reading them as plain ASCII once made three pairs of bytes read alike,
+     * and a name holding one came back as a different name.
+     */
     private static final char[] TABLE = new char[256];
 
     static {
-        java.util.Arrays.fill(TABLE, '\0');
         TABLE[SPACE] = ' ';
         for (int i = 0; i < 10; i++) TABLE[0xA1 + i] = (char) ('0' + i);
         TABLE[0xAB] = '!'; TABLE[0xAC] = '?'; TABLE[0xAD] = '.'; TABLE[0xAE] = '-';
-        TABLE[0xB0] = '.';                       // the game's ellipsis glyph
-        TABLE[0xB1] = '"'; TABLE[0xB2] = '"'; TABLE[0xB3] = '\''; TABLE[0xB4] = '\'';
+        TABLE[0xB0] = '…';
+        TABLE[0xB1] = '“'; TABLE[0xB2] = '”'; TABLE[0xB3] = '‘'; TABLE[0xB4] = '’';
         TABLE[0xB5] = '♂'; TABLE[0xB6] = '♀';
         TABLE[0xB8] = ','; TABLE[0xBA] = '/';
         for (int i = 0; i < 26; i++) TABLE[0xBB + i] = (char) ('A' + i);
@@ -62,17 +70,41 @@ final class Gen3Text {
         }
     }
 
-    /** The stored byte for a character, or -1 when it has no equivalent. */
+    /**
+     * The stored byte for a character, or -1 when it has no equivalent.
+     *
+     * A typed apostrophe is the game's own, the one in FARFETCH'D, and a typed
+     * double quote opens a quotation: the game has no straight quotes.
+     */
     static int encode(char c) {
+        if (c == '\'') return 0xB4;
+        if (c == '"') return 0xB1;
+        if (c == '\0') return -1;                // the table's mark for "no character"
         for (int value = 0; value < TABLE.length; value++)
-            if (TABLE[value] == c && !(value == 0xB2 || value == 0xB4 || value == 0xB0))
-                return value;
+            if (TABLE[value] == c) return value;
         return -1;
     }
 
-    /** How long a name is, in stored bytes, before the terminator. */
-    static int length(byte[] bytes, int at, int limit) {
-        for (int i = 0; i < limit; i++) if ((bytes[at + i] & 0xFF) == TERMINATOR) return i;
-        return limit;
+    /** A name as {@link #write} stores it, in a field of {@code length} bytes. */
+    static byte[] bytes(String text, int length) {
+        var out = new byte[length];
+        write(text, out, 0, length);
+        return out;
+    }
+
+    /**
+     * A stored name's bytes, copied exactly up to its terminator and padded
+     * with terminators after it, as {@link #write} pads.
+     *
+     * Text cannot carry every byte a name may hold — one outside the table
+     * reads as '?' — so a name that must match the game's copy byte for byte
+     * is copied, never read and written again. The game reads no further than
+     * the terminator, so the padding changes nothing it compares.
+     */
+    static byte[] copy(byte[] bytes, int at, int length) {
+        var out = new byte[length];
+        java.util.Arrays.fill(out, (byte) TERMINATOR);
+        for (int i = 0; i < length && (bytes[at + i] & 0xFF) != TERMINATOR; i++) out[i] = bytes[at + i];
+        return out;
     }
 }

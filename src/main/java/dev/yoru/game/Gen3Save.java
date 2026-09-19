@@ -3,6 +3,7 @@ package dev.yoru.game;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * A Gen 3 battery save, read the way Emerald itself reads it.
@@ -257,19 +258,51 @@ public final class Gen3Save {
     /**
      * The player's own identity, as the save records it.
      *
-     * A Pokémon written with a different trainer id is a traded one: the game
-     * marks it as met elsewhere and, past a badge threshold, it disobeys. So
-     * anything Yoru delivers carries these exact values.
+     * A Pokémon written with a different trainer id or name is a traded one:
+     * the game marks it as met elsewhere and, past a badge threshold, it
+     * disobeys. So anything Yoru delivers carries these exact values.
+     *
+     * {@code storedName} is the name as a Pokémon record stores it, in seven
+     * bytes. The game compares those with the player's own byte for byte
+     * (IsOtherTrainer), and {@code name} cannot stand in for them — a byte the
+     * table has no character for reads as '?' — so a gift copies these.
      */
-    public record Trainer(String name, int gender, int publicId, int secretId, int playTimeMinutes) {
+    public record Trainer(String name, int gender, int publicId, int secretId, int playTimeMinutes,
+                          byte[] storedName) {
+        public Trainer {
+            if (storedName.length != Gen3Pokemon.OT_NAME_BYTES)
+                throw new IllegalArgumentException("A stored trainer name is " + Gen3Pokemon.OT_NAME_BYTES + " bytes");
+            storedName = storedName.clone();
+        }
+
+        /** A trainer no save holds: the name is stored as the game's alphabet writes it. */
+        public Trainer(String name, int gender, int publicId, int secretId, int playTimeMinutes) {
+            this(name, gender, publicId, secretId, playTimeMinutes, Gen3Text.bytes(name, Gen3Pokemon.OT_NAME_BYTES));
+        }
+
+        @Override public byte[] storedName() { return storedName.clone(); }
+
+        // A record compares an array by reference; two reads of one save are one trainer.
+        @Override public boolean equals(Object o) {
+            return o instanceof Trainer t && name.equals(t.name) && gender == t.gender && publicId == t.publicId
+                && secretId == t.secretId && playTimeMinutes == t.playTimeMinutes
+                && Arrays.equals(storedName, t.storedName);
+        }
+
+        @Override public int hashCode() {
+            return Objects.hash(name, gender, publicId, secretId, playTimeMinutes) * 31 + Arrays.hashCode(storedName);
+        }
+
         /** The full 32-bit value a Pokémon record stores as its OT id. */
         public int otId() { return (secretId << 16) | (publicId & 0xFFFF); }
     }
 
     public Trainer trainer() {
         byte[] s = sections[0];
+        // The game copies the first seven bytes of the player's name into each
+        // Pokémon it gives them (CreateBoxMon), so they are copied, not re-encoded.
         return new Trainer(Gen3Text.read(s, 0, 8), s[0x08] & 0xFF, u16(s, 0x0A), u16(s, 0x0C),
-            u16(s, 0x0E) * 60 + (s[0x10] & 0xFF));
+            u16(s, 0x0E) * 60 + (s[0x10] & 0xFF), Gen3Text.copy(s, 0, Gen3Pokemon.OT_NAME_BYTES));
     }
 
     /** Money, stored XOR the save's own encryption key. */
