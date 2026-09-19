@@ -81,15 +81,24 @@ public final class Gen3Fixture {
         return stamp(out, slot);
     }
 
-    /** Writes a party into section 1 in place. */
+    /**
+     * Writes a party into section 1 in place. The entries past it are left as
+     * the game leaves an empty one (ZeroMonData): zeros, with MAIL_NONE in the
+     * mail byte, so an edit that wipes that byte shows up against a fixture.
+     */
     public static byte[] withParty(byte[] raw, List<byte[]> records) {
         var out = raw.clone();
         int slot = Gen3Save.read(out).loadedSlot();
         int at = offsetOf(out, 1);
         out[at + Gen3Save.PARTY_COUNT_AT] = (byte) records.size();
-        for (int i = 0; i < records.size(); i++)
-            System.arraycopy(records.get(i), 0, out, at + Gen3Save.PARTY_AT + i * Gen3Pokemon.PARTY_SIZE,
-                Gen3Pokemon.PARTY_SIZE);
+        for (int i = 0; i < Gen3Save.PARTY_LIMIT; i++) {
+            int entry = at + Gen3Save.PARTY_AT + i * Gen3Pokemon.PARTY_SIZE;
+            if (i < records.size()) System.arraycopy(records.get(i), 0, out, entry, Gen3Pokemon.PARTY_SIZE);
+            else {
+                Arrays.fill(out, entry, entry + Gen3Pokemon.PARTY_SIZE, (byte) 0);
+                out[entry + Gen3Pokemon.MAIL_AT] = (byte) Gen3Pokemon.MAIL_NONE;
+            }
+        }
         return stamp(out, slot);
     }
 

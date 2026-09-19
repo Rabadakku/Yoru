@@ -311,7 +311,8 @@ public final class Gen3Pokemon {
     // ---- joining the party -------------------------------------------------
 
     public static final int SHEDINJA = 292;
-    static final int MAIL_NONE = 0xFF;
+    /** A party record's mail byte, and what it holds when there is no letter. */
+    static final int MAIL_AT = 0x55, MAIL_NONE = 0xFF;
 
     /**
      * The party record the game makes when a boxed Pokémon joins the party.
@@ -332,7 +333,7 @@ public final class Gen3Pokemon {
         var b = ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN);
         b.putInt(0x50, 0);
         b.put(0x54, (byte) level);
-        b.put(0x55, (byte) MAIL_NONE);
+        b.put(MAIL_AT, (byte) MAIL_NONE);
         b.putShort(0x56, (short) stats[0]);
         for (int i = 0; i < 6; i++) b.putShort(0x58 + i * 2, (short) stats[i]);
         return out;
