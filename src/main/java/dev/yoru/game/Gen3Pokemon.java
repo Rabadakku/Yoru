@@ -2,6 +2,7 @@ package dev.yoru.game;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 
 /**
  * One Pokémon as the Gen 3 games store it: 80 bytes, encrypted and shuffled.
@@ -338,6 +339,40 @@ public final class Gen3Pokemon {
         b.put(MAIL_AT, (byte) MAIL_NONE);
         b.putShort(0x56, (short) stats[0]);
         for (int i = 0; i < 6; i++) b.putShort(0x58 + i * 2, (short) stats[i]);
+        return out;
+    }
+
+    /**
+     * The box record the game makes when it places a Pokémon in a box.
+     *
+     * SetPlacedMonData runs BoxMonRestorePP before SetBoxMonAt, so every
+     * Pokémon put in a box — deposited, or dropped there by MOVE POKÉMON — has
+     * each move's PP refilled to what its PP Ups allow (CalculatePPWithBonus).
+     * The record is patched in place: only the PP bytes and the checksum can
+     * change, and every other byte the game wrote stays as it was, where
+     * {@link #encode} would derive some of them afresh.
+     *
+     * A record whose checksum fails is copied unchanged, as the game refills
+     * nothing in one either; so is the PP of a move this build has no PP for.
+     */
+    public static byte[] toBox(byte[] bytes, int at) {
+        byte[] out = Arrays.copyOfRange(bytes, at, at + BOX_SIZE);
+        if (!intact(out, 0)) return out;
+        var head = view(out, 0, BOX_SIZE);
+        int personality = head.getInt(0x00), otId = head.getInt(0x04);
+        var data = decrypt(out, 0x20, personality, otId);
+        var b = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
+        int g = offsetOf(personality, GROWTH), a = offsetOf(personality, ATTACKS);
+        int bonuses = b.get(g + 8) & 0xFF;
+        for (int i = 0; i < 4; i++) {
+            int base = Learnsets.pp(b.getShort(a + i * 2) & 0xFFFF);
+            if (base == 0) continue;           // no move there, or one past this build's table
+            int ups = (bonuses >>> (2 * i)) & 3;
+            b.put(a + 8 + i, (byte) (base + base * 20 * ups / 100));
+        }
+        head.putShort(0x1C, (short) checksum(data));
+        encrypt(data, personality, otId);
+        System.arraycopy(data, 0, out, 0x20, DATA_SIZE);
         return out;
     }
 

@@ -108,6 +108,84 @@ public final class StorageEditTest {
             "the entry the party let go of is emptied as the game empties one, no-mail byte and all");
     }
 
+    /** A record with Growth's two unused bytes set, which encode never writes, and its checksum made good. */
+    private static byte[] withGrowthFiller(byte[] record) {
+        var out = record.clone();
+        int personality = (int) Gen3Save.u32(out, 0), otId = (int) Gen3Save.u32(out, 4);
+        byte[] data = Gen3Pokemon.decrypt(out, 0x20, personality, otId);
+        int growth = Gen3Pokemon.offsetOf(personality, 0);
+        data[growth + 10] = 0x5A;
+        data[growth + 11] = (byte) 0xA5;
+        Gen3Save.putU16(out, 0x1C, Gen3Pokemon.checksum(data));
+        Gen3Pokemon.encrypt(data, personality, otId);
+        System.arraycopy(data, 0, out, 0x20, Gen3Pokemon.DATA_SIZE);
+        return out;
+    }
+
+    /**
+     * The game refills PP whenever it puts a Pokémon in a box (SetPlacedMonData
+     * runs BoxMonRestorePP), PP Ups included, so a deposit here does too — and
+     * changes nothing else in the record, not even bytes encode would not write.
+     */
+    private static void aBoxRefillsPp() {
+        var raw = save();
+        var start = Gen3Save.read(raw);
+        // The Pikachu at 9 knows Growl (40 PP), Thunder Shock (30), Tail Whip (30)
+        // and Thunder Wave (20). Three PP Ups on Growl make 40 + 40*20*3/100 = 64;
+        // two on Thunder Shock make 30 + 30*20*2/100 = 42.
+        var spent = withGrowthFiller(altered(start.partyRecord(1), mon -> {
+            java.util.Arrays.fill(mon.pp, 0);
+            mon.ppBonuses = 0b00_00_10_11;
+        }));
+        check(java.util.Arrays.equals(Gen3Pokemon.decode(spent, 0).moves, new int[]{45, 84, 39, 86}),
+            "the fixture knows the moves this check works from");
+        var tired = Gen3Save.read(raw);
+        tired.party(List.of(start.partyRecord(0), spent));
+        var before = tired.bytes();
+
+        var deposited = Gen3Save.read(StorageEdit.move(before, party(1), box(4, 9)));
+        int at = Gen3Save.slotOffset(4, 9);
+        var boxed = deposited.boxed(deposited.storage(), 4, 9);
+        check(java.util.Arrays.equals(boxed.pp, new int[]{64, 42, 30, 20}),
+            "a deposit refills every move's PP as far as its PP Ups allow, got " + java.util.Arrays.toString(boxed.pp));
+        check(Gen3Pokemon.intact(deposited.storage(), at), "and the record still checksums");
+
+        byte[] record = java.util.Arrays.copyOfRange(deposited.storage(), at, at + Gen3Pokemon.BOX_SIZE);
+        check(java.util.Arrays.equals(record, 0, 0x1C, spent, 0, 0x1C)
+                && java.util.Arrays.equals(record, 0x1E, 0x20, spent, 0x1E, 0x20),
+            "the clear header is the party record's, byte for byte");
+        int personality = boxed.personality, otId = boxed.otId;
+        byte[] was = Gen3Pokemon.decrypt(spent, 0x20, personality, otId);
+        byte[] now = Gen3Pokemon.decrypt(record, 0x20, personality, otId);
+        int ppAt = Gen3Pokemon.offsetOf(personality, 1) + 8;
+        boolean onlyPp = true;
+        for (int i = 0; i < Gen3Pokemon.DATA_SIZE; i++)
+            if (i < ppAt || i >= ppAt + 4) onlyPp &= was[i] == now[i];
+        check(onlyPp, "and underneath, only the four PP bytes differ: Growth's unused bytes survive");
+
+        // A swap sends the displaced party member into the box: it is refilled too.
+        var withBoxed = Gen3Save.read(before);
+        var storage = withBoxed.storage();
+        var planted = Gen3Pokemon.decodeFromParty(Gen3Fixture.member(raw, 280, 7, 3), 0).encode();
+        System.arraycopy(planted, 0, storage, Gen3Save.slotOffset(5, 0), Gen3Pokemon.BOX_SIZE);
+        withBoxed.storage(storage);
+        var swapped = Gen3Save.read(StorageEdit.move(withBoxed.bytes(), box(5, 0), party(1)));
+        check(java.util.Arrays.equals(swapped.boxed(swapped.storage(), 5, 0).pp, new int[]{64, 42, 30, 20}),
+            "a party member swapped into a box is refilled as well");
+        check(java.util.Arrays.equals(swapped.party().get(1).pp, Gen3Pokemon.decode(planted, 0).pp),
+            "while the one joining the party keeps its PP, as a withdrawal does");
+
+        // Box to box goes through the same placement in the game, so a record
+        // left with spent PP (by an older build's deposit) is refilled when moved.
+        var shelved = Gen3Save.read(before);
+        var shelf = shelved.storage();
+        System.arraycopy(spent, 0, shelf, Gen3Save.slotOffset(6, 0), Gen3Pokemon.BOX_SIZE);
+        shelved.storage(shelf);
+        var moved = Gen3Save.read(StorageEdit.move(shelved.bytes(), box(6, 0), box(6, 1)));
+        check(java.util.Arrays.equals(moved.boxed(moved.storage(), 6, 1).pp, new int[]{64, 42, 30, 20}),
+            "a Pokémon moved from box to box is refilled too");
+    }
+
     /** Dropping onto an occupied party position swaps the two. */
     private static void swapsWithAPartyMember() {
         var raw = save();
@@ -439,6 +517,7 @@ public final class StorageEditTest {
         swapsOntoAnOccupiedSlot();
         movesIntoTheParty();
         depositsFromTheParty();
+        aBoxRefillsPp();
         swapsWithAPartyMember();
         reordersTheParty();
         refusesTheImpossible();
@@ -450,6 +529,6 @@ public final class StorageEditTest {
         keepsOneAbleToBattle();
         keepsMailOutOfTheBoxes();
         anyEmptyPartyCellAddsToTheEnd();
-        System.out.println("PASS: " + checks + " storage edit checks (moves, swaps, reorder, renames, wallpapers, verifier refusals)");
+        System.out.println("PASS: " + checks + " storage edit checks (moves, swaps, reorder, PP in boxes, renames, wallpapers, verifier refusals)");
     }
 }
