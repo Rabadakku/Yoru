@@ -112,8 +112,7 @@ public final class Gen3Pokemon {
 
     /** Reads an 80-byte box entry (or the first 80 bytes of a party entry). */
     public static Gen3Pokemon decode(byte[] bytes, int at) {
-        var buffer = ByteBuffer.wrap(bytes, at, BOX_SIZE).order(ByteOrder.LITTLE_ENDIAN).slice()
-            .order(ByteOrder.LITTLE_ENDIAN);
+        var buffer = view(bytes, at, BOX_SIZE);
         var p = new Gen3Pokemon();
         p.personality = buffer.getInt(0x00);
         p.otId = buffer.getInt(0x04);
@@ -131,8 +130,7 @@ public final class Gen3Pokemon {
 
     /** Whether the stored checksum agrees with the data it covers. */
     public static boolean intact(byte[] bytes, int at) {
-        var buffer = ByteBuffer.wrap(bytes, at, BOX_SIZE).order(ByteOrder.LITTLE_ENDIAN).slice()
-            .order(ByteOrder.LITTLE_ENDIAN);
+        var buffer = view(bytes, at, BOX_SIZE);
         int personality = buffer.getInt(0x00), otId = buffer.getInt(0x04);
         int stored = buffer.getShort(0x1C) & 0xFFFF;
         return stored == checksum(decrypt(bytes, at + 0x20, personality, otId));
@@ -182,8 +180,7 @@ public final class Gen3Pokemon {
     /** Reads a 100-byte party entry. */
     public static Gen3Pokemon decodeFromParty(byte[] bytes, int at) {
         var p = decode(bytes, at);
-        var buffer = ByteBuffer.wrap(bytes, at, PARTY_SIZE).order(ByteOrder.LITTLE_ENDIAN).slice()
-            .order(ByteOrder.LITTLE_ENDIAN);
+        var buffer = view(bytes, at, PARTY_SIZE);
         p.status = buffer.getInt(0x50);
         p.level = buffer.get(0x54) & 0xFF;
         p.mail = buffer.get(0x55) & 0xFF;
@@ -195,6 +192,11 @@ public final class Gen3Pokemon {
         p.spAttack = buffer.getShort(0x60) & 0xFFFF;
         p.spDefense = buffer.getShort(0x62) & 0xFFFF;
         return p;
+    }
+
+    /** A little-endian window onto {@code size} bytes from {@code at}, indexed from zero. */
+    private static ByteBuffer view(byte[] bytes, int at, int size) {
+        return ByteBuffer.wrap(bytes, at, size).slice().order(ByteOrder.LITTLE_ENDIAN);
     }
 
     // ---- encryption and shuffling ----------------------------------------
@@ -359,10 +361,14 @@ public final class Gen3Pokemon {
     /**
      * ModifyStatByNature. Stat indices 1 to 5 are Attack, Defense, Speed,
      * Sp. Atk and Sp. Def; nature n raises stat n / 5 + 1 and lowers
-     * n % 5 + 1, which is exactly gNatureStatTable. The game multiplies and
-     * divides in a 32-bit signed value, so the product is not truncated: a
-     * stat big enough to overflow sixteen bits would otherwise be divided
-     * from its wrapped remainder and come out far too small.
+     * n % 5 + 1, which is exactly gNatureStatTable.
+     *
+     * The cartridge keeps the product in sixteen bits (a u16 in pokeemerald
+     * unless BUGFIX is defined), so a raised stat above 595 or a lowered one
+     * above 728 would wrap there. No Emerald stat reaches that — the highest a
+     * nature touches is Shuckle's 559 Defense — so Yoru keeps the whole
+     * product, as the BUGFIX build does, and agrees with the game on every
+     * stat the game can produce.
      */
     static int byNature(int nature, int stat, int statIndex) {
         int raised = nature / 5 + 1, lowered = nature % 5 + 1;
@@ -390,7 +396,6 @@ public final class Gen3Pokemon {
     public boolean isEgg() { return ((ivsEggAbility >>> 30) & 1) == 1; }
     /** Set by the game when a record fails its checksum on access. */
     public boolean badEgg() { return (flags & 0x01) != 0; }
-    public int abilitySlot() { return (ivsEggAbility >>> 31) & 1; }
 
     /** True when the personality makes this one shiny for its trainer. */
     public boolean shiny() {
