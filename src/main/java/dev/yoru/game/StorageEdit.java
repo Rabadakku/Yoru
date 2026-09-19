@@ -39,7 +39,9 @@ public final class StorageEdit {
      *
      * The game's own refusals apply (pokemon_storage_system.c): the party must
      * keep a Pokémon able to battle — hatched, with HP left — and a Pokémon
-     * holding Mail never goes into a box.
+     * holding Mail never goes into a box. So does what it does on the way: a
+     * Pokémon put in a box has its PP refilled, and one joining the party has
+     * its stats worked out afresh.
      */
     public static byte[] move(byte[] before, Place from, Place to) {
         Objects.requireNonNull(from);
@@ -69,14 +71,12 @@ public final class StorageEdit {
         if (!to.party() && !from.party()) {
             int toAt = Gen3Save.slotOffset(to.box(), to.slot());
             int fromAt = Gen3Save.slotOffset(from.box(), from.slot());
-            writeSlot(storage, toAt, moving);
-            wantedSlots.put(toAt, moving);
+            place(storage, toAt, moving, wantedSlots);
             if (target == null) { clearSlot(storage, fromAt); wantedSlots.put(fromAt, null); }
-            else { writeSlot(storage, fromAt, target); wantedSlots.put(fromAt, target); }
+            else place(storage, fromAt, target, wantedSlots);
         } else if (!to.party()) {
             int toAt = Gen3Save.slotOffset(to.box(), to.slot());
-            writeSlot(storage, toAt, moving);
-            wantedSlots.put(toAt, moving);
+            place(storage, toAt, moving, wantedSlots);
             partyLoss.merge(identity(moving), 1, Integer::sum);
             if (target == null) party.remove(from.slot());
             else { party.set(from.slot(), Gen3Pokemon.toParty(target, 0)); partyGain.merge(identity(target), 1, Integer::sum); partyDerivedFrom.put(identity(target), target); }
@@ -89,8 +89,7 @@ public final class StorageEdit {
                 wantedSlots.put(fromAt, null);
             } else {
                 party.set(index, Gen3Pokemon.toParty(moving, 0));
-                writeSlot(storage, fromAt, target);
-                wantedSlots.put(fromAt, target);
+                place(storage, fromAt, target, wantedSlots);
                 partyLoss.merge(identity(target), 1, Integer::sum);
             }
             partyGain.merge(identity(moving), 1, Integer::sum);
@@ -181,18 +180,25 @@ public final class StorageEdit {
     /** The Pokémon at a place, box-encoded, or null when the place is empty. */
     private static byte[] boxFormAt(List<byte[]> party, byte[] storage, Place place) {
         if (place.party())
-            // The box form is the first 80 bytes of the party record, exactly as
-            // the game's MonToBoxMon copies them. Copying rather than re-encoding
-            // means a deposit is pinned to its source bytes, not to encode's idea
-            // of them.
+            // The box form is the first 80 bytes of the party record, the part
+            // the game keeps when it puts a Pokémon in a box. Copying rather
+            // than re-encoding means a deposit is pinned to its source bytes,
+            // not to encode's idea of them; place() then refills only its PP.
             return place.slot() >= 0 && place.slot() < party.size()
                 ? Arrays.copyOf(party.get(place.slot()), Gen3Pokemon.BOX_SIZE) : null;
         int at = Gen3Save.slotOffset(place.box(), place.slot());
         return Gen3Save.empty(storage, at) ? null : Arrays.copyOfRange(storage, at, at + Gen3Pokemon.BOX_SIZE);
     }
 
-    private static void writeSlot(byte[] storage, int at, byte[] record) {
-        System.arraycopy(record, 0, storage, at, Gen3Pokemon.BOX_SIZE);
+    /**
+     * Puts a Pokémon in a box slot as the game's SetPlacedMonData does, with
+     * its PP refilled ({@link Gen3Pokemon#toBox}), and records the exact bytes
+     * the slot must then hold.
+     */
+    private static void place(byte[] storage, int at, byte[] boxForm, Map<Integer, byte[]> wantedSlots) {
+        byte[] placed = Gen3Pokemon.toBox(boxForm, 0);
+        System.arraycopy(placed, 0, storage, at, Gen3Pokemon.BOX_SIZE);
+        wantedSlots.put(at, placed);
     }
 
     private static void clearSlot(byte[] storage, int at) {
@@ -225,11 +231,11 @@ public final class StorageEdit {
      * gained or lost must match partyGain minus partyLoss exactly, with every
      * surviving record's checksum intact.
      *
-     * A deposit is a plain byte copy, so its slot is pinned against the source
-     * bytes it came from. A withdrawal is the one place a move re-derives
-     * anything — the game recalculates level and stats when a boxed Pokémon
-     * joins the party — and the substructure checksum does not cover those
-     * fields. So every gained member is re-derived here from the box record in
+     * A placement in a box is its source record with the PP refilled in place,
+     * so its slot is pinned to exactly those bytes. A withdrawal re-derives
+     * more — the game recalculates level and stats when a boxed Pokémon joins
+     * the party — and the substructure checksum does not cover those fields.
+     * So every gained member is re-derived here from the box record in
      * partyDerivedFrom and compared across all 100 bytes, not just its
      * identity and checksum.
      *
