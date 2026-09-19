@@ -596,6 +596,248 @@ public final class VaultStoreTest {
         }
     }
 
+    // ---- what an open, closed or odd vault may not do ------------------------
+
+    /**
+     * A vault that was closed has wiped its key, so a write through it would
+     * seal the vault under a key of zeros — one nothing can open again, and one
+     * the app then cannot delete either, since deleting asks for an unlock
+     * first. Every writer refuses instead, and closing twice is harmless.
+     */
+    private static void aClosedVaultRefusesToWrite(Path dir) throws Exception {
+        var store = new VaultStore(dir);
+        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var vault = store.create("School", PASSWORD.toCharArray());
+        vault.save(invented);
+        vault.close();
+        var bytes = Files.readAllBytes(store.path("School"));
+
+        refused(() -> vault.save(State.empty()), "a save through a vault that was closed");
+        refused(vault::backup, "a backup through a vault that was closed");
+        char[] secret = INVENTED_KEY.toCharArray();
+        refused(() -> vault.changeSecret(secret, invented), "a new secret for a vault that was closed");
+        check(new String(secret).chars().allMatch(c -> c == 0), "and the secret handed in is wiped all the same");
+        boolean closedTwice = true;
+        try { vault.close(); } catch (Exception e) { closedTwice = false; }
+        check(closedTwice, "closing a vault a second time does nothing");
+
+        check(Arrays.equals(Files.readAllBytes(store.path("School")), bytes), "the file is exactly as it was");
+        check(store.backups("School").length == 0, "and no backup was written");
+        try (var reopened = store.open("School", PASSWORD.toCharArray())) {
+            check(reopened.load().equals(invented), "the vault still opens with its password and everything in it");
+        }
+    }
+
+    /**
+     * A vault open in another window is not renamed or deleted under it. That
+     * window goes on saving to the name it opened, so a rename would leave two
+     * vaults — the renamed one stale — and a delete would take what it is
+     * still writing to.
+     */
+    private static void anOpenVaultIsNotMovedOutFromUnderIt(Path dir) throws Exception {
+        var store = new VaultStore(dir);
+        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        try (var vault = store.createPasswordless("School")) {
+            vault.save(invented);
+            vault.backup();
+            String message = null;
+            try { store.rename("School", "University"); } catch (IOException e) { message = e.getMessage(); }
+            check(message != null && message.contains("School"),
+                "renaming a vault that is open elsewhere is refused, and says which, got " + message);
+            refused(() -> store.delete("School"), "deleting a vault that is open elsewhere");
+            check(store.names().equals(List.of("School")) && store.passwordless("School")
+                    && store.backups("School").length == 1,
+                "nothing of it moved, got " + namesOf(dir));
+            vault.save(invented);
+        }
+        check(store.names().equals(List.of("School")), "and its next save left one vault, not two");
+        check(namesOf(dir).stream().noneMatch(n -> n.startsWith(".deleting")), "with nothing staged");
+        store.rename("School", "University");
+        check(store.names().equals(List.of("University")), "once it is closed it can be renamed");
+        try (var vault = store.open("University")) {
+            check(vault.load().equals(invented), "with everything in it");
+        }
+        store.delete("University");
+        check(store.names().isEmpty() && namesOf(dir).stream().noneMatch(n -> n.startsWith("University")),
+            "and deleted, lock and all, got " + namesOf(dir));
+    }
+
+    /**
+     * A delete that could not put everything back leaves the copies it made
+     * staged — for a password-free vault, perhaps the only copy of its key. A
+     * second delete asked for before the next start must not clear them away.
+     */
+    private static void aSecondDeleteKeepsWhatTheFirstLeftStaged(Path dir) throws Exception {
+        var store = new VaultStore(dir);
+        var invented = contents(null, "Study", 30);
+        try (var vault = store.createPasswordless("School")) { vault.save(invented); }
+        // The first delete put the vault back and could not put its key back.
+        stageEverything(dir, "School");
+        Path key = LocalAccess.keyPath(store.path("School"));
+        Path stagedKey = dir.resolve(".deleting").resolve("School").resolve(key.getFileName());
+        var keyBytes = Files.readAllBytes(key);
+        Files.delete(key);
+
+        String message = null;
+        try { store.delete("School"); } catch (IOException e) { message = e.getMessage(); }
+        check(message != null && message.contains("School"),
+            "a second delete is refused while the first one's copies are staged, got " + message);
+        check(Files.exists(stagedKey) && Arrays.equals(Files.readAllBytes(stagedKey), keyBytes),
+            "and the staged key, the only copy there is, survives it");
+        check(store.exists("School"), "the vault is untouched");
+
+        new VaultStore(dir).reconcile();
+        check(store.passwordless("School"), "the next start puts the key back beside its vault");
+        try (var vault = store.open("School")) {
+            check(vault.load().equals(invented), "which opens with everything in it");
+        }
+        store.delete("School");
+        check(store.names().isEmpty(), "and the delete can then go ahead");
+    }
+
+    /**
+     * What goes wrong is said without saying where the vaults are: these
+     * messages reach dialogs people screenshot when they ask for help, and the
+     * file system's own messages are the paths on this machine.
+     */
+    private static void errorsDoNotSayWhereTheVaultsAre(Path dir) throws Exception {
+        var store = new VaultStore(dir);
+        try (var vault = store.create("Delta", PASSWORD.toCharArray())) {
+            vault.save(State.empty());
+            vault.backup();
+        }
+        // A folder where the renamed backup has to go makes the file system refuse the move.
+        String backup = store.backups("Delta")[0].getFileName().toString();
+        Path inTheWay = dir.resolve("Epsilon" + backup.substring("Delta".length()));
+        Files.createDirectories(inTheWay.resolve("inside"));
+        String message = null;
+        try { store.rename("Delta", "Epsilon"); } catch (IOException e) { message = e.getMessage(); }
+        check(message != null && message.contains("Delta"), "a rename the disk refuses says which vault, got " + message);
+        check(!message.contains(dir.toString()) && !message.contains("/") && !message.contains("\\"),
+            "and not where it is, got " + message);
+        check(store.exists("Delta") && !store.exists("Epsilon"), "and it kept its old name");
+        deleteTree(inTheWay);
+
+        check(VaultStore.reason(new java.nio.file.FileSystemException("/invented/a", "/invented/b", "Is a directory"))
+            .equals("Is a directory."), "the file system's reason is kept");
+        check(!VaultStore.reason(new java.nio.file.AccessDeniedException("/invented/a")).contains("/"),
+            "and its paths are not");
+        check(!VaultStore.reason(new IOException("/invented/a: No space left on device")).contains("/"),
+            "nor a path in any other message");
+
+        if (Files.getFileStore(dir).supportsFileAttributeView("posix")) {
+            var normal = Files.getPosixFilePermissions(dir);
+            try (var vault = store.open("Delta", PASSWORD.toCharArray())) {
+                Files.setPosixFilePermissions(dir, java.nio.file.attribute.PosixFilePermissions.fromString("r-x------"));
+                String saving = null;
+                try { vault.save(State.empty()); } catch (IOException e) { saving = e.getMessage(); }
+                finally { Files.setPosixFilePermissions(dir, normal); }
+                check(saving != null && !saving.contains(dir.toString()) && !saving.contains("/"),
+                    "a save the folder refuses does not say where the folder is, got " + saving);
+            }
+        }
+    }
+
+    /**
+     * Sixty letters is a length, not a size. A letter outside the basic planes
+     * takes four bytes on the disk, and forty-eight of them leave no room for
+     * the suffix a backup adds to the name — a vault whose every backup, and so
+     * every change that takes one first, would fail. A new name is refused
+     * before that; a vault already filed under one is still listed and opened.
+     */
+    private static void aNameTooLongForTheDiskIsRefused(Path dir) throws Exception {
+        var store = new VaultStore(dir);
+        String bold = "𝐀";   // a mathematical bold capital A: one letter, four bytes
+        String tooLong = bold.repeat(48), longest = bold.repeat(45);
+        refused(() -> store.create(tooLong, PASSWORD.toCharArray()), "a name too long for the disk");
+        refused(() -> store.createPasswordless(tooLong), "a password-free vault under a name too long for the disk");
+        check(store.names().isEmpty(), "and nothing was made, got " + namesOf(dir));
+
+        try (var vault = store.create(longest, PASSWORD.toCharArray())) {
+            vault.save(State.empty());
+            vault.backup();
+        }
+        check(store.backups(longest).length == 1, "a name at the limit still has room for its backups");
+        refused(() -> store.rename(longest, tooLong), "renaming onto a name too long for the disk");
+        check(store.exists(longest), "which leaves the vault where it was");
+
+        // A vault an earlier build filed under such a name keeps working.
+        Files.copy(store.path(longest), dir.resolve(tooLong + ".vault"));
+        check(store.names().contains(tooLong), "a vault already under a longer name is still listed");
+        try (var vault = store.open(tooLong, PASSWORD.toCharArray())) {
+            check(vault.load().equals(State.empty()), "and still opens");
+        }
+    }
+
+    /**
+     * On a disk that does not tell letter case apart — the default on macOS and
+     * Windows — "study" is already at "Study", because it is the same file. A
+     * rename that only changes the case is the vault being renamed, not one in
+     * the way. Skipped where the disk does tell case apart.
+     */
+    private static void aRenameThatOnlyChangesCaseGoesThrough(Path dir) throws Exception {
+        Path probe = Files.createFile(dir.resolve("case-probe"));
+        boolean caseBlind = Files.exists(dir.resolve("CASE-PROBE"));
+        Files.delete(probe);
+        if (!caseBlind) return;
+
+        var store = new VaultStore(dir);
+        var invented = contents(null, "Study", 30);
+        try (var vault = store.createPasswordless("study")) {
+            vault.save(invented);
+            vault.backup();
+        }
+        store.rename("study", "Study");
+        check(store.names().equals(List.of("Study")), "the vault is listed under its new case, got " + store.names());
+        check(namesOf(dir).stream().noneMatch(n -> n.startsWith("study")),
+            "and nothing is left under the old one, got " + namesOf(dir));
+        check(store.passwordless("Study") && store.backups("Study").length == 1, "its key and backup came with it");
+        try (var vault = store.open("Study")) {
+            check(vault.load().equals(invented), "with everything in it");
+        }
+    }
+
+    /**
+     * Seals a file the way a vault is sealed, but larger than any vault Yoru
+     * writes. The test knows the format so the size, not the seal, is what is
+     * being checked.
+     */
+    private static void sealOversized(Path file, char[] secret) throws Exception {
+        byte[] salt = new byte[16];
+        new java.security.SecureRandom().nextBytes(salt);
+        var spec = new javax.crypto.spec.PBEKeySpec(secret, salt, 600_000, 256);
+        byte[] key = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+        byte[] header = java.nio.ByteBuffer.allocate(24).putInt(0x594F5255).putInt(1).put(salt).array();
+        byte[] nonce = new byte[12];
+        new java.security.SecureRandom().nextBytes(nonce);
+        var cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(key, "AES"),
+            new javax.crypto.spec.GCMParameterSpec(128, nonce));
+        cipher.updateAAD(header);
+        byte[] sealed = cipher.doFinal(new byte[32_000_000]);
+        try (var out = Files.newOutputStream(file)) {
+            out.write(header);
+            out.write(nonce);
+            out.write(sealed);
+        }
+    }
+
+    /**
+     * A file larger than any vault is not read whole to test a key against it.
+     * The constructor already refused one; the check a recovery runs at every
+     * start did not, and a stray multi-gigabyte file there would end the app
+     * before the welcome screen.
+     */
+    private static void aFileTooLargeToBeAVaultIsNotRead(Path dir) throws Exception {
+        sealOversized(dir.resolve("Huge.vault"), INVENTED_KEY.toCharArray());
+        check(!EncryptedVault.opens(dir.resolve("Huge.vault"), INVENTED_KEY.toCharArray()),
+            "a file larger than any vault is not one, whatever it is sealed with");
+        Files.writeString(dir.resolve("Gone.vault.local-key"), INVENTED_KEY);
+        var recovered = new VaultStore(dir).reconcile();
+        check(recovered.empty(), "so a stray key is not handed to it, got " + recovered);
+        check(Files.exists(dir.resolve("Gone.vault.local-key")), "and is left where it was");
+    }
+
     // ---- what a deletion removes, in words -----------------------------------
 
     /** The confirmation's words name everything that goes, with the counts. */
@@ -746,6 +988,13 @@ public final class VaultStoreTest {
             aLeftoverKeyIsRefusedRatherThanTrapped(fresh(root, "leftover-key"));
             aKeyMadeForAVaultThatNeverCameIsTakenBack(fresh(root, "half-made"));
             onlyNamesTheAppCanUseAreListed(fresh(root, "listed-names"));
+            aClosedVaultRefusesToWrite(fresh(root, "closed"));
+            anOpenVaultIsNotMovedOutFromUnderIt(fresh(root, "open-elsewhere"));
+            aSecondDeleteKeepsWhatTheFirstLeftStaged(fresh(root, "delete-again"));
+            errorsDoNotSayWhereTheVaultsAre(fresh(root, "no-paths"));
+            aNameTooLongForTheDiskIsRefused(fresh(root, "long-name"));
+            aRenameThatOnlyChangesCaseGoesThrough(fresh(root, "case"));
+            aFileTooLargeToBeAVaultIsNotRead(fresh(root, "too-large"));
             contentsSayWhatWouldBeDeleted();
             migratesOlderVaultsWithoutLoss(fresh(root, "migrate"), fresh(root, "migrate-old"));
             migrationIsIdempotent(fresh(root, "idempotent"), fresh(root, "idempotent-old"));
