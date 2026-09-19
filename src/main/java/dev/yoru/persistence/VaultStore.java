@@ -4,8 +4,16 @@ import dev.yoru.domain.Model.State;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -29,25 +37,36 @@ import java.util.List;
  * so the worst a kill can leave is an orphan key rather than a vault nothing can
  * open. A delete copies — and proves, and flushes — the copy before it removes
  * anything, and puts the copies back if a removal fails, so a failed deletion
- * leaves the vault exactly as it was rather than half gone.
+ * leaves the vault exactly as it was rather than half gone. Both hold the
+ * vault's lock while they work, so a vault open in another window is refused
+ * rather than moved out from under it.
  *
  * A kill between two moves cannot be walked back in process, so {@link
- * #reconcile()} recognises the two shapes one leaves — an unfinished delete and
- * a key separated from its vault — and puts them right before the vaults are
- * listed.
+ * #reconcile()} recognises the shapes one leaves — an unfinished delete, a key
+ * separated from its vault, and a password removal that stopped part way — and
+ * puts them right before the vaults are listed.
  */
 public class VaultStore {
 
     /** The suffix every vault file carries. */
     public static final String SUFFIX = ".vault";
-    /** What an unlock key beside a vault is called the rest of. */
-    private static final String KEY_SUFFIX = ".local-key";
+    /**
+     * What a new unlock key is called the rest of until the vault it is for has
+     * been re-encrypted under it. Nothing reads a file with this ending as a key.
+     */
+    private static final String PENDING = ".pending";
     /** The folder Yoru chose for this machine's vaults: its own, under the user's Yoru folder. */
     private static final String FOLDER = "vaults";
     /** Where a deletion stages its copies until the original is gone. */
     private static final String STAGING = ".deleting";
     /** A vault name: letters, digits, spaces, underscores and dashes, 1 to 60. */
     private static final String VALID = "[\\p{L}\\p{N} _-]{1,60}";
+    /**
+     * The most bytes a new name may take on the disk. File systems allow 255 in
+     * one name, and the longest one Yoru files beside a vault — a migration
+     * backup set aside as stale — adds 71 to the vault's own name.
+     */
+    private static final int MAX_NAME_BYTES = 180;
 
     private final Path root;
 
@@ -92,6 +111,22 @@ public class VaultStore {
         return name != null && name.equals(name.strip()) && name.matches(VALID);
     }
 
+    /**
+     * Refuses a name the disk can hold as a vault but not as everything filed
+     * beside one.
+     *
+     * Sixty letters is a length, not a size: a letter outside the basic planes
+     * takes four bytes, and forty-eight of them leave a vault whose every backup
+     * fails for a name that is too long — and with it every change that takes a
+     * backup first. Only a name being taken for the first time is held to this.
+     * {@link #validate} is not, because a vault already filed under a longer
+     * name has to keep being listed and opened on the disk that holds it.
+     */
+    private static void requireStorable(String name) {
+        if (name.getBytes(StandardCharsets.UTF_8).length > MAX_NAME_BYTES)
+            throw new IllegalArgumentException("That name is too long for this disk; use fewer or simpler characters.");
+    }
+
     public Path root() {
         return root;
     }
@@ -104,7 +139,16 @@ public class VaultStore {
     public Path[] backups(String name) {
         String prefix = validate(name) + SUFFIX;
         if (!Files.isDirectory(root)) return new Path[0];
-        try (var files = Files.list(root)) {
+        try {
+            return backupsIn(root, prefix);
+        } catch (IOException e) {
+            return new Path[0];
+        }
+    }
+
+    /** The encrypted backups in a folder that start with this prefix, oldest name first. */
+    private static Path[] backupsIn(Path dir, String prefix) throws IOException {
+        try (var files = Files.list(dir)) {
             return files.filter(Files::isRegularFile)
                 .map(Path::getFileName)
                 .filter(file -> {
@@ -112,10 +156,8 @@ public class VaultStore {
                     return text.startsWith(prefix) && text.endsWith(".bak");
                 })
                 .sorted()
-                .map(root::resolve)
+                .map(dir::resolve)
                 .toArray(Path[]::new);
-        } catch (IOException e) {
-            return new Path[0];
         }
     }
 
@@ -160,6 +202,7 @@ public class VaultStore {
     /** Creates a vault under a name nothing is using yet. */
     public EncryptedVault create(String name, char[] password) throws IOException {
         name = validate(name);
+        requireStorable(name);
         requireFree(name);
         Files.createDirectories(root);
         return new EncryptedVault(path(name), password);
@@ -172,6 +215,7 @@ public class VaultStore {
      */
     public EncryptedVault createPasswordless(String name) throws IOException {
         name = validate(name);
+        requireStorable(name);
         requireFree(name);
         Files.createDirectories(root);
         Path vault = path(name);
@@ -201,8 +245,16 @@ public class VaultStore {
     }
 
     public EncryptedVault open(String name, char[] password) throws IOException {
-        Path vault = path(name);
-        if (!Files.isRegularFile(vault)) throw new IOException("There is no vault called \"" + validate(name) + "\".");
+        Path vault;
+        try {
+            vault = requireVault(name);
+        } catch (IOException | RuntimeException e) {
+            // EncryptedVault wipes the password whatever happens to it, so a
+            // refusal before it is reached has to wipe it too: the callers hand
+            // over a copy and never see it again.
+            Arrays.fill(password, '\0');
+            throw e;
+        }
         return new EncryptedVault(vault, password);
     }
 
@@ -221,9 +273,19 @@ public class VaultStore {
      * have to open it again — the key is beside the vault, never in the app.
      */
     public char[] secretOf(String name) throws IOException {
+        return LocalAccess.read(requireVault(name));
+    }
+
+    /** The vault filed under a name, or the refusal every operation here gives when there is none. */
+    private Path requireVault(String name) throws IOException {
         Path vault = path(name);
         if (!Files.isRegularFile(vault)) throw new IOException("There is no vault called \"" + validate(name) + "\".");
-        return LocalAccess.read(vault);
+        return vault;
+    }
+
+    /** Where a vault's new unlock key waits while the vault is re-encrypted under it. */
+    private static Path pendingKey(Path vault) {
+        return Path.of(LocalAccess.keyPath(vault) + PENDING);
     }
 
     /**
@@ -233,24 +295,48 @@ public class VaultStore {
      * The vault is handed in already open. Only a vault somebody has opened has
      * proved its password, and a change made while the app is running has to
      * write the state that is on screen rather than the one last read off the
-     * disk. The unlock key is written first and taken back if the re-encryption
-     * fails, so the one shape this class refuses to let anything else land on —
-     * a key beside a vault it cannot open — is never left behind.
+     * disk.
+     *
+     * The one shape this class refuses to let anything else land on is a key
+     * beside a vault it cannot open: the vault would be listed as password-free
+     * and never again asked for the password that does open it. So the new key
+     * is written and flushed under a name nothing reads as a key, the vault is
+     * re-encrypted under it, and only then is it moved to the name that says the
+     * vault has no password. A failure before that takes the key back, and the
+     * vault still opens with the password it had. A kill leaves the key under
+     * its waiting name, which {@link #reconcile()} finishes on the next start.
      *
      * @return the vault's new unlock secret, for the session that has to keep it
      */
     public char[] removePassword(String name, EncryptedVault vault, State state) throws IOException {
         name = validate(name);
-        if (!exists(name)) throw new IOException("There is no vault called \"" + name + "\".");
+        Path file = requireVault(name);
         if (passwordless(name)) throw new IOException("\"" + name + "\" already opens without a password.");
-        char[] secret = LocalAccess.write(path(name));
+        Path pending = pendingKey(file);
+        // Never written over: if an earlier removal's re-encryption landed, the
+        // key waiting there is the only thing that opens the vault.
+        if (Files.exists(pending))
+            throw new IOException("An earlier attempt to take the password off \"" + name + "\" did not finish. "
+                + "Restart Yoru so it can finish that first.");
+        char[] secret = null;
         try {
+            secret = LocalAccess.writeKey(pending);
             vault.changeSecret(secret.clone(), state);
         } catch (IOException | RuntimeException e) {
             // The vault still opens with the password it always had: changeSecret
             // puts its own key back, and the file was never written.
-            deleteQuietly(LocalAccess.keyPath(path(name)));
+            deleteQuietly(pending);
+            if (secret != null) Arrays.fill(secret, '\0');
             throw e;
+        }
+        // From here the vault opens with this key and nothing else, so it is
+        // never taken back. A move that fails leaves it under its waiting name,
+        // where the next start puts it in place, and this session keeps the
+        // secret it needs in the meantime.
+        try {
+            move(pending, LocalAccess.keyPath(file));
+        } catch (IOException | RuntimeException notYet) {
+            return secret;
         }
         forceDir(root);
         return secret;
@@ -270,7 +356,30 @@ public class VaultStore {
         if (LocalAccess.enabled(path(name)))
             throw new IOException("An unlock key for \"" + name + "\" is here without its vault, so nothing else may take "
                 + "that name: it would be listed as password-free and never open. Remove the leftover key file ("
-                + name + SUFFIX + KEY_SUFFIX + "), or use another name.");
+                + name + SUFFIX + LocalAccess.SUFFIX + "), or use another name.");
+    }
+
+    /**
+     * Takes a vault's lock — the one an open vault holds — for as long as its
+     * files are being moved, so a vault open in another Yoru window is refused
+     * rather than split in two: that window would go on saving under the old
+     * name. Closing the channel gives the lock up.
+     */
+    private static FileChannel lock(Path vault, String name) throws IOException {
+        var channel = FileChannel.open(EncryptedVault.lockPath(vault), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+        try {
+            FileLock held;
+            try {
+                held = channel.tryLock();
+            } catch (OverlappingFileLockException openHere) {
+                held = null;
+            }
+            if (held == null) throw new IOException("\"" + name + "\" is open in another Yoru window. Close it there first.");
+            return channel;
+        } catch (IOException | RuntimeException e) {
+            channel.close();
+            throw e;
+        }
     }
 
     // ---- renaming ------------------------------------------------------------
@@ -288,49 +397,65 @@ public class VaultStore {
      * first would leave a vault that nothing can pair with a dead key.
      *
      * The vault must be closed: the name is how it is found, and an open vault
-     * still writes to the name it was opened under.
+     * still writes to the name it was opened under. One open in another window
+     * is refused.
      */
     public void rename(String from, String to) throws IOException {
         from = validate(from);
         to = validate(to);
         if (from.equals(to)) return;
-        Path source = path(from);
-        if (!Files.isRegularFile(source)) throw new IOException("There is no vault called \"" + from + "\".");
-        requireFree(to);
+        Path source = requireVault(from);
+        Path target = path(to);
+        // A disk that does not tell letter case apart — the default on macOS and
+        // Windows — finds "study" already at "Study", because it is the same
+        // file. That is the vault being renamed, not one in the way, and the
+        // moves below change the case.
+        boolean caseOnly = from.equalsIgnoreCase(to) && Files.exists(target) && Files.isSameFile(source, target);
+        if (!caseOnly) requireFree(to);
+        requireStorable(to);
 
-        var moves = new ArrayList<Path[]>();
-        try {
-            Path target = path(to);
-            Path key = LocalAccess.keyPath(source);
-            if (Files.isRegularFile(key)) {
-                Path moved = LocalAccess.keyPath(target);
-                move(key, moved);
-                moves.add(new Path[] { key, moved });
-            }
-            move(source, target);
-            moves.add(new Path[] { source, target });
-            for (Path backup : backups(from)) {
-                Path moved = root.resolve(to + SUFFIX + backup.getFileName().toString().substring((from + SUFFIX).length()));
-                move(backup, moved);
-                moves.add(new Path[] { backup, moved });
-            }
-        } catch (IOException | RuntimeException e) {
-            for (int i = moves.size() - 1; i >= 0; i--) {
-                try {
-                    move(moves.get(i)[1], moves.get(i)[0]);
-                } catch (IOException ignored) {
-                    // Undone in reverse: the vault first, then its key. A kill in
-                    // the middle of walking back leaves the same shape a kill in the
-                    // middle of moving does, and the next start puts that right.
+        try (var held = lock(source, from)) {
+            var moves = new ArrayList<Path[]>();
+            try {
+                Path key = LocalAccess.keyPath(source);
+                if (Files.isRegularFile(key)) {
+                    Path moved = LocalAccess.keyPath(target);
+                    move(key, moved);
+                    moves.add(new Path[] { key, moved });
                 }
+                move(source, target);
+                moves.add(new Path[] { source, target });
+                for (Path backup : backups(from)) {
+                    Path moved = root.resolve(to + SUFFIX + backup.getFileName().toString().substring((from + SUFFIX).length()));
+                    move(backup, moved);
+                    moves.add(new Path[] { backup, moved });
+                }
+            } catch (IOException | RuntimeException e) {
+                walkBack(moves);
+                throw new IOException("Renaming \"" + from + "\" failed, so it keeps its old name. " + reason(e), e);
             }
-            throw new IOException("Renaming \"" + from + "\" failed, so it keeps its old name. " + e.getMessage(), e);
         }
         // After the rename, never inside it: an empty lock file that will not go
-        // is no reason to undo a rename that worked.
+        // is no reason to undo a rename that worked. On a disk that does not tell
+        // case apart this is the new name's lock file too, which costs nothing:
+        // it is made again whenever the vault is opened.
         try {
-            Files.deleteIfExists(root.resolve(from + SUFFIX + ".lock"));
+            Files.deleteIfExists(EncryptedVault.lockPath(source));
         } catch (IOException ignored) {
+        }
+    }
+
+    /**
+     * Undoes moves in reverse: the vault first, then its key. A kill in the
+     * middle of walking back leaves the same shape a kill in the middle of moving
+     * does, and the next start puts that right — as it does a step that fails here.
+     */
+    private void walkBack(List<Path[]> moves) {
+        for (int i = moves.size() - 1; i >= 0; i--) {
+            try {
+                move(moves.get(i)[1], moves.get(i)[0]);
+            } catch (IOException ignored) {
+            }
         }
     }
 
@@ -349,32 +474,54 @@ public class VaultStore {
      * confirmation promised the data was being removed.
      *
      * A kill before the removal loop finished leaves the copies in `.deleting/`
-     * and is undone by {@link #reconcile()} on the next start. The vault must be
-     * closed: its lock is one of the files that goes.
+     * and is undone by {@link #reconcile()} on the next start, and until then a
+     * second delete of the same vault is refused: what is staged may be the only
+     * copy of something the first could not put back. The vault must be closed,
+     * and one open in another window is refused.
      */
     public void delete(String name) throws IOException {
         name = validate(name);
-        if (!Files.isRegularFile(path(name))) throw new IOException("There is no vault called \"" + name + "\".");
-        List<Path> present = belongingTo(name);
+        Path vault = requireVault(name);
         Path staging = root.resolve(STAGING).resolve(name);
-        try {
-            Files.createDirectories(staging);
-            for (Path file : present) copyAndVerify(file, staging);
-            forceDir(staging);
-        } catch (IOException | RuntimeException e) {
+        if (holdsAnything(staging))
+            throw new IOException("An earlier deletion of \"" + name + "\" left its copy in place. "
+                + "Restart Yoru so it can be put back first.");
+        try (var held = lock(vault, name)) {
+            List<Path> present = belongingTo(name);
+            try {
+                Files.createDirectories(staging);
+                for (Path file : present) copyAndVerify(file, staging);
+                forceDir(staging);
+            } catch (IOException | RuntimeException e) {
+                deleteTree(staging);
+                throw new IOException("Deleting \"" + name + "\" failed before anything was removed, so it is untouched. "
+                    + reason(e), e);
+            }
+            try {
+                for (Path file : present) removeFile(file);
+                // The removals reach the disk before the copies that stand for them go,
+                // so a kill cannot bring back a vault that was deleted.
+                forceDir(root);
+            } catch (IOException | RuntimeException e) {
+                throw putBack(name, present, staging, e);
+            }
             deleteTree(staging);
-            throw new IOException("Deleting \"" + name + "\" failed before anything was removed, so it is untouched. "
-                + e.getMessage(), e);
         }
+        // The lock goes last, once it is given up: a lock file that is held
+        // cannot be removed on Windows, and it holds nothing — it is made again
+        // whenever a vault by this name is opened.
         try {
-            for (Path file : present) removeFile(file);
-            // The removals reach the disk before the copies that stand for them go,
-            // so a kill cannot bring back a vault that was deleted.
-            forceDir(root);
-        } catch (IOException | RuntimeException e) {
-            throw putBack(name, present, staging, e);
+            Files.deleteIfExists(EncryptedVault.lockPath(vault));
+        } catch (IOException ignored) {
         }
-        deleteTree(staging);
+    }
+
+    /** Whether a folder is there with anything in it. */
+    private static boolean holdsAnything(Path dir) throws IOException {
+        if (!Files.isDirectory(dir)) return false;
+        try (var files = Files.list(dir)) {
+            return files.findAny().isPresent();
+        }
     }
 
     /** Removes one file. Overridable so a test can prove the restore path. */
@@ -382,13 +529,15 @@ public class VaultStore {
         Files.deleteIfExists(path);
     }
 
-    /** Every file a vault owns, the vault itself first: its unlock key, its backups, its lock. */
+    /**
+     * Every file a vault owns, the vault itself first: its unlock key and its
+     * backups. Not its lock, which the deletion is holding.
+     */
     private List<Path> belongingTo(String name) {
         var out = new ArrayList<Path>();
         Path vault = path(name);
         if (Files.isRegularFile(vault)) out.add(vault);
-        for (Path beside : List.of(LocalAccess.keyPath(vault), root.resolve(name + SUFFIX + ".lock")))
-            if (Files.isRegularFile(beside)) out.add(beside);
+        if (Files.isRegularFile(LocalAccess.keyPath(vault))) out.add(LocalAccess.keyPath(vault));
         out.addAll(List.of(backups(name)));
         return out;
     }
@@ -405,7 +554,8 @@ public class VaultStore {
      * Flushes a file to the disk rather than the page cache — the same thing
      * {@link EncryptedVault#save} does before a vault it wrote is real. A
      * deletion's promise rests on its copy, so the copy has to be on the disk
-     * before the original is taken off it.
+     * before the original is taken off it; and a copy put back has to be there
+     * before the one it came from goes.
      */
     private static void force(Path file) throws IOException {
         try (var channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
@@ -426,23 +576,51 @@ public class VaultStore {
         }
     }
 
+    /**
+     * What went wrong, in words that do not say where the vaults are (#41).
+     *
+     * The file system's messages are the paths it failed on, and these reach a
+     * dialog people screenshot when they ask for help — so its reason is kept
+     * and its paths are not. The exception stays the cause, with every detail.
+     */
+    static String reason(Throwable e) {
+        if (e instanceof AccessDeniedException) return "Permission was refused.";
+        if (e instanceof NoSuchFileException) return "A file it needed was not there.";
+        if (e instanceof FileAlreadyExistsException) return "A file was already in the way.";
+        if (e instanceof DirectoryNotEmptyException) return "A folder in the way was not empty.";
+        if (e instanceof FileSystemException fs) {
+            String why = fs.getReason();
+            return why == null || why.isBlank() ? "The disk refused." : why.strip() + ".";
+        }
+        String message = e.getMessage();
+        if (message == null || message.isBlank() || message.contains("/") || message.contains("\\"))
+            return "The disk refused.";
+        return message;
+    }
+
     /** Puts the verified copies back, and says what happened if even that fails. */
     private IOException putBack(String name, List<Path> present, Path staging, Exception failure) {
         try {
             for (Path file : present) {
                 Path copy = staging.resolve(file.getFileName());
-                if (Files.isRegularFile(copy)) Files.copy(copy, file, StandardCopyOption.REPLACE_EXISTING);
+                if (Files.isRegularFile(copy)) {
+                    Files.copy(copy, file, StandardCopyOption.REPLACE_EXISTING);
+                    force(file);
+                }
                 if (!Files.isRegularFile(file) || Files.mismatch(file, copy) != -1)
                     throw new IOException("the copy of " + file.getFileName() + " could not be put back");
             }
+            // The copies are the only other copy, so what they put back is on the
+            // disk — names and all — before they go.
+            forceDir(root);
         } catch (IOException restore) {
             // Nothing is thrown away here: the copies are still in the staging folder.
             return new IOException("Deleting \"" + name + "\" failed and it could not be put back. The untouched copy "
-                + "Yoru made first is still there. " + restore.getMessage(), failure);
+                + "Yoru made first is still there. " + reason(restore), failure);
         }
         deleteTree(staging);
         return new IOException("Deleting \"" + name + "\" failed, so it was put back exactly as it was. "
-            + failure.getMessage(), failure);
+            + reason(failure), failure);
     }
 
     // ---- what a kill left behind ---------------------------------------------
@@ -455,8 +633,8 @@ public class VaultStore {
     /**
      * Puts right what a kill left half-done, before the vaults are listed (#41).
      *
-     * Two things here move files, and a kill between two moves cannot be walked
-     * back in process. Both leave a shape this recognises:
+     * Three things here move files, and a kill between two moves cannot be walked
+     * back in process. Each leaves a shape this recognises:
      *
      * <ul>
      *   <li>An unfinished delete. Everything the vault owns was copied, flushed
@@ -466,6 +644,12 @@ public class VaultStore {
      *       delete can be asked for again. If every original is gone the removal
      *       loop had finished and only the staged copy was left, so the deletion
      *       the person asked for is completed rather than undone.</li>
+     *   <li>A password removal that stopped part way. Its key waits under a name
+     *       nothing reads as a key until the vault has been re-encrypted under
+     *       it. One that opens its vault is one whose re-encryption landed, and
+     *       is put where it belongs; one that does not is one whose re-encryption
+     *       never happened, beside a vault that still opens with its password,
+     *       and goes.</li>
      *   <li>A key separated from its vault. A rename or an adoption killed after
      *       the key moved and before the vault did leaves a vault with no key and
      *       a key with no vault, and that is the one shape that would otherwise
@@ -486,15 +670,22 @@ public class VaultStore {
         // The vaults go back before the keys are matched, so a vault an unfinished
         // delete had removed is here to be matched like any other.
         var undeleted = rollBackDeletes();
-        var keys = orphanKeys();
         var rekeyed = new ArrayList<String>();
+        var keys = new ArrayList<>(orphanKeys());
+        for (Path pending : filesEndingWith(SUFFIX + LocalAccess.SUFFIX + PENDING)) {
+            Path vault = root.resolve(without(pending, LocalAccess.SUFFIX + PENDING));
+            // A waiting key whose vault has moved on — renamed in the session that
+            // could not put the key in place — is matched like any other.
+            if (!Files.isRegularFile(vault)) keys.add(pending);
+            else if (finishRemoval(pending, vault)) rekeyed.add(nameOf(vault));
+        }
         if (!keys.isEmpty()) {
             var keyless = new ArrayList<Path>();
             for (Path vault : vaultFiles()) if (!LocalAccess.enabled(vault)) keyless.add(vault);
             for (Path key : keys) {
                 Path vault = null;
                 for (int i = 0; i < keyless.size(); i++) {
-                    if (opens(keyless.get(i), key)) { vault = keyless.remove(i); break; }
+                    if (keyOpens(key, keyless.get(i))) { vault = keyless.remove(i); break; }
                 }
                 if (vault == null) continue;
                 move(key, LocalAccess.keyPath(vault));
@@ -504,14 +695,60 @@ public class VaultStore {
         return new Recovery(undeleted, List.copyOf(rekeyed));
     }
 
-    /** Whether an unlock key is the one a vault was encrypted with. */
-    private boolean opens(Path vault, Path key) throws IOException {
-        String file = key.getFileName().toString();
-        // The key file's own name says which vault it appears beside, and only its
-        // contents are wanted here: that vault need not exist for the key to be read.
+    /**
+     * Finishes a password removal a kill stopped part way, or clears away one
+     * that never reached the vault.
+     *
+     * Only a definite answer acts. A vault open in another window may be in the
+     * middle of that very removal, and one that cannot be read right now may be
+     * the vault this key alone opens, so either leaves the key where it is for
+     * the next start. A key file cut short while it was written goes: the vault
+     * was not touched until the key was whole and on the disk.
+     *
+     * @return whether the vault now has its key beside it
+     */
+    private boolean finishRemoval(Path pending, Path vault) {
+        // Not a shape a removal leaves — it never writes over a key — so there
+        // is nothing certain to act on.
+        if (LocalAccess.enabled(vault)) return false;
+        try (var held = lock(vault, nameOf(vault))) {
+            char[] secret;
+            try {
+                secret = LocalAccess.readKey(pending);
+            } catch (LocalAccess.Malformed cutShort) {
+                Files.delete(pending);
+                return false;
+            }
+            boolean opens;
+            try {
+                opens = EncryptedVault.decrypts(vault, secret);
+            } finally {
+                Arrays.fill(secret, '\0');
+            }
+            if (!opens) {
+                Files.delete(pending);
+                return false;
+            }
+            move(pending, LocalAccess.keyPath(vault));
+            forceDir(root);
+            return true;
+        } catch (IOException | RuntimeException unsure) {
+            return false;
+        }
+    }
+
+    /**
+     * Whether the unlock key in this file is the one a vault was encrypted with.
+     *
+     * The key is read from the file itself, so it need not sit beside the vault
+     * it is tried against: a staged copy, a key a kill separated from its vault,
+     * a key still waiting to be put in place. A file that is not a key opens
+     * nothing.
+     */
+    private static boolean keyOpens(Path key, Path vault) {
         char[] secret;
         try {
-            secret = LocalAccess.read(root.resolve(file.substring(0, file.length() - KEY_SUFFIX.length())));
+            secret = LocalAccess.readKey(key);
         } catch (IOException malformed) {
             return false;
         }
@@ -524,18 +761,26 @@ public class VaultStore {
 
     /** Unlock keys here whose vault is not beside them. */
     private List<Path> orphanKeys() throws IOException {
+        return filesEndingWith(SUFFIX + LocalAccess.SUFFIX).stream()
+            .filter(key -> !Files.isRegularFile(root.resolve(without(key, LocalAccess.SUFFIX))))
+            .toList();
+    }
+
+    /** The files here whose names end this way, in order. */
+    private List<Path> filesEndingWith(String ending) throws IOException {
         if (!Files.isDirectory(root)) return List.of();
         try (var files = Files.list(root)) {
             return files.filter(Files::isRegularFile)
-                .filter(file -> file.getFileName().toString().endsWith(SUFFIX + KEY_SUFFIX))
-                .filter(file -> {
-                    String base = file.getFileName().toString();
-                    base = base.substring(0, base.length() - KEY_SUFFIX.length());
-                    return !Files.isRegularFile(root.resolve(base));
-                })
+                .filter(file -> file.getFileName().toString().endsWith(ending))
                 .sorted()
                 .toList();
         }
+    }
+
+    /** A file's name without an ending it is known to have. */
+    private static String without(Path file, String ending) {
+        String name = file.getFileName().toString();
+        return name.substring(0, name.length() - ending.length());
     }
 
     /**
@@ -564,10 +809,14 @@ public class VaultStore {
                     if (Files.exists(original)) continue;
                     if (!mayReturn(copy)) continue;
                     Files.copy(copy, original, StandardCopyOption.COPY_ATTRIBUTES);
+                    force(original);
                     undone.add(dir.getFileName().toString());
                 }
             }
         }
+        // What went back is on the disk, names and all, before the only other
+        // copy of it goes.
+        if (!undone.isEmpty()) forceDir(root);
         deleteTree(staging);
         return List.copyOf(undone);
     }
@@ -587,24 +836,11 @@ public class VaultStore {
      * is given back to its owner. Anything else is left in the staging folder,
      * which is cleared with it.
      */
-    private boolean mayReturn(Path copy) throws IOException {
-        String file = copy.getFileName().toString();
-        if (!file.endsWith(SUFFIX + KEY_SUFFIX)) return true;
-        Path vault = root.resolve(file.substring(0, file.length() - KEY_SUFFIX.length()));
+    private boolean mayReturn(Path copy) {
+        if (!copy.getFileName().toString().endsWith(SUFFIX + LocalAccess.SUFFIX)) return true;
+        Path vault = root.resolve(without(copy, LocalAccess.SUFFIX));
         if (!Files.isRegularFile(vault)) return true;
-        char[] secret;
-        // The key is read through its own name: a key file is read by the path of
-        // the vault it appears beside, so the copy stands in for that vault here.
-        try {
-            secret = LocalAccess.read(copy.resolveSibling(file.substring(0, file.length() - KEY_SUFFIX.length())));
-        } catch (IOException malformed) {
-            return false;
-        }
-        try {
-            return EncryptedVault.opens(vault, secret);
-        } finally {
-            Arrays.fill(secret, '\0');
-        }
+        return keyOpens(copy, vault);
     }
 
     /** The files directly in a folder, in order. */
@@ -689,17 +925,12 @@ public class VaultStore {
                 moves.add(new Path[] { backup, backupTarget });
             }
         } catch (IOException | RuntimeException e) {
-            for (int i = moves.size() - 1; i >= 0; i--) {
-                try {
-                    move(moves.get(i)[1], moves.get(i)[0]);
-                } catch (IOException ignored) {
-                }
-            }
-            throw new IOException("Adopting \"" + base + "\" failed, so it was left where it was. " + e.getMessage(), e);
+            walkBack(moves);
+            throw new IOException("Adopting \"" + base + "\" failed, so it was left where it was. " + reason(e), e);
         }
         // An empty lock file; it is made again when the vault is next opened.
         try {
-            Files.deleteIfExists(vaultFile.resolveSibling(base + SUFFIX + ".lock"));
+            Files.deleteIfExists(EncryptedVault.lockPath(vaultFile));
         } catch (IOException ignored) {
         }
         return name;
@@ -709,16 +940,7 @@ public class VaultStore {
     private static Path[] backupsBeside(Path vaultFile, String name) throws IOException {
         Path dir = vaultFile.toAbsolutePath().getParent();
         if (dir == null || !Files.isDirectory(dir)) return new Path[0];
-        String prefix = name + SUFFIX;
-        try (var files = Files.list(dir)) {
-            return files.filter(Files::isRegularFile)
-                .filter(file -> {
-                    String text = file.getFileName().toString();
-                    return text.startsWith(prefix) && text.endsWith(".bak");
-                })
-                .sorted()
-                .toArray(Path[]::new);
-        }
+        return backupsIn(dir, name + SUFFIX);
     }
 
     /** The name itself when it is free, otherwise the next one: nothing is overwritten. */
@@ -740,36 +962,33 @@ public class VaultStore {
      * not is a stranger's, and giving it to this vault would list a vault as
      * password-free that its own key cannot open, so the name is passed over.
      */
-    private boolean usable(String name, Path vaultFile) throws IOException {
+    private boolean usable(String name, Path vaultFile) {
         Path vault = root.resolve(name + SUFFIX);
         if (Files.exists(vault)) return false;
         if (!LocalAccess.enabled(vault)) return true;
-        char[] secret;
-        try {
-            secret = LocalAccess.read(vault);
-        } catch (IOException malformed) {
-            return false;
-        }
-        try {
-            return EncryptedVault.opens(vaultFile, secret);
-        } finally {
-            Arrays.fill(secret, '\0');
-        }
+        return keyOpens(LocalAccess.keyPath(vault), vaultFile);
     }
 
     /**
      * Moves a file, copying it first when the two places are on different disks.
-     * A copy is verified before the original goes, so a move never loses one.
-     * Overridable so a test can prove the walk-back after a move fails.
+     * A copy is verified and flushed before the original goes, so a move never
+     * loses one — not to a failure, and not to a power cut that took a copy
+     * still in the page cache. Overridable so a test can prove the walk-back
+     * after a move fails.
      */
     void move(Path from, Path to) throws IOException {
         try {
             Files.move(from, to, StandardCopyOption.ATOMIC_MOVE);
         } catch (AtomicMoveNotSupportedException e) {
             Files.copy(from, to, StandardCopyOption.COPY_ATTRIBUTES);
-            if (Files.mismatch(from, to) != -1) {
+            try {
+                if (Files.mismatch(from, to) != -1)
+                    throw new IOException("The copy of " + from.getFileName() + " did not match, so the original stays.");
+                force(to);
+                forceDir(to.toAbsolutePath().getParent());
+            } catch (IOException | RuntimeException failed) {
                 Files.deleteIfExists(to);
-                throw new IOException("The copy of " + from.getFileName() + " did not match, so the original stays.");
+                throw failed;
             }
             Files.delete(from);
         }
