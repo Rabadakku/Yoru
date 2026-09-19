@@ -103,6 +103,9 @@ public final class StorageEditTest {
         check(reread.partyCount() == 1, "the party shrank to one");
         check(reread.party().getFirst().nationalDex() == 255, "the starter remains the lead");
         check(reread.boxed(reread.storage(), 4, 9) != null, "the box slot holds the deposited member");
+        check(reread.section(1)[Gen3Save.PARTY_AT + Gen3Pokemon.PARTY_SIZE + Gen3Pokemon.MAIL_AT]
+                == (byte) Gen3Pokemon.MAIL_NONE,
+            "the entry the party let go of is emptied as the game empties one, no-mail byte and all");
     }
 
     /** Dropping onto an occupied party position swaps the two. */

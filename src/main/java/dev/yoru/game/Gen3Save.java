@@ -79,6 +79,8 @@ public final class Gen3Save {
 
     /** Party lives in section 1: a count byte, padding, then six 100-byte entries. */
     public static final int PARTY_COUNT_AT = 0x234, PARTY_AT = 0x238, PARTY_LIMIT = 6;
+    /** Where the sixth party entry ends; nothing past it in section 1 is the party's. */
+    static final int PARTY_END = PARTY_AT + PARTY_LIMIT * Gen3Pokemon.PARTY_SIZE;
 
     /**
      * Offsets inside SaveBlock1 (sections 1 to 4, 3968 bytes each) and
@@ -398,18 +400,29 @@ public final class Gen3Save {
         return out;
     }
 
-    /** Replaces the party. Unused entries are zeroed, as the game leaves them. */
+    /**
+     * Replaces the party.
+     *
+     * An entry the party no longer reaches is emptied as the game's ZeroMonData
+     * empties it: zeros, with MAIL_NONE in the mail byte. Entries past both the
+     * old party and the new one are left exactly as the game left them, so a
+     * change that keeps the party's size touches only the members it replaces.
+     */
     public void party(List<byte[]> records) {
         if (records.size() > PARTY_LIMIT) throw new IllegalArgumentException("A party holds at most " + PARTY_LIMIT);
+        for (var record : records)
+            if (record.length != Gen3Pokemon.PARTY_SIZE)
+                throw new IllegalArgumentException("A party record is " + Gen3Pokemon.PARTY_SIZE + " bytes");
         byte[] s = sections[1];
+        int previous = partyCount();
         s[PARTY_COUNT_AT] = (byte) records.size();
-        for (int i = 0; i < PARTY_LIMIT; i++) {
+        for (int i = 0; i < Math.max(previous, records.size()); i++) {
             int at = PARTY_AT + i * Gen3Pokemon.PARTY_SIZE;
-            if (i < records.size()) {
-                if (records.get(i).length != Gen3Pokemon.PARTY_SIZE)
-                    throw new IllegalArgumentException("A party record is " + Gen3Pokemon.PARTY_SIZE + " bytes");
-                System.arraycopy(records.get(i), 0, s, at, Gen3Pokemon.PARTY_SIZE);
-            } else Arrays.fill(s, at, at + Gen3Pokemon.PARTY_SIZE, (byte) 0);
+            if (i < records.size()) System.arraycopy(records.get(i), 0, s, at, Gen3Pokemon.PARTY_SIZE);
+            else {
+                Arrays.fill(s, at, at + Gen3Pokemon.PARTY_SIZE, (byte) 0);
+                s[at + Gen3Pokemon.MAIL_AT] = (byte) Gen3Pokemon.MAIL_NONE;
+            }
         }
     }
 

@@ -329,10 +329,18 @@ public final class Gen3SaveTest {
         check(save.party().get(0).nationalDex() == 252 && save.party().get(1).level() == 7, "reading back as themselves");
         var reread = Gen3Save.read(save.bytes());
         check(reread.partyCount() == 2 && Arrays.equals(reread.partyRecord(0), a), "and surviving the write");
+        // The sixth entry was never part of the party; mark it, so leaving it
+        // alone is told apart from rewriting it the same.
+        int sixth = Gen3Save.PARTY_AT + 5 * Gen3Pokemon.PARTY_SIZE;
+        save.section(1)[sixth + 7] = 0x5A;
         save.party(List.of(a));
-        boolean zeroed = true;
-        for (int i = Gen3Save.PARTY_AT + 100; i < Gen3Save.PARTY_AT + 600; i++) zeroed &= save.section(1)[i] == 0;
-        check(zeroed, "a shorter party leaves the unused entries zeroed, as the game does");
+        int vacated = Gen3Save.PARTY_AT + Gen3Pokemon.PARTY_SIZE;
+        boolean emptied = true;
+        for (int i = 0; i < Gen3Pokemon.PARTY_SIZE; i++)
+            emptied &= save.section(1)[vacated + i] == (i == 0x55 ? (byte) 0xFF : 0);
+        check(emptied, "the member a shorter party lets go of is emptied as ZeroMonData empties it: "
+            + "zeros, and no mail (0xFF) in the mail byte");
+        check(save.section(1)[sixth + 7] == 0x5A, "and an entry past both parties is left exactly as it was");
         refused(() -> save.party(List.of(a, a, a, a, a, a, a)), "a seventh member is refused");
     }
 
