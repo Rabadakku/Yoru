@@ -423,6 +423,15 @@ public class VaultStore {
                     move(key, moved);
                     moves.add(new Path[] { key, moved });
                 }
+                // A key still waiting to be put in place may be the only thing
+                // that opens the vault, so it goes where the vault goes, and
+                // before it for the same reason the key does.
+                Path waiting = pendingKey(source);
+                if (Files.isRegularFile(waiting)) {
+                    Path moved = pendingKey(target);
+                    move(waiting, moved);
+                    moves.add(new Path[] { waiting, moved });
+                }
                 move(source, target);
                 moves.add(new Path[] { source, target });
                 for (Path backup : backups(from)) {
@@ -530,14 +539,16 @@ public class VaultStore {
     }
 
     /**
-     * Every file a vault owns, the vault itself first: its unlock key and its
-     * backups. Not its lock, which the deletion is holding.
+     * Every file a vault owns, the vault itself first: its unlock key, a key
+     * still waiting to be put in place, and its backups. Not its lock, which
+     * the deletion is holding.
      */
     private List<Path> belongingTo(String name) {
         var out = new ArrayList<Path>();
         Path vault = path(name);
         if (Files.isRegularFile(vault)) out.add(vault);
-        if (Files.isRegularFile(LocalAccess.keyPath(vault))) out.add(LocalAccess.keyPath(vault));
+        for (Path key : List.of(LocalAccess.keyPath(vault), pendingKey(vault)))
+            if (Files.isRegularFile(key)) out.add(key);
         out.addAll(List.of(backups(name)));
         return out;
     }
