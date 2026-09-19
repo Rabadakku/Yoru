@@ -335,8 +335,12 @@ public final class StorageEdit {
     static void verifyRename(byte[] before, byte[] after, int box, String name) {
         int start = Gen3Save.BOX_NAMES_AT + box * Gen3Save.BOX_NAME_BYTES;
         assertOnlyChanges(before, after, at -> at >= start && at < start + Gen3Save.BOX_NAME_BYTES);
-        var saved = Gen3Save.read(after);
-        if (!saved.boxName(saved.storage(), box).strip().equals(name.strip()))
+        // Compared as stored bytes rather than text: a typed apostrophe is
+        // stored as the game's own and reads back curly, and is still the name
+        // that was written.
+        byte[] saved = Gen3Save.read(after).storage();
+        byte[] wanted = Gen3Text.bytes(name.strip(), Gen3Save.BOX_NAME_BYTES);
+        if (!Arrays.equals(saved, start, start + Gen3Save.BOX_NAME_BYTES, wanted, 0, Gen3Save.BOX_NAME_BYTES))
             throw new IllegalStateException("The box name did not come back as written.");
     }
 

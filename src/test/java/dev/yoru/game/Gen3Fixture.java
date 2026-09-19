@@ -69,6 +69,18 @@ public final class Gen3Fixture {
         return stamp(out, slot);
     }
 
+    /**
+     * Writes a trainer name's eight stored bytes into section 0 exactly, for a
+     * name text cannot carry: a byte outside Yoru's table, or anything after
+     * the terminator.
+     */
+    public static byte[] withTrainerName(byte[] raw, byte[] stored) {
+        var out = raw.clone();
+        int slot = Gen3Save.read(out).loadedSlot();
+        System.arraycopy(stored, 0, out, offsetOf(out, 0), 8);
+        return stamp(out, slot);
+    }
+
     /** Writes a party into section 1 in place. */
     public static byte[] withParty(byte[] raw, List<byte[]> records) {
         var out = raw.clone();

@@ -54,10 +54,11 @@ public final class StudyGift {
      * Builds a companion of a species at a level, belonging to this save's own
      * trainer, identified by this reward.
      *
-     * The trainer matters: a companion carrying a different id is a traded
-     * Pokémon, which the game marks as met elsewhere and which disobeys past a
-     * badge threshold. Reading the id from the save is what makes it the
-     * player's own.
+     * The trainer matters: a companion carrying a different id or name is a
+     * traded Pokémon, which the game marks as met elsewhere and which disobeys
+     * past a badge threshold. Reading both from the save is what makes it the
+     * player's own — the name as the save's own bytes, because the game
+     * compares it byte for byte and text cannot carry every byte.
      */
     public static Gen3Pokemon build(UUID reward, int nationalDexNumber, int level,
                                     Gen3Save.Trainer trainer, String nickname, int metLocation) {
@@ -67,6 +68,7 @@ public final class StudyGift {
         mon.personality = personalityFor(reward);
         mon.otId = trainer.otId();
         mon.otName = trainer.name();
+        mon.otNameBytes = trainer.storedName();
         mon.language = ENGLISH;
         mon.nickname = nickname != null && !nickname.isBlank()
             ? nickname : defaultName(nationalDexNumber);
