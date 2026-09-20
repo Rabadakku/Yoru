@@ -166,6 +166,32 @@ public final class PortableVaultTest {
         rejects(()->PortableVault.parse("not json at all"),"Text that is not JSON is refused");
         rejects(()->PortableVault.parse("[]"),"A JSON array is not a vault");
 
+        // A number too large for its field is refused by name, not wrapped round
+        // into a different one that passes: 2^32 + 7 hours is not 7 hours.
+        refuses(json.replace("\"dailyGoalHours\": 7","\"dailyGoalHours\": 4294967303"),"dailyGoalHours",
+            "A daily goal past the int range is refused, not read as 7");
+        refuses(json.replace("\"level\": 7","\"level\": 4294967303"),"level","A level past the int range is refused");
+        // And in a format 1 file, where 2^32 would otherwise be the first species.
+        String capture="{\"id\": \""+UUID.randomUUID()+"\", \"species\": SPECIES, \"caughtAt\": \"2026-09-01T08:00:00Z\"}";
+        String formatOne=json.replace("\"yoru\": 2","\"yoru\": 1,\n  \"collection\": {\"captures\": ["+capture
+            +"], \"encountersUsed\": 3, \"rewardedSeconds\": 5400}");
+        check(PortableVault.parse(formatOne.replace("SPECIES","0")).rewards().stream().anyMatch(r->r.nationalDex()==252),
+            "A format 1 capture still imports as a reward");
+        refuses(formatOne.replace("SPECIES","4294967296"),"species","A format 1 species past the int range is refused");
+
+        // A title cut between the two halves of an emoji — a bounded import can
+        // leave one — still exports as text a file can hold, and comes back.
+        var cutTask=new Task(UUID.randomUUID(),null,null,"Revise \uD83D","",null,TaskStatus.TODO,"notion",
+            Instant.parse("2026-09-01T12:00:00Z"),0,null);
+        var cut=new State(List.of(),List.of(),List.of(),List.of(),List.of(cutTask),List.of(),List.of(),
+            Settings.defaults(),Campaign.start(1),List.of(),null);
+        var exported=java.nio.file.Files.createTempFile("yoru-export-",".json");
+        try{
+            java.nio.file.Files.writeString(exported,PortableVault.export(cut,when));
+            check(PortableVault.parse(java.nio.file.Files.readString(exported)).equals(cut),
+                "A lone surrogate in a title survives an export written to a file");
+        }finally{java.nio.file.Files.deleteIfExists(exported);}
+
         // A record index is reported, so a bad row in a long file can be found.
         refuses(json.replace("\"title\": \"Order textbook\"","\"title\": 5"),"tasks[1]","The failing record is identified by index");
 

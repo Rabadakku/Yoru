@@ -100,6 +100,24 @@ public final class ExpansionTest {
         var roundTrip=Map.of("text","line\n\"quoted\"\t日本語", "items",List.of(true,1,"x"));check(Json.read(Json.write(roundTrip)) instanceof Map,"JSON roundtrip");
         rejects(()->Json.read("{\"a\":1,\"a\":2}"),"duplicate JSON keys rejected");rejects(()->Json.read("[1,]"),"malformed array rejected");
         rejects(()->Json.read("[".repeat(40)+"0"+"]".repeat(40)),"JSON depth bounded");
+        // Half of a surrogate pair, as text cut between the two halves leaves it,
+        // is escaped: written raw, no encoding can save the file it is in.
+        String cut="Revise \uD83D";
+        String written=Json.write(cut);
+        check(written.contains("\\ud83d")&&java.nio.charset.StandardCharsets.UTF_8.newEncoder().canEncode(written),
+            "a lone surrogate is escaped, so the JSON can be saved as UTF-8, got "+written);
+        check(cut.equals(Json.read(written)),"and reads back as the same text");
+        check(Json.write("\uD83D\uDE00").equals("\"\uD83D\uDE00\""),"a whole pair is written as it is");
+        // An escaped character is four hexadecimal digits; a sign is not one.
+        rejects(()->Json.read("\"\\u-001\""),"a \\u escape with a minus sign is refused");
+        rejects(()->Json.read("\"\\u+041\""),"a \\u escape with a plus sign is refused");
+        check("A".equals(Json.read("\"\\u0041\"")),"a real \\u escape still reads");
+        // A refusal says where the text stops being JSON, and a list over the
+        // limit says that rather than calling the file malformed.
+        String where=null;try{Json.read("[1,]");}catch(IllegalArgumentException e){where=e.getMessage();}
+        check(where!=null&&where.contains("character 4"),"a parse error says where it is, got "+where);
+        String tooMany=null;try{Json.read("["+"0,".repeat(100_000)+"0]");}catch(IllegalArgumentException e){tooMany=e.getMessage();}
+        check(tooMany!=null&&tooMany.contains("100000"),"a list over the limit says so, got "+tooMany);
         Path unsupported=dir.resolve("unsafe.exe");Files.writeString(unsupported,"not an input");rejects(()->OpenAiTasks.Attachment.read(unsupported),"unsupported input rejected");
         try(var files=Files.list(dir)){for(Path p:files.toList())Files.delete(p);}Files.delete(dir);
         System.out.println("PASS: "+checks+" expansion checks (encounters, rewards, tasks, schema migration, API fixtures and JSON)");
