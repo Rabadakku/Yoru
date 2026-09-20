@@ -109,6 +109,17 @@ public final class VisualSystemTest {
         var stats = named(app, "today.stats");
         check(agenda != null && stats != null && agenda.getY() < stats.getY(), "Today's agenda comes before its statistics");
 
+        tracker.start(tracker.state().activities().getFirst().id());
+        open(app,"Tasks");
+        var status=button(app,"session.status");
+        check(status.isVisible()&&status.getText().contains("Recording"),
+            "A running timer stays visible away from Today");
+        status.doClick();
+        check(named(app,"today.timer")!=null,"The recording status returns to the timer");
+        tracker.stop(tracker.now());
+        app.updateRecordingStatus();
+        check(!button(app,"session.status").isVisible(),"Clocking out clears the recording status");
+
         open(app, "Data");
         check(!labels(app).contains("VAULT"), "the vault's controls have left the Data page");
 

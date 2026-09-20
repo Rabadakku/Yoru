@@ -48,6 +48,7 @@ public final class YoruApp extends JPanel implements Shell {
     private final TodayPage todayPage=new TodayPage(this);
     private final SettingsPage settingsPage=new SettingsPage(this);
     private javax.swing.Timer ticker;
+    private JButton recordingStatus;
     private final TasksPanel.ViewState taskViewState=new TasksPanel.ViewState();
     private final Map<String,JButton> navigation = new LinkedHashMap<>();
     private boolean closed;
@@ -168,6 +169,7 @@ public final class YoruApp extends JPanel implements Shell {
             var running=tracker.active();
             boolean animate=running!=null && !reducedMotion;
             todayPage.tick(animate,running,page.equals("Today"));
+            updateRecordingStatus();
             // Synced here rather than from the clock-in and clock-out buttons, so
             // a session recovered when the vault opens — which passes through
             // neither — still starts the music.
@@ -293,6 +295,14 @@ public final class YoruApp extends JPanel implements Shell {
         var date=label(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d",Locale.ENGLISH)),TYPE_CAPTION,MUTED);
         date.setToolTipText("Times shown in "+zone);
         heading.add(date,BorderLayout.EAST);
+        recordingStatus=button("",()->showPage("Today"));
+        recordingStatus.setName("session.status");
+        recordingStatus.setContentAreaFilled(false);
+        recordingStatus.setForeground(ACCENT_TEXT);
+        recordingStatus.setBorder(new EmptyBorder(0,0,0,SPACE_MD));
+        recordingStatus.setToolTipText("Return to your timer to clock out or edit this session");
+        heading.add(recordingStatus,BorderLayout.WEST);
+        updateRecordingStatus();
         content.add(heading,BorderLayout.NORTH);
         JPanel view=switch(page) {
             case "Schedule"->schedule();
@@ -320,6 +330,17 @@ public final class YoruApp extends JPanel implements Shell {
         content.revalidate();
         content.repaint();
         if(keep!=null)scrollTo(keep);
+    }
+
+    /** Keep a running session visible while the user works on another page. */
+    void updateRecordingStatus() {
+        if(recordingStatus==null)return;
+        var active=tracker.active();
+        recordingStatus.setVisible(active!=null);
+        if(active==null)return;
+        String text="● Recording · "+Analytics.duration(Math.max(0,
+            Duration.between(active.start(),tracker.now()).getSeconds()));
+        if(!text.equals(recordingStatus.getText()))recordingStatus.setText(text);
     }
 
     /** Puts the page on screen back where it was, or as far down as it still reaches. */
