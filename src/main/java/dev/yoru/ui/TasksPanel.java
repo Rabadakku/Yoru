@@ -326,6 +326,33 @@ final class TasksPanel extends JPanel implements Scrollable {
         return line;
     }
 
+    /**
+     * Lights a row while the pointer is over it.
+     *
+     * A row is a control — its title opens the task, its menu acts on it — and
+     * it said nothing about that until something inside it was reached. The
+     * shade is the one buttons use when hovered, so "under the pointer" looks
+     * the same everywhere.
+     */
+    private static void lightOnHover(JPanel line) {
+        line.setOpaque(false);
+        var over=new java.awt.event.MouseAdapter() {
+            @Override public void mouseEntered(java.awt.event.MouseEvent e) {
+                line.setOpaque(true);
+                line.setBackground(shade(PANEL,DARK?12:-8));
+                line.repaint();
+            }
+            @Override public void mouseExited(java.awt.event.MouseEvent e) {
+                // Only when the pointer has left the row itself: moving onto a
+                // control inside it is still being over the row.
+                if(line.contains(e.getPoint())) return;
+                line.setOpaque(false);
+                line.repaint();
+            }
+        };
+        line.addMouseListener(over);
+    }
+
     private static JPanel headerRow() {
         var header=tableRow();
         header.setName("task.header");
@@ -338,6 +365,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         var task=tasks.get(index);
         boolean done=task.status()==TaskStatus.DONE;
         var line=tableRow();
+        lightOnHover(line);
         line.setBorder(restingBorder());
 
         var check=new JCheckBox();
