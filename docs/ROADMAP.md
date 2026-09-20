@@ -1,5 +1,18 @@
 # Yoru roadmap
 
+## UI improvements for 1.0.12 — September 20, 2026
+
+On `codex/ui-polish`, based on released 1.0.11.
+See [RELEASE-1.0.12.md](RELEASE-1.0.12.md) for the scope.
+
+- Done: task search across titles, notes and tags, retained task view state,
+  timer controls ahead of scenery, daily-goal progress, recording status across
+  pages, navigation spacing, light-theme action contrast and rounded borders.
+- Checks: targeted behaviour, contrast and text-fit regressions pass. Full
+  suite and release-platform installer builds are the remaining release gates.
+- Limits: no claim of a new full-source audit, clean-machine install or native
+  campaign verification. No changes to the vault format or reward economy.
+
 ## Release candidate 1.0.11 — September 20, 2026
 
 Built on `claude/code-review`. Notes: [RELEASE-1.0.11.md](RELEASE-1.0.11.md).
