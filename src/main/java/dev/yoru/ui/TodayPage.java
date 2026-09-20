@@ -408,11 +408,20 @@ final class TodayPage {
      */
     private JPanel week(JPanel tile,java.util.Map<LocalDate,Long> daily,LocalDate today,int goalHours) {
         gap(tile,SPACE_MD);
-        int height=grow(SPACE_XL);
-        var days=new JPanel(new GridLayout(1,7,SPACE_XS,0));
+        // Bars of their own width rather than a seventh of the tile: stretched
+        // across it they were seven wide slabs a few pixels apart, which read
+        // as a row of chips and not as a week. Narrow ones, taller than they
+        // are wide, are a chart even at this size.
+        int height=grow(SPACE_XXL);
+        int wide=grow(SPACE_MD);
+        int width=7*wide+6*SPACE_SM;
+        var days=new JPanel(new GridLayout(1,7,SPACE_SM,0));
         days.setOpaque(false);
         days.setAlignmentX(0);
-        days.setMaximumSize(new Dimension(Integer.MAX_VALUE,height));
+        days.setMaximumSize(new Dimension(width,height));
+        var initials=new JPanel(new GridLayout(1,7,SPACE_SM,0));
+        initials.setOpaque(false);
+        initials.setAlignmentX(0);
         long most=3600;
         for(int i=6;i>=0;i--) most=Math.max(most,daily.getOrDefault(today.minusDays(i),0L));
         for(int i=6;i>=0;i--) {
@@ -424,13 +433,26 @@ final class TodayPage {
             // in the fourteen-day chart: a stub reads as a bar that failed.
             int tall=seconds==0?HAIRLINE:Math.max(RING,(int)(height*seconds/most));
             var bar=new Theme.Bar(seconds==0?LINE:Heatmap.colour(day,seconds,goalHours));
-            bar.setMaximumSize(new Dimension(Integer.MAX_VALUE,tall));
-            bar.setPreferredSize(new Dimension(SPACE_MD,tall));
+            bar.setMaximumSize(new Dimension(wide,tall));
+            bar.setPreferredSize(new Dimension(wide,tall));
             bar.setToolTipText(day+" · "+Analytics.report(seconds));
             column.add(bar);
             days.add(column);
+            // The day under its bar, as the fourteen-day chart numbers its own:
+            // seven unlabelled bars leave the reader counting backwards from
+            // whichever end they guess is today. Today's is the one in body ink.
+            var initial=label(day.getDayOfWeek().getDisplayName(java.time.format.TextStyle.NARROW,
+                java.util.Locale.getDefault()).toUpperCase(java.util.Locale.getDefault()),
+                TYPE_CAPTION,day.equals(today)?TEXT:MUTED);
+            initial.setHorizontalAlignment(SwingConstants.CENTER);
+            initial.getAccessibleContext().setAccessibleName(day.getDayOfWeek().getDisplayName(
+                java.time.format.TextStyle.FULL,java.util.Locale.getDefault()));
+            initials.add(initial);
         }
         tile.add(days);
+        gap(tile,SPACE_XS);
+        initials.setMaximumSize(new Dimension(width,initials.getPreferredSize().height));
+        tile.add(initials);
         return tile;
     }
     private void updateTimer() {
