@@ -8,8 +8,9 @@ See [RELEASE-1.0.12.md](RELEASE-1.0.12.md) for the scope.
 - Done: task search across titles, notes and tags, retained task view state,
   timer controls ahead of scenery, daily-goal progress, recording status across
   pages, navigation spacing, light-theme action contrast and rounded borders.
-- Checks: targeted behaviour, contrast and text-fit regressions pass. Full
-  suite and release-platform installer builds are the remaining release gates.
+- Checks: full isolated suite passes, including 100 rendered views and 3,888
+  long-name layout checks across all four text sizes. All five theme galleries
+  were visually reviewed. Installer builds remain the release gate.
 - Limits: no claim of a new full-source audit, clean-machine install or native
   campaign verification. No changes to the vault format or reward economy.
 
