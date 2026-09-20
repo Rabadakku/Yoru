@@ -235,6 +235,15 @@ public final class ContrastTest {
      * depends on UIManager defaults alone.
      */
     private static Map<String,JComponent> controls() {
+        var primary=Theme.accentButton("Start",()->{});
+        var selected=Theme.selected(Theme.button("Selected",()->{}),true);
+        for(var control:List.of(primary,selected)) {
+            check(ratio(control.getForeground(),control.getBackground())>=4.5,
+                Theme.current()+" primary and selected labels must reach 4.5:1");
+            for(int delta:new int[]{Theme.DARK?18:-12,Theme.DARK?-24:-30})
+                check(ratio(control.getForeground(),Theme.shade(control.getBackground(),delta))>=4.5,
+                    Theme.current()+" primary labels must remain readable on hover and press");
+        }
         var controls=new LinkedHashMap<String,JComponent>();
         controls.put("button",Theme.button("Save",()->{}));
         controls.put("accent button",Theme.accentButton("Play",()->{}));

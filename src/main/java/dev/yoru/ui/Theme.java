@@ -402,7 +402,7 @@ final class Theme {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setColor(ringFor(c));
         g.setStroke(new BasicStroke(RING));
-        g.drawRoundRect(x + RING / 2, y + RING / 2, w - 1 - RING, h - 1 - RING, corner(w, h), corner(w, h));
+        g.drawRoundRect(x + RING / 2, y + RING / 2, w - 1 - RING, h - 1 - RING, corner(w, h) * 2, corner(w, h) * 2);
         g.dispose();
     }
 
@@ -435,7 +435,7 @@ final class Theme {
             if (line != null) {
                 g.setColor(line);
                 g.setStroke(new BasicStroke(HAIRLINE));
-                g.drawRoundRect(x, y, w - 1, h - 1, corner(w, h), corner(w, h));
+                g.drawRoundRect(x, y, w - 1, h - 1, corner(w, h) * 2, corner(w, h) * 2);
             }
             g.dispose();
             if (group ? focusedWithin(c) : focused(c)) paintRing(graphics, c, x, y, w, h);
@@ -1264,18 +1264,18 @@ final class Theme {
      * choice marks itself here instead, and stays enabled.
      */
     static JButton selected(JButton b,boolean chosen) {
-        b.setBackground(chosen?CYAN:LINE);
+        b.setBackground(chosen?ACCENT_TEXT:LINE);
         b.setForeground(chosen?(DARK?BG:PANEL):TEXT);
-        b.setBorder(controlBorder(chosen?CYAN:LINE));
+        b.setBorder(controlBorder(chosen?ACCENT_TEXT:LINE));
         return b;
     }
 
     /** Primary action: filled in the accent colour, with the ground colour on top. */
     static JButton accentButton(String text,Runnable fn) {
         var b=button(text,fn);
-        b.setBackground(CYAN);
+        b.setBackground(ACCENT_TEXT);
         b.setForeground(DARK?BG:PANEL);
-        b.setBorder(controlBorder(CYAN));
+        b.setBorder(controlBorder(ACCENT_TEXT));
         return b;
     }
 
