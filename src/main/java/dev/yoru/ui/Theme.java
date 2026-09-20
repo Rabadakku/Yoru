@@ -1024,12 +1024,104 @@ final class Theme {
      * {@code SPACE_XL} is the distance from the header to the first card.
      */
     static JPanel pageHeader(String title,String subtitle) {
+        return pageHeader(title,subtitle,new JComponent[0]);
+    }
+
+    /**
+     * The same header, carrying the page's own actions on the title's line.
+     *
+     * A page that put its actions in a row of their own spent a fourth line
+     * before its first card, and the row read as content rather than as the
+     * page's toolbar. On the title's line they are unmistakably the page's, and
+     * the first card starts a row earlier. They wrap below at larger text sizes.
+     */
+    static JPanel pageHeader(String title,String subtitle,JComponent... actions) {
         var p=stack();
-        p.add(title(title));
-        gap(p,SPACE_SM);
-        p.add(subtitle(subtitle));
+        if(actions.length==0) {
+            p.add(title(title));
+            gap(p,SPACE_SM);
+            p.add(subtitle(subtitle));
+            gap(p,SPACE_XL);
+            return p;
+        }
+        var words=stack();
+        words.add(title(title));
+        gap(words,SPACE_SM);
+        words.add(subtitle(subtitle));
+        var right=wrappingRow();
+        for(var action:actions) right.add(action);
+        var head=new JPanel(new HeadRow()) {
+            // Its own height, and the height depends on whether the actions
+            // fold, so it is asked for rather than frozen at construction.
+            @Override public Dimension getMaximumSize() {
+                return new Dimension(Integer.MAX_VALUE,getPreferredSize().height);
+            }
+        };
+        head.setOpaque(false);
+        head.setAlignmentX(0);
+        head.add(words);
+        head.add(right);
+        p.add(head);
         gap(p,SPACE_XL);
         return p;
+    }
+
+    /**
+     * A page header's two blocks: the words, and the actions that belong to
+     * them.
+     *
+     * Side by side while both fit, with the actions on the subtitle's line
+     * rather than floating against the title's midline. When they do not fit
+     * the actions fold onto a line of their own: at 200% text four buttons want
+     * more width than the title's line has to spare, and squeezing the words
+     * into what was left cut the subtitle instead of moving the buttons.
+     */
+    private static final class HeadRow implements LayoutManager {
+        @Override public void addLayoutComponent(String name,Component c) { }
+        @Override public void removeLayoutComponent(Component c) { }
+
+        private boolean sideBySide(Container parent,int width) {
+            return parent.getComponent(0).getPreferredSize().width + SPACE_LG
+                + parent.getComponent(1).getPreferredSize().width <= width;
+        }
+
+        /** The width to lay out at: this header's own once it has one, else what holds it. */
+        private int room(Container parent) {
+            int width=parent.getWidth();
+            for(Container holder=parent.getParent();width==0&&holder!=null;holder=holder.getParent())
+                width=holder.getWidth();
+            var insets=parent.getInsets();
+            return Math.max(0,width-insets.left-insets.right);
+        }
+
+        @Override public Dimension preferredLayoutSize(Container parent) {
+            var insets=parent.getInsets();
+            var words=parent.getComponent(0).getPreferredSize();
+            var actions=parent.getComponent(1).getPreferredSize();
+            boolean side=sideBySide(parent,room(parent));
+            int width=side?words.width+SPACE_LG+actions.width:Math.max(words.width,actions.width);
+            int height=side?Math.max(words.height,actions.height):words.height+SPACE_MD+actions.height;
+            return new Dimension(width+insets.left+insets.right,height+insets.top+insets.bottom);
+        }
+
+        @Override public Dimension minimumLayoutSize(Container parent) { return preferredLayoutSize(parent); }
+
+        @Override public void layoutContainer(Container parent) {
+            var insets=parent.getInsets();
+            var words=parent.getComponent(0);
+            var actions=parent.getComponent(1);
+            int width=room(parent);
+            var wordsSize=words.getPreferredSize();
+            var actionsSize=actions.getPreferredSize();
+            if(sideBySide(parent,width)) {
+                words.setBounds(insets.left,insets.top,width-SPACE_LG-actionsSize.width,wordsSize.height);
+                actions.setBounds(insets.left+width-actionsSize.width,
+                    insets.top+Math.max(0,wordsSize.height-actionsSize.height),actionsSize.width,actionsSize.height);
+            } else {
+                words.setBounds(insets.left,insets.top,width,wordsSize.height);
+                actions.setBounds(insets.left,insets.top+wordsSize.height+SPACE_MD,width,actionsSize.height);
+            }
+        }
     }
 
     /**
@@ -1134,6 +1226,62 @@ final class Theme {
         var p=row();
         p.setLayout(new WrapFlowLayout(FlowLayout.LEFT,SPACE_MD,SPACE_XS));
         return p;
+    }
+
+    /**
+     * A card's top line: what the card is on the left, the controls that act on
+     * it on the right, both on one line.
+     *
+     * A card that stacked its controls under its title spent three lines saying
+     * what one line says, and pushed the card's own content past the fold. The
+     * controls wrap onto further lines at larger text sizes rather than
+     * crowding the name, which shortens with a tooltip.
+     */
+    static JPanel cardHead(JComponent title, JComponent... actions) {
+        var head = new JPanel(new BorderLayout(SPACE_MD, 0));
+        head.setOpaque(false);
+        head.setAlignmentX(0);
+        head.add(title, BorderLayout.CENTER);
+        if (actions.length > 0) {
+            var right = wrappingRow();
+            for (var action : actions) right.add(action);
+            head.add(right, BorderLayout.EAST);
+        }
+        // Its own height: inside a card's vertical box an unbounded row would
+        // take the slack meant for the card's content.
+        head.setMaximumSize(new Dimension(Integer.MAX_VALUE, head.getPreferredSize().height));
+        return head;
+    }
+
+    /**
+     * One column of a chart: a rounded cap on a square foot, standing on the
+     * baseline the whole row shares.
+     *
+     * A plain panel gave every bar four square corners and no floor, so a
+     * fourteen-day row read as fourteen unrelated blocks. The cap is the
+     * control radius, so a bar and a button agree about how round this app is.
+     */
+    static final class Bar extends JPanel {
+        private final Color fill;
+
+        Bar(Color fill) {
+            this.fill = fill;
+            setOpaque(false);
+            setAlignmentX(0);
+        }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            var g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int width = getWidth(), height = getHeight();
+            g.setColor(fill);
+            // Rounded at the top only: the foot meets the baseline, and a bar
+            // one pixel tall still draws as that pixel rather than vanishing
+            // into a corner radius.
+            int radius = Math.min(RADIUS, height);
+            g.fillRoundRect(0, 0, width, height + radius, radius, radius);
+            g.dispose();
+        }
     }
 
     /** The corner a card turns: rounder than a control's, so a card reads as the surface controls sit on (#9). */
@@ -1250,6 +1398,21 @@ final class Theme {
         b.setForeground(TEXT);
         b.setBorder(controlBorder(LINE));
         b.addActionListener(e->fn.run());
+        return b;
+    }
+
+    /**
+     * The quiet form of a button, for the controls that belong to a row rather
+     * than to the page.
+     *
+     * Same shape, same size, same focus ring — drawn in the card's own surface
+     * with a hairline, so four rows of three controls read as a table with
+     * actions rather than as a wall of twelve buttons. Hover and press still
+     * shade, because the fill they shade is a real colour.
+     */
+    static JButton ghost(JButton b) {
+        b.setBackground(PANEL);
+        b.setBorder(controlBorder(LINE));
         return b;
     }
 

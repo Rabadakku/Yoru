@@ -316,29 +316,30 @@ final class CollectionPage {
                          JPanel details, Arrangement arrangement, boolean gameOpen) {
         var c = card();
         c.setName("collection.boxes");
-        c.add(sectionHeader("PC BOXES"));
-        gap(c, SPACE_SM);
         var previous = button("‹ Previous", () -> screen.turn(-1));
         previous.setName("collection.previousBox");
         var next = button("Next ›", () -> screen.turn(1));
         next.setName("collection.nextBox");
-        c.add(flushRow(previous, selector, next, occupancy));
 
         var arrange = button(gameOpen ? "The game is running" : "Arrange", () -> setArranging(arrangement, true));
         arrange.setName("collection.arrange");
         arrange.setEnabled(!gameOpen);
-        var rename = button("Rename box…", this::renameBox);
+        var rename = ghost(button("Rename box…", this::renameBox));
         rename.setName("collection.rename");
         rename.setEnabled(!gameOpen);
-        var paper = button("Wallpaper", this::nextWallpaper);
+        var paper = ghost(button("Wallpaper", this::nextWallpaper));
         paper.setName("collection.wallpaper");
         paper.setEnabled(!gameOpen);
         // Three controls that are disabled for one reason, said on each of them.
         if (gameOpen) for (var control : new JComponent[] {arrange, rename, paper})
             control.setToolTipText("Close the game first: while it runs it holds its own copy of the save");
-        // Arrange last: it hides while arranging, and a hidden control first in
-        // a flush row would leave its gap behind and push the row off the margin.
-        c.add(flushRow(rename, paper, arrange));
+        // What the box is, then which box, then what can be done to it: the
+        // card's name carries its own controls, and turning the pages sits with
+        // the box being turned. Arrange last: it hides while arranging, and a
+        // hidden control first in a flush row would leave its gap behind.
+        c.add(cardHead(sectionHeader("PC BOXES"), rename, paper, arrange));
+        gap(c, SPACE_MD);
+        c.add(flushRow(previous, selector, next, occupancy));
 
         // Arranging is a mode with its instruction in words, a way to put a
         // Pokémon back, and a way out, rather than a hint painted on the box.

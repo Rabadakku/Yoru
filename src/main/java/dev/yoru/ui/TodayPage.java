@@ -75,7 +75,18 @@ final class TodayPage {
         // Two columns while there is room for both, stacked when there is not:
         // the companion card used to be a fixed 315 px in an EAST slot, which
         // broke the page below about 900 px rather than reflowing.
-        p.add(new Hero(focusCard(),companionColumn()));
+        //
+        // What is next sits beside what is now. The companion alone left the
+        // right of the hero empty down to the focus card's floor, and the
+        // agenda is the one thing a running timer wants next to it.
+        var agenda=schedulePreview();
+        agenda.setName("today.agenda");
+        var rail=stack();
+        rail.add(companionColumn());
+        gap(rail,SPACE_LG);
+        rail.add(agenda);
+        glue(rail);
+        p.add(new Hero(focusCard(),rail));
         gap(p,SPACE_XL);
 
         var daily=Analytics.daily(tracker.state(),null,zone,Instant.now());
@@ -89,11 +100,8 @@ final class TodayPage {
         stats.add(stat("TODAY",Analytics.duration(daily.getOrDefault(today,0L))));
         stats.add(stat("LAST 7 DAYS",Analytics.report(weekSeconds)));
         stats.add(stat("CURRENT STREAK",plural(Analytics.streak(daily,today),"day")));
-        // The agenda before the statistics (#9): what comes next, then how it has gone.
-        var agenda=schedulePreview();
-        agenda.setName("today.agenda");
-        p.add(agenda);
-        gap(p,SPACE_LG);
+        // The agenda before the statistics (#9): what comes next, then how it
+        // has gone. The agenda is in the hero above, so that order still holds.
         p.add(stats);
         gap(p,SPACE_LG);
         p.add(heatCard(today));
@@ -283,11 +291,11 @@ final class TodayPage {
             long sec=Analytics.daily(tracker.state(),a.id(),zone(),Instant.now()).getOrDefault(today,0L);
             // Management sits with the picker's own list, by identity: the buttons
             // carry the activity's id, so renaming one can never move another's time.
-            var rename=button("Rename",()->ActivityManager.rename(shell.owner(),tracker,a,()->shell.show("Today")));
+            var rename=ghost(button("Rename",()->ActivityManager.rename(shell.owner(),tracker,a,()->shell.show("Today"))));
             rename.setName("activity.rename."+a.id());
             // "Delete", not "Remove": this is the control that can destroy the
             // recorded time, and the dialog it opens says so.
-            var remove=button("Delete",()->ActivityManager.remove(shell.owner(),tracker,a,()->shell.show("Today")));
+            var remove=ghost(button("Delete",()->ActivityManager.remove(shell.owner(),tracker,a,()->shell.show("Today"))));
             remove.setName("activity.remove."+a.id());
             boolean timing=!ActivityManager.canRemove(tracker,a.id());
             remove.setEnabled(!timing);

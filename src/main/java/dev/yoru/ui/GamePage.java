@@ -70,7 +70,10 @@ final class GamePage {
         var read = GameView.read(state);
         var save = read.save();
         var hero = card();
-        hero.add(sectionHeader("SAVED GAME")); gap(hero, SPACE_MD);
+        // The save's own file actions sit on the card's title line; Play stays
+        // in the body, where the save it continues is described.
+        var manage = wrappingRow();
+        hero.add(cardHead(sectionHeader("SAVED GAME"), manage)); gap(hero, SPACE_MD);
         // 18, not 22: the rule is that a figure earns 22 and a headline does
         // not, and none of these five lines is a number.
         JLabel headline;
@@ -112,8 +115,10 @@ final class GamePage {
         export.setEnabled(state.game() != null);
         // Disabled with the reason on it rather than a button that does nothing.
         export.setToolTipText(state.game() == null ? "There is no save in this vault yet" : "Write a copy of this save somewhere else");
-        hero.add(flushRow(play, button("Import save…", this::chooseSave), export,
-            button("Choose game file…", this::chooseRom)));
+        manage.add(ghost(button("Import save…", this::chooseSave)));
+        manage.add(ghost(export));
+        manage.add(ghost(button("Choose game file…", this::chooseRom)));
+        hero.add(flushRow(play));
         gap(hero, SPACE_MD);
         hero.add(bodyLabel("As on the cartridge, only saves made in the game are kept, so save before you close it."));
         p.add(hero);
