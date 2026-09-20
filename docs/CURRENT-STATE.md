@@ -1,5 +1,28 @@
 # Development handoff
 
+## Release candidate 1.0.11 — September 20, 2026
+
+Branch `claude/code-review`, from main after #32. Notes: `RELEASE-1.0.11.md`.
+
+- **The review.** One agent per slice of the source read every file in it; every
+  finding then went to a verifier told to refute it, and every claimed bug to a
+  second one told to reproduce it. 135 findings, 89 confirmed. The raw results
+  are in this session's workflow journal, not in the repository.
+- **Fixed here** (each with a failing-first test): the study gift trainer name
+  (`Gen3Save.Trainer.storedName`, copied byte for byte, with `Gen3Text` made
+  injective over the game's own symbols); vacated party entries emptied as
+  `ZeroMonData` does; PP restored on every box placement; the unlock key staged,
+  flushed and published only after re-encryption, with `reconcile` taught the
+  staged state; `save()` after `close()` refused; rename and delete taking the
+  lock; JSON escaping lone surrogates; and the tracking and Notion importer
+  fixes listed in the release notes.
+- **Not reviewed yet:** `ui-shell` (YoruApp, Shell, VaultLauncher), `ui-foundation`
+  (Theme, dialogs, Logo) and `ui-today-tasks` (Today, Settings, Tasks). Their
+  reviewers were cut off by a usage limit three times. Start the next pass there.
+- **Confirmed but not fixed:** the emulator, artwork and remaining UI cleanups
+  (mostly dead code, duplicated helpers and stale comments), plus a handful of
+  low-severity vault items. None changes behaviour a player sees.
+
 ## After 1.0.10 — September 16, 2026
 
 #30 was merged from `claude/text-fit`; #31 and the companion-artwork removal are

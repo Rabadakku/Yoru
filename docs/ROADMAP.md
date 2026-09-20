@@ -1,5 +1,30 @@
 # Yoru roadmap
 
+## Release candidate 1.0.11 — September 20, 2026
+
+Built on `claude/code-review`. Notes: [RELEASE-1.0.11.md](RELEASE-1.0.11.md).
+It carries the text size setting (#31), the withdrawal of the companion
+artwork at the owner's request, and the fixes from a full review of the source.
+
+The review read every file outside three UI areas — the main window and vault
+launcher, the theme and dialog foundation, and the Today, Settings and task
+pages — and put each finding to verifiers whose job was to refute it. Of 135
+findings, 89 survived, 40 were refuted and 6 were left undecided. The confirmed
+domain, application, save-format, vault and importer set is fixed here; each bug
+arrived with a test that fails without its fix. The three unreviewed UI areas,
+and the confirmed cleanups in the emulator, artwork and remaining UI code, are
+the next pass.
+
+| Gate | Evidence | State |
+|---|---|---|
+| Isolated suite | `./test.sh`, including the named-module check | Passing |
+| Every page, every theme, both sizes | `PreviewInventoryTest`: 100 renders | Passing |
+| Every page at every text size | `TextFitTest`: 100, 125, 150, 200% | Passing |
+| Old vaults and saves still open | `LegacyVaultTest` opens a vault written by the 1.0.10 build | Passing |
+| No personal data or game assets | `PrivacyTest`, `DistributionTest`: the jar now ships no images at all | Passing |
+| Installers | `release.yml` on the version tag | Pending the release |
+| Clean-machine install, full campaign, real libretro core | By hand | Not verified |
+
 ## After 1.0.10 — September 16, 2026
 
 #9's acceptance asked for long names and 200% text, and neither had been
