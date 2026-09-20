@@ -331,8 +331,9 @@ final class TasksPanel extends JPanel implements Scrollable {
      *
      * A row is a control — its title opens the task, its menu acts on it — and
      * it said nothing about that until something inside it was reached. The
-     * shade is the one buttons use when hovered, so "under the pointer" looks
-     * the same everywhere.
+     * fill moves the way a hovered button's does, a step short of it: the same
+     * move over a whole row at a button's strength reads as a selection rather
+     * than as the pointer.
      */
     private static void lightOnHover(JPanel line) {
         line.setOpaque(false);
