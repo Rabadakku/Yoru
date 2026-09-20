@@ -1178,6 +1178,18 @@ final class Theme {
             new EmptyBorder(SPACE_SM,SPACE_MD,SPACE_SM,SPACE_MD));
     }
 
+    /**
+     * The last row of a list that ends inside a card: the same room, no rule.
+     *
+     * A rule under the final row divides it from the card's own edge a few
+     * pixels below, which reads as a list whose last entry failed to draw. The
+     * pixel the rule gives up goes back into the padding, so the row stands
+     * exactly as tall as the ones above it.
+     */
+    static Border listEnd() {
+        return new EmptyBorder(SPACE_SM,SPACE_MD,SPACE_SM+HAIRLINE,SPACE_MD);
+    }
+
     /** "1 day" / "6 days" — the one place number agreement is decided. */
     static String plural(int count,String noun) { return count+" "+noun+(count==1?"":"s"); }
 
