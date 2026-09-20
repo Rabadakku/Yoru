@@ -62,8 +62,16 @@ final class WrapFlowLayout extends FlowLayout {
     private Dimension size(Container target, boolean preferred) {
         synchronized (target.getTreeLock()) {
             int width = target.getWidth();
-            for (Container holder = target.getParent(); width == 0 && holder != null; holder = holder.getParent())
-                width = holder.getWidth();
+            // The room inside what holds it, not that holder's own width: a card
+            // is its padding wider than any row it can hold, and a row measured
+            // against the card's outer width reported one line, was laid out in
+            // the narrower room it actually had, and wrapped a button onto a
+            // second line the card had left no height for. At the window's
+            // minimum that button was the focus card's Edit timer.
+            for (Container holder = target.getParent(); width == 0 && holder != null; holder = holder.getParent()) {
+                var padding = holder.getInsets();
+                width = Math.max(0, holder.getWidth() - padding.left - padding.right);
+            }
             var insets = target.getInsets();
             int room = width == 0 ? Integer.MAX_VALUE : width - insets.left - insets.right;
             int line = 0, lineHeight = 0, widest = 0, height = 0;
