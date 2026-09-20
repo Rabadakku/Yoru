@@ -77,7 +77,12 @@ final class TasksPanel extends JPanel implements Scrollable {
         this.state=state;
         view=state.view; sort=state.sort; month=state.month;
         var p=stack();
-        p.add(YoruApp.pageHeaderFor("Tasks","TASKS · NOTES · DUE DATES"));
+        // The one thing this page makes sits on its title's line; the views and
+        // the tools that refine them follow, two rows where there were three.
+        var create=accentButton("New task",()->edit(null));
+        create.setName("task.new");
+        create.setToolTipText("Add a task");
+        p.add(YoruApp.pageHeaderFor("Tasks","TASKS · NOTES · DUE DATES",create));
 
         var top=new JPanel(new BorderLayout(SPACE_MD,0));
         top.setOpaque(false);
@@ -89,10 +94,8 @@ final class TasksPanel extends JPanel implements Scrollable {
             viewButtons.put(value,b);tabs.add(b);
         }
         top.add(tabs,BorderLayout.CENTER);
-        var create=accentButton("New task",()->edit(null));
-        create.setName("task.new");
-        create.setToolTipText("Add a task");
-        top.add(create,BorderLayout.EAST);
+        // What the list is showing belongs beside the views that decide it.
+        top.add(summary,BorderLayout.EAST);
         p.add(top);gap(p,SPACE_MD);
 
         var order=plainCombo(new JComboBox<>(Sort.values()));
@@ -115,12 +118,14 @@ final class TasksPanel extends JPanel implements Scrollable {
         left.setOpaque(false);
         left.add(sortControls);left.add(tags);left.add(importer);
         tools.add(left,BorderLayout.WEST);
-        tools.add(summary,BorderLayout.EAST);
-        p.add(tools);gap(p,SPACE_MD);
-        var find=new JPanel(new BorderLayout(SPACE_MD,0));
+        var find=new JPanel(new BorderLayout(SPACE_SM,0));
         find.setOpaque(false);
-        var caption=label("Search tasks",TYPE_LABEL,MUTED);
+        var caption=label("Search",TYPE_LABEL,MUTED);
         caption.setLabelFor(search);
+        // A width of its own: in the slack of a BorderLayout a text field grows
+        // to the width of the window, and a search box the width of the page
+        // reads as the page's subject rather than as one of its tools.
+        search.setPreferredSize(new Dimension(grow(SPACE_XXL*8),controlHeight()));
         search.setName("task.search");
         search.setText(state.query);
         search.getAccessibleContext().setAccessibleName("Search task titles, notes and tags");
@@ -129,6 +134,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         find.add(caption,BorderLayout.WEST);
         find.add(search,BorderLayout.CENTER);
         find.add(clearSearch,BorderLayout.EAST);
+        tools.add(find,BorderLayout.EAST);
         search.getInputMap().put(KeyStroke.getKeyStroke("ESCAPE"),"clearSearch");
         search.getActionMap().put("clearSearch",new AbstractAction() {
             public void actionPerformed(java.awt.event.ActionEvent e) { search.setText(""); }
@@ -138,7 +144,7 @@ final class TasksPanel extends JPanel implements Scrollable {
             public void removeUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
             public void changedUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
         });
-        p.add(find);gap(p,SPACE_MD);
+        p.add(tools);gap(p,SPACE_MD);
         p.add(rows);gap(p,SPACE_MD);
         add(p,BorderLayout.NORTH);
         rebuildRows();

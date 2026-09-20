@@ -24,17 +24,14 @@ final class HabitsPanel {
 
     static JPanel view(Tracker tracker,Runnable refresh) {
         var body=stack();
-        body.add(YoruApp.pageHeaderFor("Habits","DAILY CHECK-OFFS · TIME SINCE"));
+        body.add(YoruApp.pageHeaderFor("Habits","DAILY CHECK-OFFS · TIME SINCE",
+            button("+ Daily check-off",()->create(tracker,refresh,HabitKind.DAILY,body)),
+            button("+ Time since",()->create(tracker,refresh,HabitKind.TIME_SINCE,body))));
         if(tracker.state().habits().isEmpty()) {
             body.add(emptyState("No habits yet.",
                 "Check off a day, or count the time since you stopped.",null));
             gap(body,SPACE_LG);
         }
-        var actions=row();
-        actions.add(button("+ Daily check-off",()->create(tracker,refresh,HabitKind.DAILY,body)));
-        actions.add(button("+ Time since",()->create(tracker,refresh,HabitKind.TIME_SINCE,body)));
-        body.add(actions);
-        gap(body,SPACE_LG);
         for(var h:tracker.state().habits()) {
             body.add(habitCard(tracker,refresh,h));
             gap(body,SPACE_MD);
@@ -44,31 +41,44 @@ final class HabitsPanel {
 
     private static JPanel habitCard(Tracker tracker,Runnable refresh,Habit habit) {
         var card=card();
-        card.add(label(habit.name(),TYPE_HEADING,TEXT));
-        var manage=row();
-        var rename=button("Rename",()-> {
+        var rename=ghost(button("Rename",()-> {
             var input=new JTextField(habit.name(),24);
             input.getAccessibleContext().setAccessibleName("Habit name");
             while(Dialogs.confirm(card,input,"Rename habit","Save")) {
                 try {tracker.renameHabit(habit.id(),input.getText());refresh.run();break;}
                 catch(Exception error){Dialogs.error(card,error.getMessage());}
             }
-        });
+        }));
         rename.setName("habit.rename."+habit.id());
         rename.getAccessibleContext().setAccessibleName("Rename "+habit.name());
-        manage.add(rename);
-        var delete=button("Delete",()-> {
+        var delete=ghost(button("Delete",()-> {
             if(Dialogs.confirm(card,"Delete this habit and its history? Other habits and study records stay unchanged. A vault backup is kept first.",
                 "Delete "+habit.name(),"Delete habit"))
                 act(card,refresh,()->tracker.deleteHabit(habit.id()));
-        });
+        }));
         delete.setName("habit.delete."+habit.id());
         delete.getAccessibleContext().setAccessibleName("Delete "+habit.name());
-        manage.add(delete);
-        card.add(manage);
-        gap(card,SPACE_SM);
-        if(habit.kind()==HabitKind.DAILY) daily(tracker,refresh,habit,card);
-        else since(tracker,refresh,habit,card);
+        // The one thing this card is for sits with its name, where the eye
+        // already is, and the two that manage the card follow it.
+        var name=shortenable(habit.name(),TYPE_HEADING,TEXT);
+        if(habit.kind()==HabitKind.DAILY) {
+            var today=LocalDate.now(ZoneId.of(habit.zone()));
+            boolean checked=habit.checkIns().contains(today);
+            // The app's own check control rather than a stock JCheckBox: a stock
+            // box is 14 px of platform chrome sitting among drawn cells and
+            // buttons, and its label baseline missed the row rhythm.
+            var check=button("Done today",()->act(card,refresh,()->tracker.checkIn(habit.id(),today,!checked)));
+            check.setName("habit.done");
+            check.getAccessibleContext().setAccessibleName(checked?"Done today, checked":"Done today, not checked");
+            selected(check,checked);
+            card.add(cardHead(name,check,rename,delete));
+            gap(card,SPACE_MD);
+            daily(tracker,refresh,habit,card);
+        } else {
+            card.add(cardHead(name,rename,delete));
+            gap(card,SPACE_MD);
+            since(tracker,refresh,habit,card);
+        }
         return card;
     }
 
@@ -83,17 +93,6 @@ final class HabitsPanel {
         // the only reason to read it.
         card.add(label(habit.streak(today)+" day streak · "
             +Theme.plural(habit.checkIns().size(),"day")+" checked off",TYPE_LABEL,TEXT));
-        gap(card,SPACE_SM);
-        // The app's own check control rather than a stock JCheckBox: a stock
-        // box is 14 px of platform chrome sitting among drawn cells and buttons,
-        // and its label baseline missed the row rhythm. Same filled-when-on
-        // treatment as the day cells, so "done" looks like one thing here.
-        boolean checked=habit.checkIns().contains(today);
-        var check=button("Done today",()->act(card,refresh,()->tracker.checkIn(habit.id(),today,!checked)));
-        check.setName("habit.done");
-        check.getAccessibleContext().setAccessibleName(checked?"Done today, checked":"Done today, not checked");
-        selected(check,checked);
-        card.add(check);
         gap(card,SPACE_MD);
         // A filled cell is a day done and an outlined one is a day not done: the
         // state reads at a glance, without a glyph to decode, and each cell is
@@ -106,6 +105,11 @@ final class HabitsPanel {
             var date=today.minusDays(i);
             boolean done=habit.checkIns().contains(date);
             var cell=selected(button("",()->act(card,refresh,()->tracker.checkIn(habit.id(),date,!done))),done);
+            // Today is outlined whether or not it is done, so the row says
+            // where now is without counting back from the end. The ring is
+            // chosen against the cell's own fill: the accent on an accent-filled
+            // done cell would be a ring nobody can see.
+            if(date.equals(today)) cell.setBorder(controlBorder(ringFor(cell.getBackground())));
             cell.setPreferredSize(new Dimension(SPACE_XXL,SPACE_XXL));
             cell.setToolTipText(date+(done?" · done · click to undo":" · click to check off"));
             cell.getAccessibleContext().setAccessibleName(date+(done?" completed":" not completed"));

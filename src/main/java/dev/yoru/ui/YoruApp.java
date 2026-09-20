@@ -95,6 +95,11 @@ public final class YoruApp extends JPanel implements Shell {
         return pageHeader(rowFor(nav).nav(),subtitle);
     }
 
+    /** The same header with the page's own actions on the title's line. */
+    static JPanel pageHeaderFor(String nav,String subtitle,JComponent... actions) {
+        return pageHeader(rowFor(nav).nav(),subtitle,actions);
+    }
+
     public YoruApp(Tracker tracker,Repository vault) { this(tracker,vault,null,null,null); }
     private YoruApp(Tracker tracker,Repository vault,VaultStore store,String openName,char[] secret) {
         this(tracker,vault,store,openName,secret,new GameController(tracker));
@@ -542,8 +547,6 @@ public final class YoruApp extends JPanel implements Shell {
 
     private JPanel schedule() {
         var p=stack();
-        p.add(pageHeaderFor("Schedule","RECORDED SESSIONS · PLANNED BLOCKS · WEEKLY TEMPLATE"));
-
         // Wrapping: with larger text the five controls take two lines (#31).
         var nav=wrappingRow();
         // A bare arrow is not a name: both get a tooltip and an accessible one.
@@ -559,8 +562,11 @@ public final class YoruApp extends JPanel implements Shell {
         nav.add(button("This week",()->{
             week=tracker.state().settings().weekOf(LocalDate.now());showPage("Schedule");
         }));
-        nav.add(button("+ Plan block",()->timeDialog(true)));
-        nav.add(button("Weekly template…",()->WeeklyTemplate.open(this,tracker,()->showPage("Schedule"))));
+        // What the page makes goes on its title's line; what moves the grid
+        // stays with the grid it moves.
+        p.add(pageHeaderFor("Schedule","RECORDED SESSIONS · PLANNED BLOCKS · WEEKLY TEMPLATE",
+            button("+ Plan block",()->timeDialog(true)),
+            ghost(button("Weekly template…",()->WeeklyTemplate.open(this,tracker,()->showPage("Schedule"))))));
         p.add(nav);
         gap(p,SPACE_MD);
 
@@ -628,11 +634,11 @@ public final class YoruApp extends JPanel implements Shell {
             what.add(Box.createHorizontalGlue());
             line.add(what,BorderLayout.CENTER);
             var actions=row();
-            actions.add(button("Edit",()->editTime(null,b)));
-            actions.add(button("Delete",()->{
+            actions.add(ghost(button("Edit",()->editTime(null,b))));
+            actions.add(ghost(button("Delete",()->{
                 if(Dialogs.confirmDestructive(this,"Delete this planned block?","Delete block","Delete"))
                     perform(()->tracker.deleteBlock(b.id()));
-            }));
+            })));
             line.add(actions,BorderLayout.EAST);
             list.add(line);
         }
@@ -716,16 +722,13 @@ public final class YoruApp extends JPanel implements Shell {
 
     private JPanel data() {
         var p=stack();
-        p.add(pageHeaderFor("Data","DURATION · HISTORY · EXPORT"));
-        var actions=row();
-        actions.add(button("+ Log time",()->timeDialog(false)));
         // An ellipsis on every action that opens a dialog, and none on the ones
         // that do not: the label is then the promise of what happens next.
-        actions.add(button("Export sessions CSV…",this::export));
-        actions.add(button("Export vault JSON…",this::exportVault));
-        actions.add(button("Import vault JSON…",this::importVault));
-        p.add(actions);
-        gap(p,SPACE_LG);
+        p.add(pageHeaderFor("Data","DURATION · HISTORY · EXPORT",
+            button("+ Log time",()->timeDialog(false)),
+            ghost(button("Export sessions CSV…",this::export)),
+            ghost(button("Export vault JSON…",this::exportVault)),
+            ghost(button("Import vault JSON…",this::importVault))));
         // The activity manager lives here as well as beside the Today picker: this
         // page is where the session counts and durations a removal would act on
         // are already on screen.
@@ -747,6 +750,12 @@ public final class YoruApp extends JPanel implements Shell {
             bars.setOpaque(false);
             long max=3600;
             for(int i=0;i<14;i++)max=Math.max(max,days.getOrDefault(LocalDate.now().minusDays(i),0L));
+            // The day numbers sit in their own row under the floor, so the
+            // bars share one baseline instead of each ending wherever its own
+            // column's label began.
+            var dayNumbers=new JPanel(new GridLayout(1,14,SPACE_SM,0));
+            dayNumbers.setOpaque(false);
+            dayNumbers.setAlignmentX(0);
             for(int i=13;i>=0;i--) {
                 LocalDate d=LocalDate.now().minusDays(i);
                 long sec=days.getOrDefault(d,0L);
@@ -762,16 +771,18 @@ public final class YoruApp extends JPanel implements Shell {
                 // rest are coloured by the time recorded, not by the column's
                 // index, so the chart agrees with the heat map above it.
                 int height=none?HAIRLINE:Math.max(RING,(int)(100*sec/max));
-                var bar=new JPanel();
-                bar.setBackground(none?LINE:Heatmap.colour(d,sec,goal));
+                var bar=new Theme.Bar(none?LINE:Heatmap.colour(d,sec,goal));
                 bar.setPreferredSize(new Dimension(25,height));
                 bar.setMaximumSize(new Dimension(60,height));
                 cell.add(bar);
-                gap(cell,SPACE_SM);
-                cell.add(label(""+d.getDayOfMonth(),TYPE_CAPTION,MUTED));
                 bars.add(cell);
+                dayNumbers.add(label(""+d.getDayOfMonth(),TYPE_CAPTION,MUTED));
             }
+            bars.setAlignmentX(0);
+            bars.setBorder(new javax.swing.border.MatteBorder(0,0,HAIRLINE,0,LINE));
             chart.add(bars);
+            gap(chart,SPACE_SM);
+            chart.add(dayNumbers);
             gap(chart,SPACE_MD);
             chart.add(TodayPage.heatLegend(LocalDate.now(),tracker.state().settings().dailyGoalHours()));
         }
