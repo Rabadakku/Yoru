@@ -150,6 +150,48 @@ public final class StudyGiftTest {
             "a companion moved to another box is still recognised");
     }
 
+    /**
+     * A gift's trainer name is the player's own bytes.
+     *
+     * The game counts a Pokémon as traded when its trainer name differs from the
+     * player's by a single byte (IsOtherTrainer), and a traded one disobeys past
+     * the badge cap. A name from the naming screen's symbol page — … ” ’ — once
+     * read back as plain ASCII and was written as other bytes, and a letter
+     * outside Yoru's table became '?'. The name is copied instead.
+     */
+    private static void theTrainerNameIsTheSavesOwnBytes() {
+        var base = Gen3Fixture.withTrainer(Gen3Fixture.save(2, 4), "TESTER", 0, 12345, 54321);
+        // A, B, the ellipsis, a closing double and single quote, a letter the
+        // game has and Yoru's table does not (0x01), then the terminator.
+        byte[] symbols = {(byte) 0xBB, (byte) 0xBC, (byte) 0xB0, (byte) 0xB2, (byte) 0xB4, 0x01,
+            (byte) 0xFF, (byte) 0xFF};
+        var trainer = Gen3Save.read(Gen3Fixture.withTrainerName(base, symbols)).trainer();
+        check(trainer.name().equals("AB…”’?"), "the name reads as the game draws it, got " + trainer.name());
+        var gift = StudyGift.build(REWARD, 252, 5, trainer, null, 0).encode();
+        check(java.util.Arrays.equals(gift, 0x14, 0x1B, symbols, 0, 7),
+            "the gift's trainer name is the save's own seven bytes, got "
+                + java.util.HexFormat.of().formatHex(gift, 0x14, 0x1B));
+        check(Gen3Pokemon.intact(gift, 0), "and the record still checksums");
+        var again = Gen3Save.read(Gen3Fixture.withTrainerName(base, symbols)).trainer();
+        check(trainer.equals(again) && trainer.hashCode() == again.hashCode(),
+            "two reads of one save are the same trainer, stored bytes and all");
+        check(!trainer.equals(Gen3Save.read(base).trainer()), "and a trainer with other name bytes is not");
+
+        // Past the terminator the game compares nothing, and a name's field can
+        // hold leftovers there. The gift pads with terminators instead, as every
+        // earlier build did, so a gift already delivered still matches the one
+        // rebuilt today.
+        byte[] leftovers = {(byte) 0xBB, (byte) 0xBC, (byte) 0xFF, (byte) 0xC0, (byte) 0xC1, (byte) 0xC2,
+            (byte) 0xFF, (byte) 0xFF};
+        var padded = StudyGift.build(REWARD, 252, 5,
+            Gen3Save.read(Gen3Fixture.withTrainerName(base, leftovers)).trainer(), null, 0).encode();
+        check(java.util.Arrays.equals(padded, 0x14, 0x1B,
+                new byte[]{(byte) 0xBB, (byte) 0xBC, -1, -1, -1, -1, -1}, 0, 7),
+            "bytes after the terminator are padded, got " + java.util.HexFormat.of().formatHex(padded, 0x14, 0x1B));
+        check(java.util.Arrays.equals(padded, 0x14, 0x1B, Gen3Text.bytes("AB", 7), 0, 7),
+            "which is exactly what writing the name as text gives");
+    }
+
     /** Impossible requests are refused rather than clamped. */
     private static void refusesWhatItCannotBuild() {
         for (int level : new int[]{0, 101, -1}) {
@@ -172,7 +214,8 @@ public final class StudyGiftTest {
         itEncodesToSomethingTheGameAccepts();
         rebuildingIsIdentical();
         deliveryIsDetectableInTheSave();
+        theTrainerNameIsTheSavesOwnBytes();
         refusesWhatItCannotBuild();
-        System.out.println("PASS: "+checks+" study gift checks (identity, fields, moves, level, detection)");
+        System.out.println("PASS: "+checks+" study gift checks (identity, fields, moves, level, detection, trainer name)");
     }
 }

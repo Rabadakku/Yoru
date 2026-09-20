@@ -2,6 +2,7 @@ package dev.yoru.game;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 
 /**
  * One Pokémon as the Gen 3 games store it: 80 bytes, encrypted and shuffled.
@@ -39,6 +40,8 @@ import java.nio.ByteOrder;
 public final class Gen3Pokemon {
 
     public static final int BOX_SIZE = 80, PARTY_SIZE = 100, DATA_SIZE = 48, SUBSTRUCTURE = 12;
+    /** The trainer name field at 0x14: seven bytes, with no room for a terminator after a seventh character. */
+    static final int OT_NAME_BYTES = 7;
 
     /** Substructure identities, in the order the game names them. */
     private static final int GROWTH = 0, ATTACKS = 1, EVS = 2, MISC = 3;
@@ -71,6 +74,14 @@ public final class Gen3Pokemon {
     public int otId;
     public String nickname = "";
     public String otName = "";
+    /**
+     * The trainer name's stored bytes, when they are known exactly; {@link #encode}
+     * then writes these rather than {@link #otName}. The game decides whose a
+     * Pokémon is by comparing them with the player's own name byte for byte
+     * (IsOtherTrainer), and text cannot carry every byte a name can hold.
+     * Decoding leaves this unset: only a gift built from a save's trainer has it.
+     */
+    byte[] otNameBytes;
     public int language = 2;          // English
     public int markings;
     /**
@@ -102,8 +113,7 @@ public final class Gen3Pokemon {
 
     /** Reads an 80-byte box entry (or the first 80 bytes of a party entry). */
     public static Gen3Pokemon decode(byte[] bytes, int at) {
-        var buffer = ByteBuffer.wrap(bytes, at, BOX_SIZE).order(ByteOrder.LITTLE_ENDIAN).slice()
-            .order(ByteOrder.LITTLE_ENDIAN);
+        var buffer = view(bytes, at, BOX_SIZE);
         var p = new Gen3Pokemon();
         p.personality = buffer.getInt(0x00);
         p.otId = buffer.getInt(0x04);
@@ -121,8 +131,7 @@ public final class Gen3Pokemon {
 
     /** Whether the stored checksum agrees with the data it covers. */
     public static boolean intact(byte[] bytes, int at) {
-        var buffer = ByteBuffer.wrap(bytes, at, BOX_SIZE).order(ByteOrder.LITTLE_ENDIAN).slice()
-            .order(ByteOrder.LITTLE_ENDIAN);
+        var buffer = view(bytes, at, BOX_SIZE);
         int personality = buffer.getInt(0x00), otId = buffer.getInt(0x04);
         int stored = buffer.getShort(0x1C) & 0xFFFF;
         return stored == checksum(decrypt(bytes, at + 0x20, personality, otId));
@@ -139,7 +148,8 @@ public final class Gen3Pokemon {
         // Bits 1 and 2 are derived, as SetBoxMonData derives them in the game.
         int derived = (flags & ~0x06) | (species != 0 ? 0x02 : 0) | (isEgg() ? 0x04 : 0);
         buffer.put(0x13, (byte) derived);
-        Gen3Text.write(otName, out, 0x14, 7);
+        if (otNameBytes != null) System.arraycopy(otNameBytes, 0, out, 0x14, OT_NAME_BYTES);
+        else Gen3Text.write(otName, out, 0x14, OT_NAME_BYTES);
         buffer.put(0x1B, (byte) markings);
 
         var data = writeSubstructures();
@@ -171,8 +181,7 @@ public final class Gen3Pokemon {
     /** Reads a 100-byte party entry. */
     public static Gen3Pokemon decodeFromParty(byte[] bytes, int at) {
         var p = decode(bytes, at);
-        var buffer = ByteBuffer.wrap(bytes, at, PARTY_SIZE).order(ByteOrder.LITTLE_ENDIAN).slice()
-            .order(ByteOrder.LITTLE_ENDIAN);
+        var buffer = view(bytes, at, PARTY_SIZE);
         p.status = buffer.getInt(0x50);
         p.level = buffer.get(0x54) & 0xFF;
         p.mail = buffer.get(0x55) & 0xFF;
@@ -184,6 +193,11 @@ public final class Gen3Pokemon {
         p.spAttack = buffer.getShort(0x60) & 0xFFFF;
         p.spDefense = buffer.getShort(0x62) & 0xFFFF;
         return p;
+    }
+
+    /** A little-endian window onto {@code size} bytes from {@code at}, indexed from zero. */
+    private static ByteBuffer view(byte[] bytes, int at, int size) {
+        return ByteBuffer.wrap(bytes, at, size).slice().order(ByteOrder.LITTLE_ENDIAN);
     }
 
     // ---- encryption and shuffling ----------------------------------------
@@ -300,7 +314,8 @@ public final class Gen3Pokemon {
     // ---- joining the party -------------------------------------------------
 
     public static final int SHEDINJA = 292;
-    static final int MAIL_NONE = 0xFF;
+    /** A party record's mail byte, and what it holds when there is no letter. */
+    static final int MAIL_AT = 0x55, MAIL_NONE = 0xFF;
 
     /**
      * The party record the game makes when a boxed Pokémon joins the party.
@@ -321,9 +336,43 @@ public final class Gen3Pokemon {
         var b = ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN);
         b.putInt(0x50, 0);
         b.put(0x54, (byte) level);
-        b.put(0x55, (byte) MAIL_NONE);
+        b.put(MAIL_AT, (byte) MAIL_NONE);
         b.putShort(0x56, (short) stats[0]);
         for (int i = 0; i < 6; i++) b.putShort(0x58 + i * 2, (short) stats[i]);
+        return out;
+    }
+
+    /**
+     * The box record the game makes when it places a Pokémon in a box.
+     *
+     * SetPlacedMonData runs BoxMonRestorePP before SetBoxMonAt, so every
+     * Pokémon put in a box — deposited, or dropped there by MOVE POKÉMON — has
+     * each move's PP refilled to what its PP Ups allow (CalculatePPWithBonus).
+     * The record is patched in place: only the PP bytes and the checksum can
+     * change, and every other byte the game wrote stays as it was, where
+     * {@link #encode} would derive some of them afresh.
+     *
+     * A record whose checksum fails is copied unchanged, as the game refills
+     * nothing in one either; so is the PP of a move this build has no PP for.
+     */
+    public static byte[] toBox(byte[] bytes, int at) {
+        byte[] out = Arrays.copyOfRange(bytes, at, at + BOX_SIZE);
+        if (!intact(out, 0)) return out;
+        var head = view(out, 0, BOX_SIZE);
+        int personality = head.getInt(0x00), otId = head.getInt(0x04);
+        var data = decrypt(out, 0x20, personality, otId);
+        var b = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
+        int g = offsetOf(personality, GROWTH), a = offsetOf(personality, ATTACKS);
+        int bonuses = b.get(g + 8) & 0xFF;
+        for (int i = 0; i < 4; i++) {
+            int base = Learnsets.pp(b.getShort(a + i * 2) & 0xFFFF);
+            if (base == 0) continue;           // no move there, or one past this build's table
+            int ups = (bonuses >>> (2 * i)) & 3;
+            b.put(a + 8 + i, (byte) (base + base * 20 * ups / 100));
+        }
+        head.putShort(0x1C, (short) checksum(data));
+        encrypt(data, personality, otId);
+        System.arraycopy(data, 0, out, 0x20, DATA_SIZE);
         return out;
     }
 
@@ -347,10 +396,14 @@ public final class Gen3Pokemon {
     /**
      * ModifyStatByNature. Stat indices 1 to 5 are Attack, Defense, Speed,
      * Sp. Atk and Sp. Def; nature n raises stat n / 5 + 1 and lowers
-     * n % 5 + 1, which is exactly gNatureStatTable. The game multiplies and
-     * divides in a 32-bit signed value, so the product is not truncated: a
-     * stat big enough to overflow sixteen bits would otherwise be divided
-     * from its wrapped remainder and come out far too small.
+     * n % 5 + 1, which is exactly gNatureStatTable.
+     *
+     * The cartridge keeps the product in sixteen bits (a u16 in pokeemerald
+     * unless BUGFIX is defined), so a raised stat above 595 or a lowered one
+     * above 728 would wrap there. No Emerald stat reaches that — the highest a
+     * nature touches is Shuckle's 559 Defense — so Yoru keeps the whole
+     * product, as the BUGFIX build does, and agrees with the game on every
+     * stat the game can produce.
      */
     static int byNature(int nature, int stat, int statIndex) {
         int raised = nature / 5 + 1, lowered = nature % 5 + 1;
@@ -378,7 +431,6 @@ public final class Gen3Pokemon {
     public boolean isEgg() { return ((ivsEggAbility >>> 30) & 1) == 1; }
     /** Set by the game when a record fails its checksum on access. */
     public boolean badEgg() { return (flags & 0x01) != 0; }
-    public int abilitySlot() { return (ivsEggAbility >>> 31) & 1; }
 
     /** True when the personality makes this one shiny for its trainer. */
     public boolean shiny() {

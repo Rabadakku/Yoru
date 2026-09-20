@@ -159,12 +159,21 @@ public final class LegacyGiftsTest {
             "and a record no reward owns is untouched");
         check(Arrays.equals(LegacyGifts.repair(repaired, rewards), repaired), "a second run changes nothing");
 
+        // The four empty entries after it hold what the game's ZeroMonData leaves:
+        // zeros and a 0xFF mail byte. Rewriting the party must not wipe that byte,
+        // or the repair's own check refuses it on every real save with room left.
+        int emptyFrom = Gen3Save.PARTY_AT + 2 * Gen3Pokemon.PARTY_SIZE;
+        check(Gen3Save.read(partySave).section(1)[emptyFrom + Gen3Pokemon.MAIL_AT] == (byte) Gen3Pokemon.MAIL_NONE,
+            "the fixture's empty party entries carry the mail byte the game leaves there");
         var partyFixed = Gen3Save.read(LegacyGifts.repair(partySave, List.of(old)));
         check(Arrays.equals(partyFixed.partyRecord(1),
             Gen3Pokemon.toParty(GameDelivery.companionFor(old, partyFixed.trainer()).encode(), 0)),
             "a repaired party gift carries the stats its real nature gives");
         check(Arrays.equals(partyFixed.partyRecord(0), Gen3Save.read(partySave).partyRecord(0)),
             "and its party neighbour is untouched");
+        check(Arrays.equals(partyFixed.section(1), emptyFrom, Gen3Save.PARTY_END,
+            Gen3Save.read(partySave).section(1), emptyFrom, Gen3Save.PARTY_END),
+            "and so are the empty entries after it");
 
         // Refusals: a save the game might not load a change into, and a result that changed something else.
         try {

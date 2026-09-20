@@ -28,6 +28,12 @@ final class PartyStrip extends JPanel {
     static final int MIN_SLOT_WIDTH = 120, SLOT_HEIGHT = 88;
     static final int SPRITE = 48;
 
+    // The slot sizes above, grown with the text size, since a slot holds a name,
+    // a level and a note (#31).
+    static int wideSlot() { return grow(WIDE_SLOT); }
+    static int minSlotWidth() { return grow(MIN_SLOT_WIDTH); }
+    static int slotHeight() { return grow(SLOT_HEIGHT); }
+
     private final List<Gen3Pokemon> party;
     private final Arrangement arrangement;
     private final Consumer<Gen3Pokemon> onSelect;
@@ -81,11 +87,12 @@ final class PartyStrip extends JPanel {
         var words = new JPanel();
         words.setOpaque(false);
         words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS));
-        var name = label("", TYPE_LABEL, TEXT);
+        // Shortenable: a narrow slot shortens its words and says them whole as a tooltip.
+        var name = shortenable("", TYPE_LABEL, TEXT);
         name.setName("party.name." + index);
-        var level = label("", TYPE_CAPTION, MUTED);
+        var level = shortenable("", TYPE_CAPTION, MUTED);
         level.setName("party.level." + index);
-        var note = label("", TYPE_CAPTION, MUTED);
+        var note = shortenable("", TYPE_CAPTION, MUTED);
         note.setName("party.note." + index);
         words.add(Box.createVerticalGlue());
         words.add(name);
@@ -174,7 +181,7 @@ final class PartyStrip extends JPanel {
     }
 
     static int columnsFor(int width) {
-        return width >= Gen3Save.PARTY_LIMIT * WIDE_SLOT + (Gen3Save.PARTY_LIMIT - 1) * SPACE_MD ? Gen3Save.PARTY_LIMIT : 3;
+        return width >= Gen3Save.PARTY_LIMIT * wideSlot() + (Gen3Save.PARTY_LIMIT - 1) * SPACE_MD ? Gen3Save.PARTY_LIMIT : 3;
     }
 
     /**
@@ -202,20 +209,20 @@ final class PartyStrip extends JPanel {
         @Override public Dimension preferredLayoutSize(Container parent) {
             int columns = columnsFor(availableWidth(parent));
             int rows = (slots.length + columns - 1) / columns;
-            return new Dimension(columns * MIN_SLOT_WIDTH + (columns - 1) * SPACE_MD,
-                rows * SLOT_HEIGHT + (rows - 1) * SPACE_MD);
+            return new Dimension(columns * minSlotWidth() + (columns - 1) * SPACE_MD,
+                rows * slotHeight() + (rows - 1) * SPACE_MD);
         }
 
         @Override public Dimension minimumLayoutSize(Container parent) {
-            return new Dimension(3 * MIN_SLOT_WIDTH + 2 * SPACE_MD, 2 * SLOT_HEIGHT + SPACE_MD);
+            return new Dimension(3 * minSlotWidth() + 2 * SPACE_MD, 2 * slotHeight() + SPACE_MD);
         }
 
         @Override public void layoutContainer(Container parent) {
             int width = parent.getWidth(), columns = columnsFor(width);
-            int cell = Math.max(MIN_SLOT_WIDTH, (width - (columns - 1) * SPACE_MD) / columns);
+            int cell = Math.max(minSlotWidth(), (width - (columns - 1) * SPACE_MD) / columns);
             for (int i = 0; i < slots.length; i++) {
                 int column = i % columns, row = i / columns;
-                slots[i].setBounds(column * (cell + SPACE_MD), row * (SLOT_HEIGHT + SPACE_MD), cell, SLOT_HEIGHT);
+                slots[i].setBounds(column * (cell + SPACE_MD), row * (slotHeight() + SPACE_MD), cell, slotHeight());
             }
             // A width that changed the row count changes the height asked for,
             // and the column above has already been laid out with the old one.

@@ -3,6 +3,7 @@ package dev.yoru.game;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * A Gen 3 battery save, read the way Emerald itself reads it.
@@ -78,6 +79,8 @@ public final class Gen3Save {
 
     /** Party lives in section 1: a count byte, padding, then six 100-byte entries. */
     public static final int PARTY_COUNT_AT = 0x234, PARTY_AT = 0x238, PARTY_LIMIT = 6;
+    /** Where the sixth party entry ends; nothing past it in section 1 is the party's. */
+    static final int PARTY_END = PARTY_AT + PARTY_LIMIT * Gen3Pokemon.PARTY_SIZE;
 
     /**
      * Offsets inside SaveBlock1 (sections 1 to 4, 3968 bytes each) and
@@ -257,19 +260,51 @@ public final class Gen3Save {
     /**
      * The player's own identity, as the save records it.
      *
-     * A Pokémon written with a different trainer id is a traded one: the game
-     * marks it as met elsewhere and, past a badge threshold, it disobeys. So
-     * anything Yoru delivers carries these exact values.
+     * A Pokémon written with a different trainer id or name is a traded one:
+     * the game marks it as met elsewhere and, past a badge threshold, it
+     * disobeys. So anything Yoru delivers carries these exact values.
+     *
+     * {@code storedName} is the name as a Pokémon record stores it, in seven
+     * bytes. The game compares those with the player's own byte for byte
+     * (IsOtherTrainer), and {@code name} cannot stand in for them — a byte the
+     * table has no character for reads as '?' — so a gift copies these.
      */
-    public record Trainer(String name, int gender, int publicId, int secretId, int playTimeMinutes) {
+    public record Trainer(String name, int gender, int publicId, int secretId, int playTimeMinutes,
+                          byte[] storedName) {
+        public Trainer {
+            if (storedName.length != Gen3Pokemon.OT_NAME_BYTES)
+                throw new IllegalArgumentException("A stored trainer name is " + Gen3Pokemon.OT_NAME_BYTES + " bytes");
+            storedName = storedName.clone();
+        }
+
+        /** A trainer no save holds: the name is stored as the game's alphabet writes it. */
+        public Trainer(String name, int gender, int publicId, int secretId, int playTimeMinutes) {
+            this(name, gender, publicId, secretId, playTimeMinutes, Gen3Text.bytes(name, Gen3Pokemon.OT_NAME_BYTES));
+        }
+
+        @Override public byte[] storedName() { return storedName.clone(); }
+
+        // A record compares an array by reference; two reads of one save are one trainer.
+        @Override public boolean equals(Object o) {
+            return o instanceof Trainer t && name.equals(t.name) && gender == t.gender && publicId == t.publicId
+                && secretId == t.secretId && playTimeMinutes == t.playTimeMinutes
+                && Arrays.equals(storedName, t.storedName);
+        }
+
+        @Override public int hashCode() {
+            return Objects.hash(name, gender, publicId, secretId, playTimeMinutes) * 31 + Arrays.hashCode(storedName);
+        }
+
         /** The full 32-bit value a Pokémon record stores as its OT id. */
         public int otId() { return (secretId << 16) | (publicId & 0xFFFF); }
     }
 
     public Trainer trainer() {
         byte[] s = sections[0];
+        // The game copies the first seven bytes of the player's name into each
+        // Pokémon it gives them (CreateBoxMon), so they are copied, not re-encoded.
         return new Trainer(Gen3Text.read(s, 0, 8), s[0x08] & 0xFF, u16(s, 0x0A), u16(s, 0x0C),
-            u16(s, 0x0E) * 60 + (s[0x10] & 0xFF));
+            u16(s, 0x0E) * 60 + (s[0x10] & 0xFF), Gen3Text.copy(s, 0, Gen3Pokemon.OT_NAME_BYTES));
     }
 
     /** Money, stored XOR the save's own encryption key. */
@@ -365,18 +400,29 @@ public final class Gen3Save {
         return out;
     }
 
-    /** Replaces the party. Unused entries are zeroed, as the game leaves them. */
+    /**
+     * Replaces the party.
+     *
+     * An entry the party no longer reaches is emptied as the game's ZeroMonData
+     * empties it: zeros, with MAIL_NONE in the mail byte. Entries past both the
+     * old party and the new one are left exactly as the game left them, so a
+     * change that keeps the party's size touches only the members it replaces.
+     */
     public void party(List<byte[]> records) {
         if (records.size() > PARTY_LIMIT) throw new IllegalArgumentException("A party holds at most " + PARTY_LIMIT);
+        for (var record : records)
+            if (record.length != Gen3Pokemon.PARTY_SIZE)
+                throw new IllegalArgumentException("A party record is " + Gen3Pokemon.PARTY_SIZE + " bytes");
         byte[] s = sections[1];
+        int previous = partyCount();
         s[PARTY_COUNT_AT] = (byte) records.size();
-        for (int i = 0; i < PARTY_LIMIT; i++) {
+        for (int i = 0; i < Math.max(previous, records.size()); i++) {
             int at = PARTY_AT + i * Gen3Pokemon.PARTY_SIZE;
-            if (i < records.size()) {
-                if (records.get(i).length != Gen3Pokemon.PARTY_SIZE)
-                    throw new IllegalArgumentException("A party record is " + Gen3Pokemon.PARTY_SIZE + " bytes");
-                System.arraycopy(records.get(i), 0, s, at, Gen3Pokemon.PARTY_SIZE);
-            } else Arrays.fill(s, at, at + Gen3Pokemon.PARTY_SIZE, (byte) 0);
+            if (i < records.size()) System.arraycopy(records.get(i), 0, s, at, Gen3Pokemon.PARTY_SIZE);
+            else {
+                Arrays.fill(s, at, at + Gen3Pokemon.PARTY_SIZE, (byte) 0);
+                s[at + Gen3Pokemon.MAIL_AT] = (byte) Gen3Pokemon.MAIL_NONE;
+            }
         }
     }
 

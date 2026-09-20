@@ -262,7 +262,7 @@ final class CollectionPage {
     private static JPanel encounters(State state) {
         var s = stack();
         long waiting = Encounters.available(state);
-        var headline = label(waiting == 0 ? "No study encounters waiting"
+        var headline = wrapping(waiting == 0 ? "No study encounters waiting"
             : Theme.plural((int) waiting, "study encounter") + " waiting", TYPE_BODY, waiting > 0 ? TEXT : MUTED);
         headline.setName("collection.encounters");
         s.add(headline);
@@ -275,7 +275,7 @@ final class CollectionPage {
     private JPanel onTheirWay(State state) {
         var s = stack();
         var pending = state.pendingRewards();
-        var headline = label(pending.isEmpty() ? "None on their way to your game"
+        var headline = wrapping(pending.isEmpty() ? "None on their way to your game"
             : pending.size() + " Pokémon on their way to your game", TYPE_BODY, pending.isEmpty() ? MUTED : GOLD_TEXT);
         headline.setName("collection.onTheirWay");
         s.add(headline);

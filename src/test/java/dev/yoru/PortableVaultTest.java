@@ -79,7 +79,7 @@ public final class PortableVaultTest {
                     new Habit(UUID.randomUUID(),"Time since last soda",HabitKind.TIME_SINCE,"Asia/Tokyo",
                         Set.of(),List.of(Instant.parse("2026-08-01T00:00:00Z"),Instant.parse("2026-08-20T06:30:00Z")))),
             List.of(tag),
-            new Settings(ThemeId.SAKURA,TrainerId.MAY,7,120,DayOfWeek.MONDAY,"waifu-fixture"),
+            new Settings(ThemeId.SAKURA,TrainerId.MAY,7,120,DayOfWeek.MONDAY),
             new Campaign(0x9E3779B97F4A7C15L,12,21600),
             List.of(pending,delivered),
             new GameSave(dev.yoru.game.Gen3Fixture.save(2,4),Instant.parse("2026-09-07T08:00:00Z")));
@@ -131,18 +131,19 @@ public final class PortableVaultTest {
         check(json.contains("\"startTime\": \"09:00\""),"Clock times are written as readable HH:MM");
         check(restored.settings().theme()==ThemeId.SAKURA,"Settings survive");
         check(restored.settings().minSessionSeconds()==120,"A non-default session floor survives");
-        check(restored.settings().waifu().equals("waifu-fixture"),"The waifu choice survives the round trip");
-        check(json.contains("\"waifu\": \"waifu-fixture\""),"The waifu choice is written as readable text");
+        check(!json.contains("waifu"),"The withdrawn companion choice is no longer written");
         check(restored.tasks().getFirst().tagId().equals(original.tags().getFirst().id()),"Task tagging survives");
 
         // An empty vault is a valid vault.
         var empty=State.empty();
         check(PortableVault.parse(PortableVault.export(empty,when)).equals(empty),"An empty vault round-trips");
 
-        // A file exported before the waifu setting existed still imports: the
-        // panel is off, which is the same thing as never having chosen a portrait.
-        check(PortableVault.parse(json.replace("\"waifu\"","\"unused\"")).settings().waifu()==null,
-            "An export from before the waifu setting imports with no waifu choice");
+        // An export written by 1.0.10 still imports: its companion choice is a
+        // field this version does not know, and its theme no longer exists.
+        var illustrated=json.replace("\"theme\": \"SAKURA\"","\"theme\": \"WAIFU\"")
+            .replace("\"trainer\":","\"waifu\": \"nightfall\",\n    \"trainer\":");
+        check(PortableVault.parse(illustrated).settings().theme()==ThemeId.MOONLIGHT,
+            "An export naming the withdrawn Waifu theme imports as Moonlight");
 
         // Refusals name the field. This is the tool people reach for when a vault
         // already looks wrong; "Invalid JSON" would not help anyone.
@@ -150,7 +151,11 @@ public final class PortableVaultTest {
         refuses(json.replace("\"activities\"","\"activitys\""),"activities","A missing section is named");
         refuses(json.replace("\"targetMinutes\": 30","\"targetMinutes\": \"thirty\""),"targetMinutes","A wrong type is named");
         refuses(json.replace("\"name\": \"Study\"","\"name\": 5"),"name","A wrong type in a record is named");
-        refuses(json.replace("\"theme\": \"SAKURA\"","\"theme\": \"NEON\""),"NEON","An unknown enum value is named");
+        refuses(json.replace("\"trainer\": \"MAY\"","\"trainer\": \"NEON\""),"NEON","An unknown enum value is named");
+        // Except the theme: a palette is a preference, not data, so an unknown
+        // one falls back instead of refusing the whole workspace.
+        check(PortableVault.parse(json.replace("\"theme\": \"SAKURA\"","\"theme\": \"NEON\"")).settings().theme()==ThemeId.MIDNIGHT,
+            "An unknown theme imports as the default rather than refusing the file");
         refuses(json.replace("\"status\": \"DOING\"","\"status\": \"BLOCKED\""),"BLOCKED","An unknown task status is named");
         refuses(json.replace("\"colour\": \"#90D8DA\"","\"colour\": \"periwinkle\""),"colour","A malformed colour is named");
         refuses(json.replace("\"earnedAt\": \"2026-09-01T08:00:00Z\"","\"earnedAt\": \"the first\""),"earnedAt","A malformed instant is named");
@@ -160,6 +165,32 @@ public final class PortableVaultTest {
         refuses(json.replace("\"startTime\": \"09:00\"","\"startTime\": \"nine\""),"startTime","A malformed clock time is named");
         rejects(()->PortableVault.parse("not json at all"),"Text that is not JSON is refused");
         rejects(()->PortableVault.parse("[]"),"A JSON array is not a vault");
+
+        // A number too large for its field is refused by name, not wrapped round
+        // into a different one that passes: 2^32 + 7 hours is not 7 hours.
+        refuses(json.replace("\"dailyGoalHours\": 7","\"dailyGoalHours\": 4294967303"),"dailyGoalHours",
+            "A daily goal past the int range is refused, not read as 7");
+        refuses(json.replace("\"level\": 7","\"level\": 4294967303"),"level","A level past the int range is refused");
+        // And in a format 1 file, where 2^32 would otherwise be the first species.
+        String capture="{\"id\": \""+UUID.randomUUID()+"\", \"species\": SPECIES, \"caughtAt\": \"2026-09-01T08:00:00Z\"}";
+        String formatOne=json.replace("\"yoru\": 2","\"yoru\": 1,\n  \"collection\": {\"captures\": ["+capture
+            +"], \"encountersUsed\": 3, \"rewardedSeconds\": 5400}");
+        check(PortableVault.parse(formatOne.replace("SPECIES","0")).rewards().stream().anyMatch(r->r.nationalDex()==252),
+            "A format 1 capture still imports as a reward");
+        refuses(formatOne.replace("SPECIES","4294967296"),"species","A format 1 species past the int range is refused");
+
+        // A title cut between the two halves of an emoji — a bounded import can
+        // leave one — still exports as text a file can hold, and comes back.
+        var cutTask=new Task(UUID.randomUUID(),null,null,"Revise \uD83D","",null,TaskStatus.TODO,"notion",
+            Instant.parse("2026-09-01T12:00:00Z"),0,null);
+        var cut=new State(List.of(),List.of(),List.of(),List.of(),List.of(cutTask),List.of(),List.of(),
+            Settings.defaults(),Campaign.start(1),List.of(),null);
+        var exported=java.nio.file.Files.createTempFile("yoru-export-",".json");
+        try{
+            java.nio.file.Files.writeString(exported,PortableVault.export(cut,when));
+            check(PortableVault.parse(java.nio.file.Files.readString(exported)).equals(cut),
+                "A lone surrogate in a title survives an export written to a file");
+        }finally{java.nio.file.Files.deleteIfExists(exported);}
 
         // A record index is reported, so a bad row in a long file can be found.
         refuses(json.replace("\"title\": \"Order textbook\"","\"title\": 5"),"tasks[1]","The failing record is identified by index");

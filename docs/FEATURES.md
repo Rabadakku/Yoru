@@ -121,7 +121,7 @@ Legend: ✅ working · 🟡 partly working · ⬜ not started
 
 | Feature | Status | Notes |
 |---|---|---|
-| AI reads class files and adds tasks | 🟡 | Built against a pay-as-you-go API key; **never tested live** |
+| AI reads class files and adds tasks | ⬜ | Removed from 1.0 (#47): the code is kept, but no build can reach it |
 | Use your existing ChatGPT plan | ❌ | **Not possible** — see below |
 | Paste-in workflow (free alternative) | ⬜ | [#15](https://github.com/Rabadakku/yoru/issues/15) |
 | Anki import | ⬜ | Planned, not connected |

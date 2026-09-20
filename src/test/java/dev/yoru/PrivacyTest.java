@@ -20,10 +20,10 @@ import java.util.regex.Pattern;
  * never leave the machine.
  *
  * The generic checks run everywhere: email addresses, home-directory paths,
- * personal file types and images outside the release media folder (or the
- * app's own bundled portraits). The owner's own identifiers cannot be written
- * here without publishing them, so they live in {@code .privacy-denylist} —
- * gitignored, one term per line — and are checked whenever that file exists.
+ * personal file types and images outside the release media folder. The owner's
+ * own identifiers cannot be written here without publishing them, so they live
+ * in {@code .privacy-denylist} — gitignored, one term per line — and are
+ * checked whenever that file exists.
  */
 public final class PrivacyTest {
     private static int checks;
@@ -31,8 +31,6 @@ public final class PrivacyTest {
 
     static final Path DENYLIST = Path.of(".privacy-denylist");
     static final String MEDIA = "docs/media/";
-    /** The app's own bundled portraits — original art that is meant to ship. */
-    static final String BUNDLED_WAIFU = "src/main/resources/dev/yoru/waifu/";
 
     static final Pattern EMAIL = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}");
     /** Addresses that identify nobody: the commit trailer, and documentation examples. */
@@ -46,16 +44,11 @@ public final class PrivacyTest {
         "(?i)(?:^|/)(?:screenshot[^/]*|[^/]*bios[^/]*\\.bin|[^/]+\\.(?:srm|sav|sa1|state|ss\\d|gba|gbc|gb|nds|vault|local-key|key|zip|bak))$");
     static final Pattern IMAGE = Pattern.compile("(?i)\\.(?:png|jpe?g|gif|webp|bmp|heic|mov|mp4)$");
 
-    /** A bundled portrait is the one kind of image that is meant to ship. */
-    static boolean bundledWaifu(String name) {
-        return name.startsWith(BUNDLED_WAIFU) && name.endsWith(".png");
-    }
-
     /** Every problem in one tracked file's name and content. */
     static List<String> problems(String name, String text, List<String> denied) {
         var out = new ArrayList<String>();
         if (PERSONAL_FILE.matcher(name).find()) out.add(name + ": a personal file type is tracked");
-        if (IMAGE.matcher(name).find() && !name.startsWith(MEDIA) && !bundledWaifu(name))
+        if (IMAGE.matcher(name).find() && !name.startsWith(MEDIA))
             out.add(name + ": images belong in " + MEDIA + ", and only release media belongs there");
         if (text == null) return out;
         String[] lines = text.split("\n", -1);
@@ -96,7 +89,8 @@ public final class PrivacyTest {
         check(!problems("Screenshot 2026-01-01.png", null, List.of()).isEmpty(), "a screenshot is caught by its name");
         check(!problems("docs/notes/board.png", null, List.of()).isEmpty(), "an image outside the media folder is caught");
         check(problems(MEDIA + "today.png", null, List.of()).isEmpty(), "release media is allowed");
-        check(problems(BUNDLED_WAIFU + "hikari.png", null, List.of()).isEmpty(), "the app's own bundled portraits are allowed");
+        check(!problems("src/main/resources/dev/yoru/waifu/portrait.png", null, List.of()).isEmpty(),
+            "the app bundles no images of its own any more, so one under src is caught like any other");
         check(!problems("src/main/resources/dev/yoru/game/sprite.png", null, List.of()).isEmpty(), "an image elsewhere is still caught");
         check(problems("src/Main.java", "int x = 1;", List.of()).isEmpty(), "ordinary code passes");
     }

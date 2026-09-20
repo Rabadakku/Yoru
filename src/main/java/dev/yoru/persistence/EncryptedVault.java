@@ -14,7 +14,15 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=12, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=13, MAX=100_000;
+    /**
+     * The file's layout: a header of magic, version and salt, which is also the
+     * cipher's associated data, then the nonce, then the ciphertext and its tag.
+     * A file shorter than a header, a nonce and a tag is not a vault.
+     */
+    private static final int HEADER=24, NONCE_END=36, MIN_FILE=52;
+    /** Larger than any vault {@link #save} writes, which caps its plaintext at 31 MB. */
+    private static final long MAX_FILE=32_000_000;
     private final Path path;
     private final FileChannel channel;
     private final FileLock lock;
@@ -23,29 +31,32 @@ public final class EncryptedVault implements Repository {
     private State initial;
     private boolean legacy;
     private int loadedSchema;
+    /**
+     * Set once the key is wiped. A write after that would encrypt the vault
+     * under a key of zeros — one nothing can open again — so every writer
+     * refuses instead.
+     */
+    private boolean closed;
     public EncryptedVault(Path path,char[] password) throws IOException {
         this.path=path.toAbsolutePath();
         FileChannel ch=null;
         FileLock lk=null;
         try {
             if(password.length<12)throw new IOException("Use a password of at least 12 characters.");
-            ch=FileChannel.open(Path.of(this.path+".lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);
+            ch=FileChannel.open(lockPath(this.path),StandardOpenOption.CREATE,StandardOpenOption.WRITE);
             lk=ch.tryLock();
             if(lk==null)throw new IOException("This vault is already open.");
             byte[] file=null;
             if(Files.exists(this.path)) {
-                if(Files.size(this.path)>32_000_000)throw new IOException("Vault exceeds size limit.");
+                if(Files.size(this.path)>MAX_FILE)throw new IOException("Vault exceeds size limit.");
                 file=Files.readAllBytes(this.path);
-                if(file.length<52)throw new IOException("Invalid vault.");
-                ByteBuffer header=ByteBuffer.wrap(file);
-                if(header.getInt()!=MAGIC||header.getInt()!=VERSION)throw new IOException("Unsupported vault format.");
-                header.get(salt);
+                System.arraycopy(salt(file),0,salt,0,salt.length);
             }
             else new SecureRandom().nextBytes(salt);
             key=derive(password,salt);
             // A new vault gets its own encounter seed, so two vaults do not meet
             // the same Pokémon in the same order.
-            initial=file==null?State.empty().withCampaign(Campaign.start(new SecureRandom().nextLong())):decode(decrypt(file));
+            initial=file==null?State.empty().withCampaign(Campaign.start(new SecureRandom().nextLong())):decode(decrypt(key,file));
             channel=ch;
             lock=lk;
             if(file==null)save(initial);
@@ -86,42 +97,84 @@ public final class EncryptedVault implements Repository {
      * schema Yoru could not read is still recognised rather than mistaken for one
      * this secret does not open. That matters to recovery, where the answer
      * decides whether a lost unlock key is given back to the vault it belongs to.
+     * A file that cannot be read is a no here; {@link #decrypts} tells the two apart.
      */
     static boolean opens(Path vault,char[] secret) {
-        byte[] file=null;
         try {
-            file=Files.readAllBytes(vault);
-            if(file.length<52)return false;
-            ByteBuffer header=ByteBuffer.wrap(file);
-            if(header.getInt()!=MAGIC||header.getInt()!=VERSION)return false;
-            byte[] salt=new byte[16];
-            header.get(salt);
-            byte[] derived=derive(secret,salt);
-            try {
-                var cipher=Cipher.getInstance("AES/GCM/NoPadding");
-                cipher.init(Cipher.DECRYPT_MODE,new SecretKeySpec(derived,"AES"),
-                    new GCMParameterSpec(128,Arrays.copyOfRange(file,24,36)));
-                cipher.updateAAD(Arrays.copyOf(file,24));
-                cipher.doFinal(file,36,file.length-36);
-                return true;
-            }
-            finally {
-                Arrays.fill(derived,(byte)0);
-            }
+            return decrypts(vault,secret);
         }
-        catch(IOException|GeneralSecurityException|RuntimeException e) {
+        catch(IOException|RuntimeException e) {
             return false;
-        }
-        finally {
-            if(file!=null)Arrays.fill(file,(byte)0);
         }
     }
 
-    private byte[] decrypt(byte[] file)throws GeneralSecurityException {
+    /**
+     * Whether an unlock secret opens a vault, and an IOException when that could
+     * not be found out — the file could not be read, or the cipher could not be
+     * set up. A caller about to discard a key on a "no" must never do it because
+     * the disk was unreadable for a moment.
+     *
+     * A file larger than any vault is a no without being read: the constructor
+     * refuses to open one, and reading a stray multi-gigabyte file whole would
+     * end the app rather than the check.
+     */
+    static boolean decrypts(Path vault,char[] secret) throws IOException {
+        if(Files.size(vault)>MAX_FILE)return false;
+        byte[] file=Files.readAllBytes(vault);
+        try {
+            byte[] salt;
+            try {
+                salt=salt(file);
+            }
+            catch(IOException notAVault) {
+                return false;
+            }
+            byte[] derived=null;
+            try {
+                derived=derive(secret,salt);
+                Arrays.fill(decrypt(derived,file),(byte)0);
+                return true;
+            }
+            catch(AEADBadTagException wrongSecret) {
+                return false;
+            }
+            catch(GeneralSecurityException e) {
+                throw new IOException("Could not test the unlock key.",e);
+            }
+            finally {
+                if(derived!=null)Arrays.fill(derived,(byte)0);
+            }
+        }
+        finally {
+            Arrays.fill(file,(byte)0);
+        }
+    }
+
+    /** The salt in a vault file's header, once the file is shown to be a vault this build reads. */
+    private static byte[] salt(byte[] file) throws IOException {
+        if(file.length<MIN_FILE)throw new IOException("Invalid vault.");
+        ByteBuffer header=ByteBuffer.wrap(file);
+        if(header.getInt()!=MAGIC||header.getInt()!=VERSION)throw new IOException("Unsupported vault format.");
+        byte[] salt=new byte[16];
+        header.get(salt);
+        return salt;
+    }
+
+    private static byte[] decrypt(byte[] key,byte[] file)throws GeneralSecurityException {
         var cipher=Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.DECRYPT_MODE,new SecretKeySpec(key,"AES"),new GCMParameterSpec(128,Arrays.copyOfRange(file,24,36)));
-        cipher.updateAAD(Arrays.copyOf(file,24));
-        return cipher.doFinal(file,36,file.length-36);
+        cipher.init(Cipher.DECRYPT_MODE,new SecretKeySpec(key,"AES"),
+            new GCMParameterSpec(128,Arrays.copyOfRange(file,HEADER,NONCE_END)));
+        cipher.updateAAD(Arrays.copyOf(file,HEADER));
+        return cipher.doFinal(file,NONCE_END,file.length-NONCE_END);
+    }
+
+    /** The lock an open vault holds: one file beside it, whatever else is done to the vault. */
+    static Path lockPath(Path vault) {
+        return Path.of(vault.toAbsolutePath()+".lock");
+    }
+
+    private void requireOpen() throws IOException {
+        if(closed)throw new IOException("This vault is closed.");
     }
     public State load() {
         return initial;
@@ -137,14 +190,26 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Schema 11 field order. Positional, so every field is written in exactly
-     * the order decode reads it; the older layouts are read by decode's
-     * schema checks and upgraded on the next save.
+     * A buffer that can be cleared. It holds the whole vault as plaintext, game
+     * save included, and would otherwise sit on the heap after every save until
+     * something happened to reuse the memory — the same reason decode wipes
+     * what it read.
+     */
+    private static final class Plaintext extends ByteArrayOutputStream {
+        byte[] buffer() { return buf; }
+        void wipe() { Arrays.fill(buf,(byte)0); count=0; }
+    }
+
+    /**
+     * Schema {@value #SCHEMA} field order. Positional, so every field is written
+     * in exactly the order decode reads it; the older layouts are read by
+     * decode's schema checks and upgraded on the next save.
      */
     public void save(State state)throws IOException {
+        requireOpen();
         Path temp=null;
+        var bytes=new Plaintext();
         try {
-            var bytes=new ByteArrayOutputStream();
             try(var out=new DataOutputStream(bytes)) {
                 out.writeInt(SCHEMA);
                 out.writeInt(state.activities().size());
@@ -190,9 +255,6 @@ public final class EncryptedVault implements Repository {
                 out.writeUTF(settings.theme().name()); out.writeUTF(settings.trainer().name());
                 out.writeInt(settings.dailyGoalHours()); out.writeInt(settings.minSessionSeconds());
                 out.writeUTF(settings.weekStartsOn().name());
-                // Schema 12 added the decorative folder; absent means no panel.
-                out.writeBoolean(settings.waifu() != null);
-                if (settings.waifu() != null) out.writeUTF(settings.waifu());
                 var campaign = state.campaign();
                 out.writeLong(campaign.seed()); out.writeLong(campaign.encountersUsed()); out.writeLong(campaign.rewardedSeconds());
                 out.writeInt(state.rewards().size());
@@ -215,7 +277,9 @@ public final class EncryptedVault implements Repository {
             var cipher=Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(key,"AES"),new GCMParameterSpec(128,nonce));
             cipher.updateAAD(header);
-            byte[] encrypted=cipher.doFinal(bytes.toByteArray());
+            // Straight from the buffer: a toByteArray() copy would be one more
+            // plaintext to wipe.
+            byte[] encrypted=cipher.doFinal(bytes.buffer(),0,bytes.size());
             temp=Files.createTempFile(path.getParent(),".yoru-",".tmp");
             try {
                 Files.setPosixFilePermissions(temp,PosixFilePermissions.fromString("rw-------"));
@@ -250,29 +314,13 @@ public final class EncryptedVault implements Repository {
                         Files.move(backup, stale);
                     }
                 }
-                if (!Files.exists(backup)) {
-                    Path copy = Files.createTempFile(path.getParent(), ".yoru-backup-", ".tmp");
-                    try {
-                        Files.copy(path, copy, StandardCopyOption.REPLACE_EXISTING);
-                        try (var out = FileChannel.open(copy, StandardOpenOption.WRITE)) {
-                            out.force(true);
-                        }
-                        try {
-                            Files.move(copy, backup, StandardCopyOption.ATOMIC_MOVE);
-                        }
-                        catch (AtomicMoveNotSupportedException e) {
-                            Files.move(copy, backup);
-                        }
-                    }
-                    finally {
-                        Files.deleteIfExists(copy);
-                    }
-                    try { Files.setPosixFilePermissions(backup, PosixFilePermissions.fromString("rw-------")); }
-                    catch (UnsupportedOperationException ignored) { }
-                    VaultStore.forceDir(path.getParent());
-                }
+                if (!Files.exists(backup)) copyAside(backup);
             }
             Files.move(temp,path,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+            // The temporary file is the vault now. Nothing below may fail the
+            // save: a caller told it failed would go on as if the old bytes were
+            // still on the disk, and a re-encryption would put back the old key.
+            temp=null;
             // The rename publishes the new vault, and a rename lives in the
             // directory's own entries: without flushing it, a power cut can
             // leave the old name pointing at the old bytes — or at nothing.
@@ -284,13 +332,47 @@ public final class EncryptedVault implements Repository {
         catch(GeneralSecurityException e) {
             throw new IOException("Encryption failed.",e);
         }
+        catch(FileSystemException e) {
+            // The file system's own message is a path on this machine.
+            throw new IOException("The vault could not be saved. "+VaultStore.reason(e),e);
+        }
         finally {
+            bytes.wipe();
             if(temp!=null)Files.deleteIfExists(temp);
         }
     }
 
     /**
-     * Reads any schema from 1 to 12.
+     * Copies this vault to a new name through a flushed temporary file in the
+     * same folder, so the copy is complete before it has a backup's name: a copy
+     * cut short by a power cut or a full disk would otherwise sit there looking
+     * like a backup, and one written only to the page cache is no backup when
+     * the machine stops.
+     */
+    private void copyAside(Path backup) throws IOException {
+        Path copy = Files.createTempFile(path.getParent(), ".yoru-backup-", ".tmp");
+        try {
+            Files.copy(path, copy, StandardCopyOption.REPLACE_EXISTING);
+            try (var out = FileChannel.open(copy, StandardOpenOption.WRITE)) {
+                out.force(true);
+            }
+            try {
+                Files.move(copy, backup, StandardCopyOption.ATOMIC_MOVE);
+            }
+            catch (AtomicMoveNotSupportedException e) {
+                Files.move(copy, backup);
+            }
+        }
+        finally {
+            Files.deleteIfExists(copy);
+        }
+        try { Files.setPosixFilePermissions(backup, PosixFilePermissions.fromString("rw-------")); }
+        catch (UnsupportedOperationException ignored) { }
+        VaultStore.forceDir(path.getParent());
+    }
+
+    /**
+     * Reads any schema from 1 to 13.
      *
      * Every field older vaults lack arrives as a sensible empty. Schemas 2 to 10
      * kept a collection of their own after the tasks and gym records after the
@@ -326,7 +408,7 @@ public final class EncryptedVault implements Repository {
                 for (int n = count(in); n > 0; n--) {
                     var id=uuid(in); var activity=in.readBoolean()?uuid(in):null;
                     var title=in.readUTF(); var notes=in.readUTF();
-                    var due=in.readBoolean()?java.time.LocalDate.ofEpochDay(in.readLong()):null;
+                    var due=in.readBoolean()?LocalDate.ofEpochDay(in.readLong()):null;
                     // Before schema 5 this was a done flag rather than a status.
                     var status=schema>=5?TaskStatus.valueOf(in.readUTF())
                         :in.readBoolean()?TaskStatus.DONE:TaskStatus.TODO;
@@ -336,7 +418,7 @@ public final class EncryptedVault implements Repository {
                     int order=schema>=5?in.readInt():0;
                     // Schema 8 split the deadline from the day you plan to work on
                     // it. Older vaults planned nothing, which is exactly null.
-                    var planned=schema>=8&&in.readBoolean()?java.time.LocalDate.ofEpochDay(in.readLong()):null;
+                    var planned=schema>=8&&in.readBoolean()?LocalDate.ofEpochDay(in.readLong()):null;
                     tasks.add(new Task(id,activity,tag,title,notes,due,status,source,created,order,planned));
                 }
                 if (schema <= 10) collection = LegacyCollection.read(in, schema, () -> {
@@ -346,8 +428,8 @@ public final class EncryptedVault implements Repository {
             var habits=new ArrayList<Habit>();
             if(schema>=3) for(int n=count(in);n>0;n--) {
                 var id=uuid(in); var name=in.readUTF(); var kind=HabitKind.valueOf(in.readUTF()); var zone=in.readUTF();
-                var dates=new HashSet<java.time.LocalDate>();
-                for(int d=count(in);d>0;d--) dates.add(java.time.LocalDate.ofEpochDay(in.readLong()));
+                var dates=new HashSet<LocalDate>();
+                for(int d=count(in);d>0;d--) dates.add(LocalDate.ofEpochDay(in.readLong()));
                 var starts=new ArrayList<Instant>(); for(int d=count(in);d>0;d--) starts.add(instant(in));
                 habits.add(new Habit(id,name,kind,zone,dates,starts));
             }
@@ -356,15 +438,16 @@ public final class EncryptedVault implements Repository {
             if(schema>=5) {
                 for(int n=count(in);n>0;n--) tags.add(new Tag(uuid(in),in.readUTF(),in.readInt()));
                 if(schema<=10) for(int n=count(in);n>0;n--) { uuid(in); in.readInt(); instant(in); }   // practice-gym records
-                var theme=ThemeId.valueOf(in.readUTF());var trainer=TrainerId.valueOf(in.readUTF());
+                var theme=ThemeId.known(in.readUTF());var trainer=TrainerId.valueOf(in.readUTF());
                 int goal=in.readInt(),floor=in.readInt();
                 // Schema 6 and earlier had no week-start preference; those vaults
                 // keep the Monday the app has always assumed.
                 var weekStart=schema>=7?java.time.DayOfWeek.valueOf(in.readUTF()):java.time.DayOfWeek.MONDAY;
-                // Schema 12 added the waifu choice; older vaults read as no panel
-                // rather than being reset, exactly as the week start was read forward.
-                var waifu=schema>=12&&in.readBoolean()?in.readUTF():null;
-                settings=new Settings(theme,trainer,goal,floor,weekStart,waifu);
+                // Schema 12 alone carried a companion-portrait choice. The
+                // feature is gone, so its bytes are read and dropped; without that
+                // every record after them would be read at the wrong offset.
+                if(schema==12&&in.readBoolean()) in.readUTF();
+                settings=new Settings(theme,trainer,goal,floor,weekStart);
             }
             var campaign = schema >= 11 ? new Campaign(in.readLong(), in.readLong(), in.readLong())
                 : collection != null ? collection.campaign() : Campaign.start(0);
@@ -422,13 +505,18 @@ public final class EncryptedVault implements Repository {
      * Every copy used to be kept, so a backup before each small deletion would
      * have grown the folder without bound (#7). Each new backup now prunes the
      * older ones by {@link #expired}. A prune that fails is left for the next
-     * backup: the copy that was asked for has already been written.
+     * backup: the copy that was asked for has already been written — and
+     * flushed, since the older copies it may replace are on the disk.
      */
     public void backup() throws IOException {
+        requireOpen();
         Path backup=Path.of(path+".reset-"+System.currentTimeMillis()+"-"+UUID.randomUUID()+".bak");
-        Files.copy(path,backup);
-        try { Files.setPosixFilePermissions(backup,PosixFilePermissions.fromString("rw-------")); }
-        catch(UnsupportedOperationException ignored) { }
+        try {
+            copyAside(backup);
+        }
+        catch(FileSystemException e) {
+            throw new IOException("The vault could not be backed up. "+VaultStore.reason(e),e);
+        }
         for (Path old : expired(resetBackups(path), Instant.now(), ZoneId.systemDefault())) {
             try { Files.deleteIfExists(old); }
             catch (IOException ignored) { }
@@ -499,6 +587,7 @@ public final class EncryptedVault implements Repository {
      */
     public void changeSecret(char[] secret,State state)throws IOException {
         try {
+            requireOpen();
             if(secret.length<12)throw new IOException("Use an unlock secret of at least 12 characters.");
             byte[] previousKey=key,previousSalt=salt.clone(),fresh=new byte[salt.length];
             new SecureRandom().nextBytes(fresh);
@@ -528,9 +617,20 @@ public final class EncryptedVault implements Repository {
         }
     }
 
+    /**
+     * Wipes the key and gives up the lock. A second call does nothing, and the
+     * channel is closed even when releasing the lock fails, since closing it
+     * releases the lock anyway.
+     */
     public void close()throws IOException {
-        Arrays.fill(key,(byte)0);
-        lock.release();
-        channel.close();
+        if(closed)return;
+        closed=true;
+        try {
+            Arrays.fill(key,(byte)0);
+            lock.release();
+        }
+        finally {
+            channel.close();
+        }
     }
 }

@@ -16,10 +16,13 @@ public final class Analytics {
      *
      * Resolved in the given zone, so a 09:00 class is 09:00 local on every one of
      * those days regardless of a daylight-saving change between them — which is
-     * the whole reason the template stores LocalTime rather than Instant. On the
-     * day a zone skips an hour, a time inside the gap is pushed forward to the
-     * first real instant after it rather than dropped; the block still happens,
-     * the clock just disagrees about when.
+     * the whole reason the template stores LocalTime rather than Instant.
+     *
+     * On the day a zone skips an hour, a time inside the gap moves later by the
+     * length of the gap, so a block starting inside it is shorter that day. One
+     * lying wholly inside the gap would end before it began, and is left out of
+     * the week rather than returned inverted: the grid draws nothing for an
+     * inverted block anyway, and every caller may assume end follows start.
      */
     public static List<Occurrence> occurrences(State state, LocalDate weekStart, ZoneId zone) {
         var out = new ArrayList<Occurrence>();
@@ -27,9 +30,10 @@ public final class Analytics {
             LocalDate date = weekStart.plusDays(offset);
             for (var rule : state.recurring()) {
                 if (rule.dayOfWeek() != date.getDayOfWeek()) continue;
-                out.add(new Occurrence(rule.id(), rule.activityId(),
-                    ZonedDateTime.of(date, rule.startTime(), zone).toInstant(),
-                    ZonedDateTime.of(date, rule.endTime(), zone).toInstant()));
+                var start = ZonedDateTime.of(date, rule.startTime(), zone).toInstant();
+                var end = ZonedDateTime.of(date, rule.endTime(), zone).toInstant();
+                if (!end.isAfter(start)) continue;
+                out.add(new Occurrence(rule.id(), rule.activityId(), start, end));
             }
         }
         out.sort(Comparator.comparing(Occurrence::start));
@@ -51,7 +55,18 @@ public final class Analytics {
      * finished yet, so judging its length would be premature.
      */
     public static boolean counts(Session session,State state,Instant now) {
-        return session.end()==null || session.seconds(now)>=state.settings().minSessionSeconds();
+        return session.end()==null || !tooShort(state,session.start(),session.end());
+    }
+
+    /**
+     * Whether a stretch of time is under the vault's minimum session.
+     *
+     * The one place the floor is compared, so clocking out, logging time,
+     * purging and every total agree by construction rather than by five copies
+     * of the same subtraction staying in step.
+     */
+    public static boolean tooShort(State state,Instant start,Instant end) {
+        return Duration.between(start,end).getSeconds()<state.settings().minSessionSeconds();
     }
 
     public static Map<LocalDate,Long> daily(State state,UUID activity,ZoneId zone,Instant now) {
@@ -81,11 +96,17 @@ public final class Analytics {
     }
     public static double adherence(State state,ScheduleBlock b,Instant now) {
         long actual=0;
-        for(var s:state.sessions())if(s.activityId().equals(b.activityId()))actual+=overlap(s.start(),s.end()==null?now:s.end(),b.start(),b.end());
+        // The same sessions every total and the grid count (#34): a session under
+        // the floor showed as "20% matched" beside a block the grid drew empty.
+        for(var s:state.sessions()) {
+            if(!s.activityId().equals(b.activityId())||!counts(s,state,now)) continue;
+            actual+=overlap(s.start(),s.end()==null?now:s.end(),b.start(),b.end());
+        }
         return Math.min(1,(double)actual/Duration.between(b.start(),b.end()).getSeconds());
     }
     public static String duration(long seconds) {
-        return String.format("%02d:%02d:%02d",Math.max(0,seconds)/3600,Math.max(0,seconds)/60%60,Math.max(0,seconds)%60);
+        long whole=Math.max(0,seconds);
+        return String.format("%02d:%02d:%02d",whole/3600,whole/60%60,whole%60);
     }
 
     /**
@@ -113,10 +134,10 @@ public final class Analytics {
         if(seconds<=0) return 0;
         long goal=Math.max(1,dailyGoalHours)*3600L;
         if(seconds>=goal) return HEAT_OVER_GOAL;
-        // Five bands below the goal, so a quarter-goal day is visibly different
-        // from a near-goal one at any goal size.
-        int band=(int)(seconds*5/goal)+1;
-        return Math.min(5,band);
+        // One band per tier below the goal, so a quarter-goal day is visibly
+        // different from a near-goal one at any goal size. Under the goal the
+        // division cannot reach the top band, so nothing needs clamping.
+        return (int)(seconds*(HEAT_TIERS-1)/goal)+1;
     }
 
     /**

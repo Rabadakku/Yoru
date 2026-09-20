@@ -117,6 +117,17 @@ public final class BackupRetentionTest {
             check(left.values().stream().anyMatch(t -> t.isAfter(Instant.ofEpochMilli(old + Duration.ofDays(1).toMillis()))),
                 "the backup just taken is one of them");
             check(!Files.exists(oldest), "the oldest reset backup is removed");
+            // It is made through a flushed temporary copy, since it may be what
+            // replaces the older ones: the copy is the vault, only its owner can
+            // read it, and no half-made copy is left beside it.
+            Path taken = left.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
+            check(Files.mismatch(taken, file) == -1, "the backup just taken is the vault, byte for byte");
+            if (Files.getFileStore(taken).supportsFileAttributeView("posix"))
+                check(Files.getPosixFilePermissions(taken).equals(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")),
+                    "and only its owner can read it");
+            try (var files = Files.list(dir)) {
+                check(files.noneMatch(p -> p.getFileName().toString().endsWith(".tmp")), "and no temporary copy is left");
+            }
             for (Path p : List.of(migration, stale, unreadable, neighbour))
                 check(Files.exists(p), "a file that is not this vault's reset backup is never pruned: " + p.getFileName());
             try (var reopened = store.open("Invented")) {

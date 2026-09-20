@@ -133,8 +133,7 @@ public final class LegacyGifts {
             byte[] sa = a.section(id), sb = b.section(id);
             for (int i = 0; i < Gen3Save.CHECKSUMMED[id]; i++) {
                 if (sa[i] == sb[i]) continue;
-                boolean inRepairedMember = id == 1 && i >= Gen3Save.PARTY_AT
-                    && i < Gen3Save.PARTY_AT + Gen3Save.PARTY_LIMIT * Gen3Pokemon.PARTY_SIZE
+                boolean inRepairedMember = id == 1 && i >= Gen3Save.PARTY_AT && i < Gen3Save.PARTY_END
                     && allowedParty.contains((i - Gen3Save.PARTY_AT) / Gen3Pokemon.PARTY_SIZE);
                 if (!inRepairedMember)
                     throw new IllegalStateException("Section " + id + " changed at byte " + i + ", which this repair never touches.");
@@ -182,7 +181,7 @@ public final class LegacyGifts {
      */
     static byte[] signedLayout(byte[] correctBox, int flags) {
         var out = correctBox.clone();
-        int personality = personalityOf(out), otId = u32(out, 4);
+        int personality = personalityOf(out), otId = (int) Gen3Save.u32(out, 4);
         byte[] plain = Gen3Pokemon.decrypt(out, 0x20, personality, otId);
         var shuffled = new byte[Gen3Pokemon.DATA_SIZE];
         for (int substructure = 0; substructure < 4; substructure++)
@@ -200,8 +199,8 @@ public final class LegacyGifts {
         var mon = Gen3Pokemon.decode(correctBox, 0);
         int[] stats = Gen3Pokemon.stats(mon.nationalDex(), mon.levelFromExperience(), mon.ivs(), mon.evs,
             Math.floorMod(mon.personality, 25));
-        putU16(record, 0x56, stats[0]);
-        for (int i = 0; i < 6; i++) putU16(record, 0x58 + i * 2, stats[i]);
+        Gen3Save.putU16(record, 0x56, stats[0]);
+        for (int i = 0; i < 6; i++) Gen3Save.putU16(record, 0x58 + i * 2, stats[i]);
         System.arraycopy(legacyBox, 0, record, 0, Gen3Pokemon.BOX_SIZE);
         return record;
     }
@@ -213,14 +212,5 @@ public final class LegacyGifts {
         throw new IllegalArgumentException("No such substructure " + substructure);
     }
 
-    private static int personalityOf(byte[] record) { return u32(record, 0); }
-
-    private static int u32(byte[] b, int at) {
-        return (b[at] & 0xFF) | (b[at + 1] & 0xFF) << 8 | (b[at + 2] & 0xFF) << 16 | (b[at + 3] & 0xFF) << 24;
-    }
-
-    private static void putU16(byte[] b, int at, int value) {
-        b[at] = (byte) value;
-        b[at + 1] = (byte) (value >>> 8);
-    }
+    private static int personalityOf(byte[] record) { return (int) Gen3Save.u32(record, 0); }
 }

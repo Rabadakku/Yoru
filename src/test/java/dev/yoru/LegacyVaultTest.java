@@ -33,6 +33,19 @@ public final class LegacyVaultTest {
         "1um8UHUOeBVGkLnyJ9tZlAxrUDEP3Eyz7oVx2ovY6MW+q0aMcbUAz1L9HIGsqWNWxM0Hxbgc" +
         "tw==";
 
+    /**
+     * A vault written by 1.0.10 (schema 12), the one release with the Waifu
+     * theme: its settings name that theme and carry a portrait choice. Both are
+     * gone, so this is the file that proves the removal did not strand anyone —
+     * the theme has to read as Moonlight, and the portrait bytes have to be
+     * stepped over, or every record after them is read at the wrong offset.
+     */
+    private static final String ILLUSTRATED_VAULT=
+        "WU9SVQAAAAGXSRSYpzp3tMi7xJYt9/MTO78Gc1uzCbXwrQiDdiyx3l2+nNsmB+uUs4KjSdBL" +
+        "H4X4vCCNMaLZieZ9z6oHUC4yhXUkoVGQhhhHqcK+EkjJQffrlA8OGky5uxCx76MqTOpOJ5sI" +
+        "LceYnw9/SlqfmaKZS64/1thavXOheGmk0yZ5kLmARrf/4dky2DrB3pk9kCUACQeel7XWf5wh" +
+        "KS+w4yWHQr9VfJQaFIQFGzTf";
+
     public static void main(String[] args)throws Exception{
         Path dir=Files.createTempDirectory("yoru-legacy-");
         try {
@@ -64,9 +77,10 @@ public final class LegacyVaultTest {
             check(task.tagId()==null,"The task is untagged");
             check(loaded.rewards().isEmpty(),"An empty collection brings no rewards");
             check(loaded.settings().equals(Settings.defaults()),"Settings fall back to the defaults");
-            // Schema 12's waifu choice did not exist when this vault was
-            // written, so it arrives as "no panel", never as a reset or a failure.
-            check(loaded.settings().waifu()==null,"An older vault arrives with no waifu choice");
+            // A theme that no longer exists reads as the nearest one that does,
+            // rather than failing the whole vault on a name.
+            check(ThemeId.known("WAIFU")==ThemeId.MOONLIGHT,"The withdrawn Waifu theme opens as Moonlight");
+            check(ThemeId.known("NO_SUCH_THEME")==ThemeId.MIDNIGHT,"An unknown theme falls back to the default");
 
             // And it must survive being written back out at the current schema.
             Path again=dir.resolve("resaved.vault");
@@ -79,6 +93,42 @@ public final class LegacyVaultTest {
                 for(var path:files.sorted(Comparator.reverseOrder()).toList())Files.delete(path);
             }
         }
+        illustrated();
         System.out.println("PASS: "+checks+" legacy vault checks (an older build's file still opens)");
+    }
+
+    /** The 1.0.10 vault above, opened by a build that no longer has the theme it names. */
+    private static void illustrated() throws Exception {
+        Path dir=Files.createTempDirectory("yoru-illustrated-");
+        try {
+            Path file=dir.resolve("illustrated.vault");
+            Files.write(file,Base64.getDecoder().decode(ILLUSTRATED_VAULT));
+
+            State loaded;
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){loaded=vault.load();}
+
+            check(loaded.settings().theme()==ThemeId.MOONLIGHT,
+                "A vault saved with the withdrawn Waifu theme opens as Moonlight");
+            // Everything written after the portrait choice: proof the reader
+            // stepped over exactly those bytes and no others.
+            check(loaded.settings().trainer()==TrainerId.MAY,"Its trainer survives the withdrawn setting");
+            check(loaded.settings().dailyGoalHours()==6,"Its daily goal survives");
+            check(loaded.settings().minSessionSeconds()==120,"Its session floor survives");
+            check(loaded.settings().weekStartsOn()==java.time.DayOfWeek.SUNDAY,"Its week start survives");
+            check(loaded.activities().size()==1&&loaded.activities().getFirst().name().equals("Study"),
+                "Its activity survives");
+            check(loaded.activities().getFirst().targetMinutes()==30,"Its daily target survives");
+
+            // And it upgrades: saved again at the current schema, it reads back the same.
+            Path again=dir.resolve("resaved.vault");
+            try(var vault=new EncryptedVault(again,PASSWORD.toCharArray())){vault.save(loaded);}
+            try(var vault=new EncryptedVault(again,PASSWORD.toCharArray())){
+                check(vault.load().equals(loaded),"Re-saving it at the current schema loses nothing");
+            }
+        } finally {
+            try(var files=Files.walk(dir)){
+                for(var path:files.sorted(Comparator.reverseOrder()).toList())Files.delete(path);
+            }
+        }
     }
 }

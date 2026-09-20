@@ -14,9 +14,11 @@ import java.util.*;
 public final class Model {
     private Model() {
     }
+    /** The first moment a record may hold, and the first one past the last it may. */
+    private static final Instant EARLIEST = Instant.parse("1900-01-01T00:00:00Z"), LATEST = Instant.parse("2200-01-01T00:00:00Z");
     private static void requireTime(Instant time) {
         Objects.requireNonNull(time);
-        if(time.isBefore(Instant.parse("1900-01-01T00:00:00Z")) || !time.isBefore(Instant.parse("2200-01-01T00:00:00Z")))
+        if(time.isBefore(EARLIEST) || !time.isBefore(LATEST))
             throw new IllegalArgumentException("Choose a date between 1900 and 2199.");
     }
     private static void requireSpan(Instant start, Instant end) {
@@ -45,7 +47,22 @@ public final class Model {
     }
 
     /** Named separately from dev.yoru.ui.Theme, which resolves one of these to colours. */
-    public enum ThemeId { MIDNIGHT, EMBER, SAKURA, LINEN, MOONLIGHT, WAIFU }
+    public enum ThemeId {
+        MIDNIGHT, EMBER, SAKURA, LINEN, MOONLIGHT;
+
+        /**
+         * The theme a saved workspace names, or the nearest one that still exists.
+         *
+         * A workspace saved with the withdrawn Waifu theme (1.0.10 only) would
+         * otherwise fail to open on its name alone. It reads as Moonlight, the
+         * palette it was split from; anything else unknown reads as the default.
+         */
+        public static ThemeId known(String name) {
+            if ("WAIFU".equals(name)) return MOONLIGHT;
+            try { return valueOf(name); }
+            catch (IllegalArgumentException | NullPointerException unknown) { return MIDNIGHT; }
+        }
+    }
     /** Overworld sprite set. Not called Character — that shadows java.lang.Character. */
     public enum TrainerId { BRENDAN, MAY }
     /**
@@ -62,15 +79,10 @@ public final class Model {
     public enum HabitKind { DAILY, TIME_SINCE }
 
     public record Settings(ThemeId theme, TrainerId trainer, int dailyGoalHours, int minSessionSeconds,
-                           DayOfWeek weekStartsOn, String waifu) {
+                           DayOfWeek weekStartsOn) {
         /** Kept for callers that predate the week-start preference. */
         public Settings(ThemeId theme, TrainerId trainer, int dailyGoalHours, int minSessionSeconds) {
-            this(theme,trainer,dailyGoalHours,minSessionSeconds,DayOfWeek.MONDAY,null);
-        }
-        /** Kept for callers that predate the waifu panel. */
-        public Settings(ThemeId theme, TrainerId trainer, int dailyGoalHours, int minSessionSeconds,
-                        DayOfWeek weekStartsOn) {
-            this(theme,trainer,dailyGoalHours,minSessionSeconds,weekStartsOn,null);
+            this(theme,trainer,dailyGoalHours,minSessionSeconds,DayOfWeek.MONDAY);
         }
         public Settings {
             Objects.requireNonNull(theme); Objects.requireNonNull(trainer);
@@ -79,11 +91,8 @@ public final class Model {
                 throw new IllegalArgumentException("Daily goal must be between 1 and 16 hours.");
             if(minSessionSeconds<0 || minSessionSeconds>3600)
                 throw new IllegalArgumentException("Minimum session must be between 0 and 60 minutes.");
-            // A waifu choice is a preference, not data: a blank one and none at
-            // all are the same choice, so the panel stays off.
-            if(waifu!=null && waifu.isBlank()) waifu=null;
         }
-        public static Settings defaults() { return new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY,null); }
+        public static Settings defaults() { return new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY); }
         /** The start of the week containing this date, under this preference. */
         public LocalDate weekOf(LocalDate date) {
             return date.with(java.time.temporal.TemporalAdjusters.previousOrSame(weekStartsOn));
@@ -110,6 +119,7 @@ public final class Model {
         public Activity retargeted(int targetMinutes) {
             return new Activity(id,name,targetMinutes);
         }
+        @Override
         public String toString() {
             return name;
         }
@@ -132,7 +142,7 @@ public final class Model {
             name = requireName(name,40,"tag name");
             colour = requireColour(colour);
         }
-        public String toString() { return name; }
+        @Override public String toString() { return name; }
     }
 
     public record Session(UUID id, UUID activityId, Instant start, Instant end) {
@@ -178,7 +188,6 @@ public final class Model {
             if(!endTime.isAfter(startTime))
                 throw new IllegalArgumentException("A repeating block must end after it starts, on the same day.");
         }
-        public Duration length() { return Duration.between(startTime,endTime); }
     }
 
     /**
@@ -222,6 +231,18 @@ public final class Model {
         public boolean sameEntryAs(Task other) {
             return title.equalsIgnoreCase(other.title()) && Objects.equals(due, other.due())
                 && Objects.equals(activityId, other.activityId());
+        }
+        /**
+         * Whether an imported row is this task again.
+         *
+         * {@link #sameEntryAs} also compares the activity link, which an import
+         * never sets: it records the class as a tag. Two classes that share an
+         * assignment title and a deadline are different work, so a row filed
+         * under a class is the same entry only as a task under that class.
+         */
+        public boolean sameImportEntryAs(Task other) {
+            return sameEntryAs(other)
+                && (tagId == null || other.tagId() == null || tagId.equals(other.tagId()));
         }
         /** The day this wants attention: the plan if there is one, else the deadline. */
         public LocalDate workOn() { return plannedFor != null ? plannedFor : due; }
@@ -315,7 +336,6 @@ public final class Model {
             this.updatedAt = updatedAt;
         }
         public byte[] bytes() { return bytes.clone(); }
-        public int size() { return bytes.length; }
         public Instant updatedAt() { return updatedAt; }
         /** Whether these are exactly the bytes this save holds. */
         public boolean holds(byte[] other) { return Arrays.equals(bytes, other); }

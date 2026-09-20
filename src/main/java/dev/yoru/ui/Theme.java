@@ -156,17 +156,8 @@ final class Theme {
         new Color[]{new Color(0x302637),new Color(0x644973),new Color(0x895B97),
                     new Color(0xB47AAA),new Color(0xD695C5),new Color(0xF2BDD9)});
 
-    /** Rose neon and deep wine, reserved for the illustrated theme. */
-    private static final Palette WAIFU = new Palette(true,
-        new Color(0x190F1B), new Color(0x281B2B), new Color(0x50374D), new Color(0xFFF1F7),
-        new Color(0xC5ACC3), new Color(0xFFACD2), new Color(0xFFACD2), new Color(0xF2CD98),
-        new Color(0xF2CD98), new Color(0xCEB4FF), new Color(0xFFABB7), new Color(0xCEBDCF),
-        new Color(0x39293D),
-        new Color[]{new Color(0x39293D),new Color(0x754B72),new Color(0xA45C8B),
-                    new Color(0xCD79AB),new Color(0xE8A0C9),new Color(0xFFD0E8)});
-
     static Palette palette(ThemeId id) {
-        return switch (id) { case MIDNIGHT -> MIDNIGHT; case EMBER -> EMBER; case SAKURA -> SAKURA; case LINEN -> LINEN; case MOONLIGHT -> MOONLIGHT; case WAIFU -> WAIFU; };
+        return switch (id) { case MIDNIGHT -> MIDNIGHT; case EMBER -> EMBER; case SAKURA -> SAKURA; case LINEN -> LINEN; case MOONLIGHT -> MOONLIGHT; };
     }
     /**
      * What a theme is, in one short line.
@@ -183,7 +174,6 @@ final class Theme {
             case SAKURA -> "Blossom pink light, after Rosé Pine Dawn.";
             case LINEN -> "Warm paper light, low chroma, quiet.";
             case MOONLIGHT -> "Violet nights and soft rose accents.";
-            case WAIFU -> "Illustrated companions, rose neon and wine.";
         };
     }
 
@@ -214,16 +204,24 @@ final class Theme {
     }
 
     /**
-     * How much larger than designed every role is drawn. Only the layout review
-     * changes it: #9 asks that pages hold together with text at 200%, and Yoru
-     * sets its own sizes, so the operating system's text size never reaches them.
-     * Set it before {@link #apply} and before the window is built.
+     * How much larger than designed every role is drawn: this computer's
+     * {@link TextSize}. Set it before {@link #apply} and before the window is
+     * built; a component keeps the face it was made with.
      */
     static float textScale = 1f;
 
     static Font mono(int size) { return new Font(MONO_FAMILY, Font.PLAIN, scaled(size)); }
     static Font sans(int size) { return new Font(Font.SANS_SERIF, Font.PLAIN, scaled(size)); }
     private static int scaled(int size) { return Math.round(size * textScale); }
+
+    /**
+     * A size set by hand around text, grown with the text size (#31): a column,
+     * a slot or a box that holds a value. Spacing between things stays as it is.
+     */
+    static int grow(int px) { return Math.round(px * textScale); }
+
+    /** The height a control in a row is set to: {@link #SPACE_XXL}, grown with the text. */
+    static int controlHeight() { return grow(SPACE_XXL); }
 
     // Role fonts. A page asks for the role; the size lives in one place so the
     // whole app moves together if a role ever has to change.
@@ -1005,10 +1003,13 @@ final class Theme {
         return label(text, TYPE_SECTION, GOLD.equals(colour) ? GOLD_TEXT : colour);
     }
     /** Copy inside a card. */
-    static JLabel bodyLabel(String text) {
+    static JLabel bodyLabel(String text) { return wrapping(text, TYPE_BODY, MUTED); }
+
+    /** Text in a role's size and colour that wraps to its width instead of being cut. */
+    static JLabel wrapping(String text, int size, Color color) {
         var label = new WrappingLabel(text);
-        label.setFont(bodyFont());
-        label.setForeground(MUTED);
+        label.setFont(sans(size));
+        label.setForeground(color);
         label.setAlignmentX(0);
         return label;
     }
