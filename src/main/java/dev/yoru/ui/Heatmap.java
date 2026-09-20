@@ -34,8 +34,6 @@ final class Heatmap extends JPanel {
         this.weekStart=weekStart;
         start=today.minusWeeks(51).with(TemporalAdjusters.previousOrSame(weekStart));
         setOpaque(false);
-        // Room under the grid for the readout line the keyboard cursor draws.
-        setPreferredSize(new Dimension(760,158+Theme.SPACE_LG));
         setToolTipText("Daily time");
         // A short name, not a sentence, but the goal is part of what a cell
         // means — a day is only "good" against it — so the name carries it. The
@@ -86,13 +84,39 @@ final class Heatmap extends JPanel {
             .toUpperCase(java.util.Locale.getDefault());
     }
 
+    // ---- geometry ----------------------------------------------------------
+    //
+    // The map is drawn rather than laid out, so nothing here grows when the
+    // reader asks for larger text (#31) unless it is asked to. At 200% the
+    // month names were drawn half above the top of the panel, the weekday
+    // initials ran into the first column, and the cells stayed the size they
+    // were designed at under text twice as tall. Every measurement below
+    // follows the caption face the map writes in.
+
+    private FontMetrics caption() { return getFontMetrics(Theme.captionFont()); }
+
+    /** The band over the grid, which the month names are written in. */
+    private int header() { return Math.max(Theme.grow(28),caption().getHeight()+Theme.SPACE_XS); }
+
+    /** The column left of the grid, which the weekday initials sit in. */
+    private int gutter() { return Math.max(Theme.grow(32),caption().stringWidth("W")+Theme.SPACE_MD); }
+
+    /** One day's row, and the cell drawn inside it. */
+    private int rowStep() { return Theme.grow(17); }
+    private int cell() { return Theme.grow(13); }
+
     private int step() {
-        return Math.max(9,(getWidth()-38)/52);
+        return Math.max(Theme.grow(9),(getWidth()-gutter()-Theme.grow(6))/52);
+    }
+
+    /** Room for the grid, plus the line the keyboard cursor reads out under it. */
+    @Override public Dimension getPreferredSize() {
+        return new Dimension(Theme.grow(760),header()+7*rowStep()+Theme.SPACE_SM+caption().getHeight());
     }
 
     public String getToolTipText(MouseEvent e) {
-        int col=(e.getX()-32)/step(),row=(e.getY()-28)/17;
-        if(e.getX()<32||e.getY()<28||col>51||row>6)return null;
+        int col=(e.getX()-gutter())/step(),row=(e.getY()-header())/rowStep();
+        if(e.getX()<gutter()||e.getY()<header()||col>51||row>6)return null;
         return readout(start.plusDays(col*7L+row));
     }
 
@@ -125,41 +149,50 @@ final class Heatmap extends JPanel {
         var g=(Graphics2D)graphics.create();
         g.setFont(Theme.captionFont());
         g.setColor(Theme.MUTED);
+        var fm=caption();
         // Monday, Wednesday and Friday, wherever the week start puts them:
-        // seven labels in a 13 px band would collide, three are enough to read
+        // seven labels in one row band would collide, three are enough to read
         // the rows by, and every other row from the top gives two identical S's
         // on a week that starts on Sunday.
-        for(DayOfWeek named:new DayOfWeek[]{DayOfWeek.MONDAY,DayOfWeek.WEDNESDAY,DayOfWeek.FRIDAY})
-            g.drawString(initial(named),7,40+Math.floorMod(named.getValue()-weekStart.getValue(),7)*17);
-        int last=-1,named=-3;
+        for(DayOfWeek named:new DayOfWeek[]{DayOfWeek.MONDAY,DayOfWeek.WEDNESDAY,DayOfWeek.FRIDAY}) {
+            int row=Math.floorMod(named.getValue()-weekStart.getValue(),7);
+            g.drawString(initial(named),(gutter()-fm.stringWidth(initial(named)))/2,
+                header()+row*rowStep()+(cell()+fm.getAscent()-fm.getDescent())/2);
+        }
+        int last=-1,free=0;
+        int months=header()-(header()-fm.getHeight())/2-fm.getDescent();
         for(int c=0;c<52;c++) {
             LocalDate first=start.plusWeeks(c);
             // A month is named once, over the first full column it owns, and
-            // only where there is room for the word: the left edge is a few
-            // days of the month before it, and two months that turn a week
-            // apart printed "SEPOCT" across the top of the map.
+            // only where the word fits beside the one before it: the left edge
+            // is a few days of the month before it, and two months that turn a
+            // week apart printed "SEPOCT" across the top of the map.
             if(first.getMonthValue()!=last) {
-                if(c>0&&c-named>=3) {
+                String name=first.getMonth().toString().substring(0,3);
+                int x=gutter()+c*step();
+                if(c>0&&x>=free) {
                     g.setColor(Theme.MUTED);
-                    g.drawString(first.getMonth().toString().substring(0,3),32+c*step(),15);
-                    named=c;
+                    g.drawString(name,x,months);
+                    free=x+fm.stringWidth(name)+Theme.SPACE_SM;
                 }
                 last=first.getMonthValue();
             }
             for(int r=0;r<7;r++) {
                 LocalDate d=first.plusDays(r);
                 g.setColor(colour(d,days.getOrDefault(d,0L)));
-                g.fillRoundRect(32+c*step(),28+r*17,step()-3,13,Theme.RADIUS,Theme.RADIUS);
+                g.fillRoundRect(gutter()+c*step(),header()+r*rowStep(),step()-Theme.grow(3),cell(),
+                    Theme.RADIUS,Theme.RADIUS);
             }
         }
         // The keyboard cursor: the cell it is on, ringed, and the day written
         // out underneath — the same reading the tooltip gives the mouse.
         if(cursorCol>=0) {
             g.setColor(Theme.ringFor(Theme.PANEL));
-            g.drawRoundRect(32+cursorCol*step()-1,28+cursorRow*17-1,step()-1,15,Theme.RADIUS,Theme.RADIUS);
+            g.drawRoundRect(gutter()+cursorCol*step()-1,header()+cursorRow*rowStep()-1,
+                step()-Theme.grow(3)+1,cell()+1,Theme.RADIUS,Theme.RADIUS);
             g.setFont(Theme.captionFont());
             g.setColor(Theme.MUTED);
-            g.drawString(readout(cursorDay()),32,28+7*17+Theme.SPACE_MD);
+            g.drawString(readout(cursorDay()),gutter(),header()+7*rowStep()+fm.getAscent());
         }
         g.dispose();
     }
