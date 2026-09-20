@@ -44,6 +44,7 @@ public final class VisualSystemTest {
         edt(VisualSystemTest::titlesAndCards);
         edt(VisualSystemTest::pages);
         edt(VisualSystemTest::dailyGoal);
+        edt(VisualSystemTest::wrappingRowsAskAgain);
         System.out.println("PASS: " + checks + " visual system checks (titles, cards, breadcrumb, Today order, Settings sections, scroll)");
         // The windows built here leave Swing's threads running.
         System.exit(0);
@@ -92,10 +93,38 @@ public final class VisualSystemTest {
             "Goal completion is announced in words as well as colour");
     }
 
+    /**
+     * A row that is given a new width asks to be measured again.
+     *
+     * This is what corrects the running app after a resize: the column that
+     * holds the row caches what it measured, and the row is measured before it
+     * is given its width, so without the asking the column keeps handing out a
+     * height from the window's previous size and the last control is drawn
+     * outside the row.
+     */
+    private static void wrappingRowsAskAgain() {
+        Theme.apply(ThemeId.MIDNIGHT);
+        var card = Theme.card();
+        var row = Theme.wrappingRow();
+        for (int i = 0; i < 4; i++) row.add(Theme.button("Invented control " + i, () -> { }));
+        card.add(row);
+        card.setSize(900, 200);
+        row.setBounds(0, 0, 900, row.getPreferredSize().height);
+        int onOneLine = card.getLayout().preferredLayoutSize(card).height;
+        row.setBounds(0, 0, 200, row.getHeight());
+        int wrapped = card.getLayout().preferredLayoutSize(card).height;
+        check(wrapped > onOneLine, "a row given less width asks for more height: " + wrapped + " against " + onOneLine);
+    }
+
     private static void pages() throws Exception {
         var repo = new Memory();
         var tracker = new Tracker(repo, Clock.systemUTC());
         tracker.addActivity("Study", 30);
+        // Two blocks today, so the agenda has a list to end.
+        var activity = tracker.state().activities().getFirst().id();
+        var noon = java.time.LocalDate.now().atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant();
+        tracker.plan(activity, noon, noon.plusSeconds(3600));
+        tracker.plan(activity, noon.plusSeconds(7200), noon.plusSeconds(10800));
         var app = new YoruApp(tracker, repo);
         app.setSize(900, 640);
 
@@ -108,6 +137,21 @@ public final class VisualSystemTest {
         var agenda = named(app, "today.agenda");
         var stats = named(app, "today.stats");
         check(agenda != null && stats != null && agenda.getY() < stats.getY(), "Today's agenda comes before its statistics");
+        // The rules inside a list divide its rows; the last row has nothing
+        // below it but the card's own edge, so it carries no rule.
+        var rows = new ArrayList<JComponent>();
+        for (var child : ((Container) agenda).getComponents())
+            if (child instanceof JPanel row && row.getLayout() instanceof BorderLayout) rows.add(row);
+        check(rows.size() == 2, "the agenda lists the blocks planned today, got " + rows.size());
+        check(rows.getFirst().getBorder() instanceof javax.swing.border.CompoundBorder,
+            "a block is ruled off from the one after it");
+        check(rows.getLast().getBorder() instanceof javax.swing.border.EmptyBorder,
+            "and the last block is not ruled off from the card's edge");
+        check(rows.getFirst().getBorder().getBorderInsets(rows.getFirst()).bottom
+            + rows.getFirst().getBorder().getBorderInsets(rows.getFirst()).top
+            == rows.getLast().getBorder().getBorderInsets(rows.getLast()).bottom
+            + rows.getLast().getBorder().getBorderInsets(rows.getLast()).top,
+            "without standing any shorter for it");
 
         tracker.start(tracker.state().activities().getFirst().id());
         open(app,"Tasks");
@@ -142,6 +186,11 @@ public final class VisualSystemTest {
         open(app, "Settings");
         var rebuilt = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, named(app, "settings.themes"));
         check(rebuilt.getViewPosition().y == furthest, "rebuilding the page on screen keeps its place, got " + rebuilt.getViewPosition().y);
+
+        for (var page : Preview.PAGES) {
+            open(app, page);
+            rowsHoldTheirLines(app, page);
+        }
     }
 
     private static void open(YoruApp app, String page) {
@@ -176,8 +225,31 @@ public final class VisualSystemTest {
         return null;
     }
 
-    private static void layout(Container c) {
-        c.doLayout();
-        for (var child : c.getComponents()) if (child instanceof Container nested) layout(nested);
+    /** The preview's own settling pass, so a render and a check see one layout. */
+    private static void layout(Container c) { Preview.layout(c); }
+
+    /**
+     * A row that wraps is as tall as the lines it wrapped onto.
+     *
+     * A column measures its children before it gives any of them a width, so a
+     * row that wraps could report one line, be laid out in the narrower room it
+     * actually had, and draw its last control below the height it was given —
+     * where it is not merely clipped but unclickable. The rule holds on every
+     * page at the window's minimum, which is where rows wrap.
+     */
+    private static void rowsHoldTheirLines(Container root, String page) {
+        for (var child : root.getComponents()) {
+            if (child instanceof Container row && row.getLayout() instanceof WrapFlowLayout)
+                for (var control : row.getComponents())
+                    check(control.getY() + control.getHeight() <= row.getHeight(),
+                        page + ": " + describe(control) + " is drawn past the row that holds it, "
+                        + (control.getY() + control.getHeight()) + " into " + row.getHeight());
+            if (child instanceof Container nested) rowsHoldTheirLines(nested, page);
+        }
+    }
+
+    private static String describe(Component control) {
+        if (control instanceof AbstractButton b && b.getText() != null && !b.getText().isBlank()) return b.getText();
+        return control.getName() != null ? control.getName() : control.getClass().getSimpleName();
     }
 }

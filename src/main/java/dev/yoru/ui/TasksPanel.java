@@ -77,23 +77,23 @@ final class TasksPanel extends JPanel implements Scrollable {
         this.state=state;
         view=state.view; sort=state.sort; month=state.month;
         var p=stack();
-        p.add(YoruApp.pageHeaderFor("Tasks","TASKS · NOTES · DUE DATES"));
+        // The one thing this page makes sits on its title's line; the views and
+        // the tools that refine them follow, two rows where there were three.
+        var create=accentButton("New task",()->edit(null));
+        create.setName("task.new");
+        create.setToolTipText("Add a task");
+        p.add(YoruApp.pageHeaderFor("Tasks","TASKS · NOTES · DUE DATES",create));
 
-        var top=new JPanel(new BorderLayout(SPACE_MD,0));
-        top.setOpaque(false);
-        var tabs=new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_XS,0));
+        var tabs=new JPanel(new WrapFlowLayout(FlowLayout.LEFT,SPACE_XS,SPACE_XS));
         tabs.setOpaque(false);
         for(var value:View.values()) {
             var b=button(value.label,()->{view=value;rebuildRows();});
             b.setName("view."+value.name().toLowerCase());
             viewButtons.put(value,b);tabs.add(b);
         }
-        top.add(tabs,BorderLayout.CENTER);
-        var create=accentButton("New task",()->edit(null));
-        create.setName("task.new");
-        create.setToolTipText("Add a task");
-        top.add(create,BorderLayout.EAST);
-        p.add(top);gap(p,SPACE_MD);
+        // What the list is showing belongs beside the views that decide it, and
+        // folds under them at the window's minimum rather than running off it.
+        p.add(splitRow(tabs,summary));gap(p,SPACE_MD);
 
         var order=plainCombo(new JComboBox<>(Sort.values()));
         order.setName("task.sort");
@@ -109,18 +109,17 @@ final class TasksPanel extends JPanel implements Scrollable {
         var importer=button("Import ▾",()->{});
         importer.setName("task.import");
         importer.addActionListener(e->importMenu().show(importer,0,importer.getHeight()));
-        var tools=new JPanel(new BorderLayout(SPACE_MD,0));
-        tools.setOpaque(false);
-        var left=new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_SM,0));
+        var left=new JPanel(new WrapFlowLayout(FlowLayout.LEFT,SPACE_SM,SPACE_XS));
         left.setOpaque(false);
         left.add(sortControls);left.add(tags);left.add(importer);
-        tools.add(left,BorderLayout.WEST);
-        tools.add(summary,BorderLayout.EAST);
-        p.add(tools);gap(p,SPACE_MD);
-        var find=new JPanel(new BorderLayout(SPACE_MD,0));
+        var find=new JPanel(new BorderLayout(SPACE_SM,0));
         find.setOpaque(false);
-        var caption=label("Search tasks",TYPE_LABEL,MUTED);
+        var caption=label("Search",TYPE_LABEL,MUTED);
         caption.setLabelFor(search);
+        // A width of its own: in the slack of a BorderLayout a text field grows
+        // to the width of the window, and a search box the width of the page
+        // reads as the page's subject rather than as one of its tools.
+        search.setPreferredSize(new Dimension(grow(SPACE_XXL*8),controlHeight()));
         search.setName("task.search");
         search.setText(state.query);
         search.getAccessibleContext().setAccessibleName("Search task titles, notes and tags");
@@ -129,6 +128,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         find.add(caption,BorderLayout.WEST);
         find.add(search,BorderLayout.CENTER);
         find.add(clearSearch,BorderLayout.EAST);
+        var tools=splitRow(left,find);
         search.getInputMap().put(KeyStroke.getKeyStroke("ESCAPE"),"clearSearch");
         search.getActionMap().put("clearSearch",new AbstractAction() {
             public void actionPerformed(java.awt.event.ActionEvent e) { search.setText(""); }
@@ -138,7 +138,7 @@ final class TasksPanel extends JPanel implements Scrollable {
             public void removeUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
             public void changedUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
         });
-        p.add(find);gap(p,SPACE_MD);
+        p.add(tools);gap(p,SPACE_MD);
         p.add(rows);gap(p,SPACE_MD);
         add(p,BorderLayout.NORTH);
         rebuildRows();
@@ -326,6 +326,34 @@ final class TasksPanel extends JPanel implements Scrollable {
         return line;
     }
 
+    /**
+     * Lights a row while the pointer is over it.
+     *
+     * A row is a control — its title opens the task, its menu acts on it — and
+     * it said nothing about that until something inside it was reached. The
+     * fill moves the way a hovered button's does, a step short of it: the same
+     * move over a whole row at a button's strength reads as a selection rather
+     * than as the pointer.
+     */
+    private static void lightOnHover(JPanel line) {
+        line.setOpaque(false);
+        var over=new java.awt.event.MouseAdapter() {
+            @Override public void mouseEntered(java.awt.event.MouseEvent e) {
+                line.setOpaque(true);
+                line.setBackground(shade(PANEL,DARK?12:-8));
+                line.repaint();
+            }
+            @Override public void mouseExited(java.awt.event.MouseEvent e) {
+                // Only when the pointer has left the row itself: moving onto a
+                // control inside it is still being over the row.
+                if(line.contains(e.getPoint())) return;
+                line.setOpaque(false);
+                line.repaint();
+            }
+        };
+        line.addMouseListener(over);
+    }
+
     private static JPanel headerRow() {
         var header=tableRow();
         header.setName("task.header");
@@ -338,6 +366,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         var task=tasks.get(index);
         boolean done=task.status()==TaskStatus.DONE;
         var line=tableRow();
+        lightOnHover(line);
         line.setBorder(restingBorder());
 
         var check=new JCheckBox();
