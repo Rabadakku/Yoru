@@ -2,7 +2,9 @@
 
 ## UI improvements for 1.0.12 — September 20, 2026
 
-On `codex/ui-polish`, based on released 1.0.11.
+On `codex/ui-polish`, based on released 1.0.11. Tracked in
+[issue #34](https://github.com/Rabadakku/Yoru/issues/34) and
+[PR #35](https://github.com/Rabadakku/Yoru/pull/35).
 See [RELEASE-1.0.12.md](RELEASE-1.0.12.md) for the scope.
 
 - Done: task search across titles, notes and tags, retained task view state,
