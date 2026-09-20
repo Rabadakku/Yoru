@@ -1097,11 +1097,20 @@ final class Theme {
                 + parent.getComponent(1).getPreferredSize().width <= width;
         }
 
-        /** The width to lay out at: this header's own once it has one, else what holds it. */
+        /**
+         * The width to lay out at: this header's own once it has one, else the
+         * room inside what holds it.
+         *
+         * Inside, not across: a card is its padding wider than anything it can
+         * give a child, and a header measured against the card's outer width
+         * decided two blocks fitted side by side in room they did not have.
+         */
         private int room(Container parent) {
             int width=parent.getWidth();
-            for(Container holder=parent.getParent();width==0&&holder!=null;holder=holder.getParent())
-                width=holder.getWidth();
+            for(Container holder=parent.getParent();width==0&&holder!=null;holder=holder.getParent()) {
+                var padding=holder.getInsets();
+                width=Math.max(0,holder.getWidth()-padding.left-padding.right);
+            }
             var insets=parent.getInsets();
             return Math.max(0,width-insets.left-insets.right);
         }
@@ -1235,9 +1244,37 @@ final class Theme {
         return p;
     }
 
-    /** A row of controls that may run onto further lines, and makes room for each of them. */
+    /**
+     * A row of controls that may run onto further lines, and makes room for each of them.
+     *
+     * A row is told how wide it is only after it has been asked how tall it is:
+     * a column measures every child before it gives any of them a width. A row
+     * that wraps therefore reported one line's height, was laid out in the
+     * narrower room it actually had, and drew its last control below the height
+     * the column had set aside for it — at the window's minimum that control
+     * was the focus card's Edit timer, and only its top edge showed. Asking
+     * again the moment the width changes settles it in the next pass, which is
+     * the pass the eye sees; the width it settles at does not change again, so
+     * the asking stops there.
+     */
     static JPanel wrappingRow() {
-        var p=row();
+        var p=new JPanel() {
+            @Override public void setBounds(int x,int y,int width,int height) {
+                boolean rewidened=width!=getWidth();
+                super.setBounds(x,y,width,height);
+                if(!rewidened) return;
+                // The column that holds it, by name: what a column measured is
+                // cached against the child it measured, and Swing only clears
+                // that cache on the way up from a child of a column it already
+                // considers settled. This one has just been handed a width that
+                // makes its old answer wrong, settled or not.
+                var holder=getParent();
+                if(holder!=null) holder.invalidate();
+                revalidate();
+            }
+        };
+        p.setAlignmentX(0);
+        p.setOpaque(false);
         p.setLayout(new WrapFlowLayout(FlowLayout.LEFT,SPACE_MD,SPACE_XS));
         return p;
     }
