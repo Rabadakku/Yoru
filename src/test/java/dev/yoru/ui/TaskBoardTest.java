@@ -356,6 +356,27 @@ public final class TaskBoardTest {
         ((JCheckBox)named(fresh,"task.done."+undated)).doClick();
         check(task(tracker,undated).status()==TaskStatus.TODO,"Clearing it reopens the task");
 
+        // Searching intersects the chosen view and never edits the manual order.
+        var savedView=new TasksPanel.ViewState();
+        var searchable=new TasksPanel(tracker,()->{},()->false,savedView);
+        var search=(JTextField)named(searchable,"task.search");
+        search.setText("LANGUAGE II");
+        check(shown(searchable).contains(dueToday.toString()),"Search matches tag names without case sensitivity");
+        check(!shown(searchable).contains(overdue.toString()),"Search excludes unrelated rows");
+        check(!item(searchable,dueToday,"task.down.").isEnabled(),"Search cannot reorder a partial list");
+        search.setText("nothing-matches-this-invented-query");
+        check(shown(searchable).isEmpty(),"A missing query has no rows");
+        button(searchable,"task.search.clear").doClick();
+        check(shown(searchable).size()==5,"Clear restores all tasks");
+        button(searchable,"view.done").doClick();
+        search.setText(task(tracker,finished).title().toUpperCase(Locale.ROOT));
+        check(shown(searchable).equals(List.of(finished.toString())),"Search intersects completed view");
+        var reopened=new TasksPanel(tracker,()->{},()->false,savedView);
+        check(shown(reopened).equals(shown(searchable)),"View and query survive page recreation");
+        check(((JTextField)named(reopened,"task.search")).getText().equals(search.getText()),"Restored query stays visible");
+        search.getActionMap().get("clearSearch").actionPerformed(null);
+        check(search.getText().isEmpty(),"Escape clears search");
+
         // A long title wraps and its row grows, instead of vanishing into an ellipsis.
         var wordy=UUID.randomUUID();
         tracker.addTasks(List.of(new Task(wordy,null,null,
