@@ -57,19 +57,26 @@ final class CollectionPage {
         var p = stack();
         p.add(YoruApp.pageHeaderFor("Collection",
             "YOUR GAME'S POKÉMON · ONE ENCOUNTER FOR EVERY 30 MINUTES RECORDED"));
+        // The line that vouches for the Pokémon goes on the floor of the card
+        // that holds them, inside its padding and on its title's left edge —
+        // floating in the gutter above the card it read as a stray caption
+        // belonging to nothing, which is the same reason Today's encounters
+        // line sits inside the companion card.
         var status = saveStatus(read);
-        if (status != null) { p.add(status); gap(p, SPACE_LG); }
         if (shell.game().running()) {
             p.add(label("The game is running. This is its last save; what you catch now appears when it saves again.", TYPE_BODY, GOLD_TEXT));
             gap(p, SPACE_LG);
         }
         if (read.kind() != GameView.SaveKind.READABLE) {
+            // No party card to stand on: a save that is failing or still being
+            // written says so above the card that explains the rest.
+            if (status != null) { p.add(status); gap(p, SPACE_LG); }
             p.add(unavailable(read));
             gap(p, SPACE_XL);
             p.add(rewards(state));
             return p;
         }
-        storage(p, read.save());
+        storage(p, read.save(), status);
         return p;
     }
 
@@ -122,7 +129,7 @@ final class CollectionPage {
     }
 
     /** The party, the rewards row and the PC boxes, sharing one selection and one arrangement. */
-    private void storage(JPanel page, Gen3Save save) {
+    private void storage(JPanel page, Gen3Save save, JComponent status) {
         boolean gameOpen = shell.game().running();
         // The edits live here, and only while the game is closed: while it runs,
         // the controls say so rather than pretending to work.
@@ -181,7 +188,7 @@ final class CollectionPage {
         screen.select(chosen);
         describe(details, chosen, shown);
 
-        page.add(party(save, strip));
+        page.add(party(save, strip, status));
         gap(page, SPACE_XL);
         page.add(rewards(shell.tracker().state()));
         gap(page, SPACE_XL);
@@ -222,13 +229,14 @@ final class CollectionPage {
         return Region.NONE;
     }
 
-    private JPanel party(Gen3Save save, PartyStrip strip) {
+    private JPanel party(Gen3Save save, PartyStrip strip, JComponent status) {
         var c = card();
         c.setName("collection.party");
         c.add(sectionHeader("YOUR PARTY · " + save.trainer().name() + " · " + save.ownedCount() + " caught · "
             + Theme.plural(save.badges(), "badge")));
         gap(c, SPACE_MD);
         c.add(strip);
+        if (status != null) { gap(c, SPACE_MD); c.add(status); }
         return c;
     }
 
