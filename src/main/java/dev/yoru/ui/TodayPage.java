@@ -98,7 +98,8 @@ final class TodayPage {
         stats.setAlignmentX(0);
         stats.setOpaque(false);
         stats.add(stat("TODAY",Analytics.duration(daily.getOrDefault(today,0L))));
-        stats.add(stat("LAST 7 DAYS",Analytics.report(weekSeconds)));
+        stats.add(week(stat("LAST 7 DAYS",Analytics.report(weekSeconds)),daily,today,
+            tracker.state().settings().dailyGoalHours()));
         stats.add(stat("CURRENT STREAK",plural(Analytics.streak(daily,today),"day")));
         // The agenda before the statistics (#9): what comes next, then how it
         // has gone. The agenda is in the hero above, so that order still holds.
@@ -393,6 +394,42 @@ final class TodayPage {
         gap(p,SPACE_MD);
         p.add(label(value,TYPE_FIGURE,TEXT));
         return p;
+    }
+
+    /**
+     * The week behind the figure: one bar a day, in the heat map's own colours.
+     *
+     * The tile said nine hours and nothing about how they fell — four long days
+     * and three empty ones read the same as seven even ones. The bars are the
+     * chart on the Data page at a glance, and the same colour means the same
+     * thing on both.
+     */
+    private JPanel week(JPanel tile,java.util.Map<LocalDate,Long> daily,LocalDate today,int goalHours) {
+        gap(tile,SPACE_MD);
+        int height=grow(SPACE_XL);
+        var days=new JPanel(new GridLayout(1,7,SPACE_XS,0));
+        days.setOpaque(false);
+        days.setAlignmentX(0);
+        days.setMaximumSize(new Dimension(Integer.MAX_VALUE,height));
+        long most=3600;
+        for(int i=6;i>=0;i--) most=Math.max(most,daily.getOrDefault(today.minusDays(i),0L));
+        for(int i=6;i>=0;i--) {
+            LocalDate day=today.minusDays(i);
+            long seconds=daily.getOrDefault(day,0L);
+            var column=stack();
+            glue(column);
+            // A day with nothing recorded is a hairline on the floor, as it is
+            // in the fourteen-day chart: a stub reads as a bar that failed.
+            int tall=seconds==0?HAIRLINE:Math.max(RING,(int)(height*seconds/most));
+            var bar=new Theme.Bar(seconds==0?LINE:Heatmap.colour(day,seconds,goalHours));
+            bar.setMaximumSize(new Dimension(Integer.MAX_VALUE,tall));
+            bar.setPreferredSize(new Dimension(SPACE_MD,tall));
+            bar.setToolTipText(day+" · "+Analytics.report(seconds));
+            column.add(bar);
+            days.add(column);
+        }
+        tile.add(days);
+        return tile;
     }
     private void updateTimer() {
         var a=tracker().active();
