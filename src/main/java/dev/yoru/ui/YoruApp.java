@@ -48,6 +48,7 @@ public final class YoruApp extends JPanel implements Shell {
     private final TodayPage todayPage=new TodayPage(this);
     private final SettingsPage settingsPage=new SettingsPage(this);
     private javax.swing.Timer ticker;
+    private final TasksPanel.ViewState taskViewState=new TasksPanel.ViewState();
     private final Map<String,JButton> navigation = new LinkedHashMap<>();
     private boolean closed;
     /** What the bar needs to show every tab whole; measured when the bar is built. */
@@ -298,7 +299,7 @@ public final class YoruApp extends JPanel implements Shell {
             case "Data"->data();
             case "Collection"->collectionPage.view();
             case "Habits"->HabitsPanel.view(tracker, () -> showPage("Habits"));
-            case "Tasks"->new TasksPanel(tracker, () -> showPage("Tasks"), () -> closed);
+            case "Tasks"->new TasksPanel(tracker, () -> showPage("Tasks"), () -> closed,taskViewState);
             case "Settings"->settingsPage.view();
             default->todayPage.view();
         }

@@ -51,6 +51,15 @@ final class TasksPanel extends JPanel implements Scrollable {
     private final JPanel rows=stack();
     private final JLabel summary=label("",TYPE_CAPTION,MUTED);
     private final Map<View,JButton> viewButtons=new EnumMap<>(View.class);
+    static final class ViewState {
+        View view=View.ALL;
+        Sort sort=Sort.MANUAL;
+        YearMonth month=YearMonth.now();
+        String query="";
+    }
+    private final ViewState state;
+    private final JTextField search=styleInput(new JTextField(24));
+    private final JButton clearSearch=button("Clear",()->search.setText(""));
     private View view=View.ALL;
     private Sort sort=Sort.MANUAL;
     private YearMonth month=YearMonth.now();
@@ -59,8 +68,14 @@ final class TasksPanel extends JPanel implements Scrollable {
     private int dragFrom=-1, dragTo=-1;
 
     TasksPanel(Tracker tracker, Runnable refresh, BooleanSupplier closed) {
+        this(tracker,refresh,closed,new ViewState());
+    }
+
+    TasksPanel(Tracker tracker, Runnable refresh, BooleanSupplier closed, ViewState state) {
         super(new BorderLayout()); setOpaque(false);
         this.tracker=tracker; this.refresh=refresh; this.closed=closed;
+        this.state=state;
+        view=state.view; sort=state.sort; month=state.month;
         var p=stack();
         p.add(YoruApp.pageHeaderFor("Tasks","TASKS · NOTES · DUE DATES"));
 
@@ -74,7 +89,7 @@ final class TasksPanel extends JPanel implements Scrollable {
             viewButtons.put(value,b);tabs.add(b);
         }
         top.add(tabs,BorderLayout.CENTER);
-        var create=accentButton("New",()->edit(null));
+        var create=accentButton("New task",()->edit(null));
         create.setName("task.new");
         create.setToolTipText("Add a task");
         top.add(create,BorderLayout.EAST);
@@ -84,6 +99,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         order.setName("task.sort");
         // One control height for the app; the width is this control's own.
         order.setPreferredSize(new Dimension(grow(SPACE_XXL*4),controlHeight()));
+        order.setSelectedItem(sort);
         order.addActionListener(e->{sort=(Sort)order.getSelectedItem();rebuildRows();});
         sortControls.setOpaque(false);
         sortControls.add(label("Sort",TYPE_CAPTION,MUTED));
@@ -101,6 +117,28 @@ final class TasksPanel extends JPanel implements Scrollable {
         tools.add(left,BorderLayout.WEST);
         tools.add(summary,BorderLayout.EAST);
         p.add(tools);gap(p,SPACE_MD);
+        var find=new JPanel(new BorderLayout(SPACE_MD,0));
+        find.setOpaque(false);
+        var caption=label("Search tasks",TYPE_LABEL,MUTED);
+        caption.setLabelFor(search);
+        search.setName("task.search");
+        search.setText(state.query);
+        search.getAccessibleContext().setAccessibleName("Search task titles, notes and tags");
+        search.setToolTipText("Search titles, notes and tags · Escape to clear");
+        clearSearch.setName("task.search.clear");
+        find.add(caption,BorderLayout.WEST);
+        find.add(search,BorderLayout.CENTER);
+        find.add(clearSearch,BorderLayout.EAST);
+        search.getInputMap().put(KeyStroke.getKeyStroke("ESCAPE"),"clearSearch");
+        search.getActionMap().put("clearSearch",new AbstractAction() {
+            public void actionPerformed(java.awt.event.ActionEvent e) { search.setText(""); }
+        });
+        search.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
+        });
+        p.add(find);gap(p,SPACE_MD);
         p.add(rows);gap(p,SPACE_MD);
         add(p,BorderLayout.NORTH);
         rebuildRows();
@@ -151,7 +189,8 @@ final class TasksPanel extends JPanel implements Scrollable {
             case STATUS->Comparator.comparing((Task t)->t.status().ordinal())
                 .thenComparing(t->t.workOn()==null?LocalDate.MAX:t.workOn());
         };
-        return filtered.sorted(by).toList();
+        String query=search.getText().strip().toLowerCase(Locale.ROOT);
+        return filtered.filter(t->matches(t,query)).sorted(by).toList();
     }
 
     /**
@@ -159,9 +198,18 @@ final class TasksPanel extends JPanel implements Scrollable {
      * from the unfiltered list. Reordering four of nine visible rows would
      * renumber those four and interleave them with the five it could not see.
      */
-    private boolean reorderable() { return sort==Sort.MANUAL&&view==View.ALL; }
+    private boolean matches(Task task,String query) {
+        if(query.isEmpty())return true;
+        String tag=tracker.state().tags().stream().filter(t->t.id().equals(task.tagId()))
+            .map(Tag::name).findFirst().orElse("");
+        return (task.title()+"\n"+task.notes()+"\n"+tag).toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private boolean reorderable() { return sort==Sort.MANUAL&&view==View.ALL&&search.getText().isBlank(); }
 
     private void rebuildRows() {
+        state.view=view; state.sort=sort; state.month=month; state.query=search.getText();
+        clearSearch.setEnabled(!search.getText().isEmpty());
         rows.removeAll();
         rowPanels.clear();
         viewButtons.forEach((value,b)->tab(b,value==view));
@@ -172,7 +220,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         int open=(int)tracker.state().tasks().stream().filter(t->t.status()!=TaskStatus.DONE).count();
         summary.setText(tasks.size()+" shown · "+open+" open · "+tracker.state().tasks().size()+" total"
             +(view==View.CALENDAR?" · drag a task onto a day to move it"
-                :reorderable()?"":" · reorder in All, My order"));
+                :reorderable()?"":" · reorder in All with search cleared"));
         if(view==View.CALENDAR) { buildCalendar(); return; }
         var table=table();
         table.add(headerRow());
@@ -185,7 +233,9 @@ final class TasksPanel extends JPanel implements Scrollable {
                 case DONE->"Nothing completed yet.";
                 case CALENDAR->"No tasks planned this month.";
             };
-            var empty=emptyState(headline,"Add one with New, or bring a list in from Import.",null);
+            boolean searching=!search.getText().isBlank();
+            var empty=emptyState(searching?"No matching tasks.":headline,
+                searching?"Try another title, note or tag, or clear your search.":"Add one with New task, or bring a list in from Import.",null);
             empty.setBorder(new EmptyBorder(SPACE_LG,SPACE_MD,SPACE_LG,SPACE_MD));
             table.add(empty);
         }
@@ -212,7 +262,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         nav.add(thisMonth);
         rows.add(nav);
 
-        var calendar=new TaskCalendar(tracker.state(),month,LocalDate.now(),(taskId,date)->{
+        var calendar=new TaskCalendar(tracker.state().withTasks(visible()),month,LocalDate.now(),(taskId,date)->{
             var task=tracker.state().tasks().stream().filter(t->t.id().equals(taskId)).findFirst().orElse(null);
             if(task==null||Objects.equals(task.plannedFor(),date))return;
             try {
@@ -581,7 +631,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         menu.add(item("Track time","task.track."+id,task.activityId()!=null&&!done,()->track(task),
             task.activityId()==null?"Assign an activity to time this task":"This task is finished"));
         menu.addSeparator();
-        String why="Reordering needs the All view in My order";
+        String why="Reordering needs the All view in My order with search cleared";
         menu.add(item("Move up","task.up."+id,reorderable()&&at>0,()->move(tasks,at,-1),reorderable()?null:why));
         menu.add(item("Move down","task.down."+id,reorderable()&&at<tasks.size()-1,()->move(tasks,at,1),reorderable()?null:why));
         menu.addSeparator();
