@@ -17,7 +17,7 @@ it could not be clicked.
 | Every page at every text size | `TextFitTest`: 100, 125, 150, 200% | Passing |
 | Rows hold their controls | `VisualSystemTest`: every page at the smallest window | Passing |
 | The week starts where the vault says | `HabitGridTest`: all seven starts, grid and heat map | Passing |
-| Installers | `release.yml` on the version tag | Pending the release |
+| Installers | `release.yml` on `v1.0.13`: .dmg, .msi and .deb, after the suite on Java 22 | Built and attached |
 | Clean-machine install, full campaign, real libretro core | By hand | Not verified |
 
 - Done, page by page. Every page: one header line, the repeated controls
