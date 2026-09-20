@@ -6,6 +6,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
+import java.util.Locale;
 import static dev.yoru.ui.Theme.*;
 
 /**
@@ -19,6 +21,9 @@ import static dev.yoru.ui.Theme.*;
 final class HabitsPanel {
     /** One formatter for every "when" this page prints, so they cannot disagree. */
     private static final DateTimeFormatter WHEN=DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    /** How far back a daily habit's grid reaches: four weeks of columns. */
+    private static final int WEEKS=4;
 
     private HabitsPanel() { }
 
@@ -97,20 +102,58 @@ final class HabitsPanel {
         // A filled cell is a day done and an outlined one is a day not done: the
         // state reads at a glance, without a glyph to decode, and each cell is
         // still a button with a name a screen reader can read out.
-        var days=new JPanel(new GridLayout(2,14,SPACE_XS,SPACE_XS));
+        //
+        // The cells stand in weekday columns, four weeks deep, under the
+        // initials of the days. Laid out as two rows of fourteen they said how
+        // many days were done and nothing about which: whether the gaps are
+        // weekends or the middle of the week is the question a check-off habit
+        // actually raises, and it is a column apart here instead of a count on
+        // the fingers. The week starts on the day the vault's own setting says,
+        // so this grid and the task calendar break their weeks in the same place.
+        var settings=tracker.state().settings();
+        var weekStart=settings.weekStartsOn();
+        var first=settings.weekOf(today).minusWeeks(WEEKS-1);
+        int side=grow(SPACE_XXL);
+        int width=7*side+6*SPACE_XS;
+        var initials=new JPanel(new GridLayout(1,7,SPACE_XS,0));
+        initials.setOpaque(false);
+        initials.setAlignmentX(0);
+        for(int i=0;i<7;i++) {
+            var day=weekStart.plus(i);
+            var initial=label(day.getDisplayName(TextStyle.NARROW,Locale.getDefault()).toUpperCase(Locale.getDefault()),
+                TYPE_SECTION,MUTED);
+            initial.setHorizontalAlignment(SwingConstants.CENTER);
+            // The narrow name repeats itself — two of seven days are "S" — so
+            // the column says the day in full to a screen reader.
+            initial.getAccessibleContext().setAccessibleName(day.getDisplayName(TextStyle.FULL,Locale.getDefault()));
+            initials.add(initial);
+        }
+        initials.setMaximumSize(new Dimension(width,initials.getPreferredSize().height));
+        card.add(initials);
+        gap(card,SPACE_XS);
+        var days=new JPanel(new GridLayout(WEEKS,7,SPACE_XS,SPACE_XS));
         days.setOpaque(false);
         days.setAlignmentX(0);
-        days.setMaximumSize(new Dimension(14*SPACE_XXL+13*SPACE_XS,2*SPACE_XXL+SPACE_XS));
-        for(int i=27;i>=0;i--) {
-            var date=today.minusDays(i);
+        days.setMaximumSize(new Dimension(width,WEEKS*side+(WEEKS-1)*SPACE_XS));
+        for(int i=0;i<WEEKS*7;i++) {
+            var date=first.plusDays(i);
+            // The rest of this week has not happened yet: an empty column keeps
+            // the grid square without offering a day to check off in advance.
+            if(date.isAfter(today)) {
+                var blank=new JPanel();
+                blank.setOpaque(false);
+                days.add(blank);
+                continue;
+            }
             boolean done=habit.checkIns().contains(date);
             var cell=selected(button("",()->act(card,refresh,()->tracker.checkIn(habit.id(),date,!done))),done);
+            cell.setName("habit.day."+date);
             // Today is outlined whether or not it is done, so the row says
             // where now is without counting back from the end. The ring is
             // chosen against the cell's own fill: the accent on an accent-filled
             // done cell would be a ring nobody can see.
             if(date.equals(today)) cell.setBorder(controlBorder(ringFor(cell.getBackground())));
-            cell.setPreferredSize(new Dimension(SPACE_XXL,SPACE_XXL));
+            cell.setPreferredSize(new Dimension(side,side));
             cell.setToolTipText(date+(done?" · done · click to undo":" · click to check off"));
             cell.getAccessibleContext().setAccessibleName(date+(done?" completed":" not completed"));
             days.add(cell);
@@ -119,7 +162,7 @@ final class HabitsPanel {
         gap(card,SPACE_SM);
         // The zone id is a developer's string, not the user's: it says nothing
         // the day cells do not already say.
-        card.add(bodyLabel("Last 28 days · click a day to correct it"));
+        card.add(bodyLabel("Last "+WEEKS+" weeks · click a day to correct it"));
     }
 
     private static void since(Tracker tracker,Runnable refresh,Habit habit,JPanel card) {
