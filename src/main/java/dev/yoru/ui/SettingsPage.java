@@ -52,25 +52,30 @@ final class SettingsPage {
         for(var id:ThemeId.values()) themes.add(themeCard(id));
         appearance.add(themes);
         gap(appearance,SPACE_LG);
+        // The caption over its controls, as every other setting on this page
+        // writes one: inline, the two rows started their buttons wherever their
+        // own words happened to end, so nothing in the card shared a left edge.
+        appearance.add(label("TRAINER SPRITE",TYPE_CAPTION,MUTED));
         var trainerRow=wrappingRow();
-        trainerRow.add(label("TRAINER SPRITE",TYPE_CAPTION,MUTED));
         for(var t:TrainerId.values()) {
             String name=t.name().charAt(0)+t.name().substring(1).toLowerCase();
             var pick=button(name,()->shell.applySettings(s->new Settings(s.theme(),t,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn())));
             trainerRow.add(selected(pick,settings.trainer()==t));
         }
         appearance.add(trainerRow);
+        gap(appearance,SPACE_LG);
         // This computer's, not the vault's: the caption says so, since the
         // themes above travel with the workspace (#31).
+        appearance.add(label("TEXT SIZE · THIS COMPUTER",TYPE_CAPTION,MUTED));
         var sizeRow=wrappingRow();
         sizeRow.setName("settings.textSize");
-        sizeRow.add(label("TEXT SIZE · THIS COMPUTER",TYPE_CAPTION,MUTED));
         for(int step:TextSize.STEPS) {
             var pick=button(step+"%",()->shell.textSize(step));
             pick.setName("textSize."+step);
             sizeRow.add(selected(pick,TextSize.current()==step));
         }
         appearance.add(sizeRow);
+        gap(appearance,SPACE_MD);
         var motion=new JCheckBox("Reduce animation for this session",shell.reducedMotion());
         motion.setOpaque(false);
         motion.setForeground(TEXT);
