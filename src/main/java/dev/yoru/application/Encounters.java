@@ -23,10 +23,9 @@ public final class Encounters {
      * worth.
      */
     public static long completedSeconds(State state) {
-        long floor = state.settings().minSessionSeconds();
-        return state.sessions().stream().filter(s -> s.end() != null)
-            .mapToLong(s -> Duration.between(s.start(), s.end()).getSeconds())
-            .filter(seconds -> seconds >= floor).sum();
+        return state.sessions().stream()
+            .filter(s -> s.end() != null && Analytics.counts(s, state, s.end()))
+            .mapToLong(s -> Duration.between(s.start(), s.end()).getSeconds()).sum();
     }
 
     /** Encounters earned and not yet opened. */

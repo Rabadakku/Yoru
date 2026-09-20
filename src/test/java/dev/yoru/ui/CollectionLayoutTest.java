@@ -109,13 +109,13 @@ public final class CollectionLayoutTest {
         check(strip.columns() == 3, "the party wraps to three by two at the minimum, got " + strip.columns());
         for (int i = 0; i < Gen3Save.PARTY_LIMIT; i++) {
             var slot = strip.slot(i);
-            check(slot.getWidth() >= PartyStrip.MIN_SLOT_WIDTH && slot.getHeight() >= PartyStrip.SLOT_HEIGHT,
+            check(slot.getWidth() >= PartyStrip.minSlotWidth() && slot.getHeight() >= PartyStrip.slotHeight(),
                 "party slot " + i + " is at least 120x88, got " + slot.getSize());
         }
         var screen = find(app, StorageScreen.class);
         var details = named(app, "collection.details");
         check(details.getY() >= screen.getY() + screen.getHeight(), "below the content width for them, the details sit under the box");
-        check(details.getWidth() > PartyStrip.MIN_SLOT_WIDTH * 3, "and take the card's width, not a sliver: " + details.getWidth());
+        check(details.getWidth() > PartyStrip.minSlotWidth() * 3, "and take the card's width, not a sliver: " + details.getWidth());
         for (String name : List.of("collection.previousBox", "collection.nextBox", "collection.arrange", "collection.encounter"))
             check(button(app, name).getHeight() >= 32, name + " is a comfortable target, got " + button(app, name).getHeight());
     }

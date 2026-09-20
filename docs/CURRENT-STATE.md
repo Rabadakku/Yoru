@@ -1,8 +1,44 @@
 # Development handoff
 
+## Release candidate 1.0.11 — September 20, 2026
+
+Branch `claude/code-review`, from main after #32. Notes: `RELEASE-1.0.11.md`.
+
+- **The review.** One agent per slice of the source read every file in it; every
+  finding then went to a verifier told to refute it, and every claimed bug to a
+  second one told to reproduce it. 135 findings, 89 confirmed. The raw results
+  are in this session's workflow journal, not in the repository.
+- **Fixed here** (each with a failing-first test): the study gift trainer name
+  (`Gen3Save.Trainer.storedName`, copied byte for byte, with `Gen3Text` made
+  injective over the game's own symbols); vacated party entries emptied as
+  `ZeroMonData` does; PP restored on every box placement; the unlock key staged,
+  flushed and published only after re-encryption, with `reconcile` taught the
+  staged state; `save()` after `close()` refused; rename and delete taking the
+  lock; JSON escaping lone surrogates; and the tracking and Notion importer
+  fixes listed in the release notes.
+- **Not reviewed yet:** `ui-shell` (YoruApp, Shell, VaultLauncher), `ui-foundation`
+  (Theme, dialogs, Logo) and `ui-today-tasks` (Today, Settings, Tasks). Their
+  reviewers were cut off by a usage limit three times. Start the next pass there.
+- **Confirmed but not fixed:** the emulator, artwork and remaining UI cleanups
+  (mostly dead code, duplicated helpers and stale comments), plus a handful of
+  low-severity vault items. None changes behaviour a player sees.
+
 ## After 1.0.10 — September 16, 2026
 
-Branch `claude/text-fit`, from main after the release.
+#30 was merged from `claude/text-fit`; #31 and the companion-artwork removal are
+on `claude/text-size` and `claude/code-review`. None of it is released yet.
+
+- **Companion artwork removed** (owner's request). `ThemeId.WAIFU`, `Settings.waifu`,
+  `WaifuCatalog`, `WaifuPanel`, `MoonlightGallery`, the five bundled portraits and
+  the `tools/waifu` scripts are gone; `src/main/resources` is now empty and the jar
+  ships no images, which `DistributionTest` and `PrivacyTest` now require.
+  - **Opening older workspaces.** `ThemeId.known` maps the withdrawn name to
+    Moonlight and anything else unknown to the default, for both vault formats.
+    Vault schema 13 stops writing the portrait choice; a schema 12 file still has
+    those bytes, so the reader steps over them — without that every record after
+    them is read at the wrong offset. `LegacyVaultTest` opens a vault written by
+    the 1.0.10 build itself (base64 fixture) and checks the settings after the
+    skipped bytes, not just the theme.
 
 - **#30: the fit test.** `TextFitTest` lengthens every name in the `Preview` fixture to the model's limit. At 1280×900 and 900×640 it checks every page for:
   - text Swing shortens without a tooltip saying all of it
@@ -15,7 +51,11 @@ Branch `claude/text-fit`, from main after the release.
   - Schedule's planned list keeps the match figure apart from the name.
 
   All 120 page renders are unchanged apart from time-dependent text.
-- **#31: open.** `Theme.textScale` scales every role. Run `TextFitTest` with `-Dtextfit.scale=2` for the 200% review; it finds 96 places today, grouped by kind in the issue.
+- **#31: text size** (`claude/text-size`).
+  - **The setting.** `TextSize` keeps 100, 125, 150 or 200% in the computer's preferences (`dev/yoru/desktop`, `text.size`), not in the vault, so no vault format changes. `YoruApp.main` applies it before the vault launcher. `Shell.textSize` saves it, reinstalls the look-and-feel faces and rebuilds the window, as a theme change does.
+  - **What grows.** `Theme.textScale` scales every role. Hand-set sizes that hold text grow through `Theme.grow` and `Theme.controlHeight`: the Tasks columns and sort box, the Settings spinners and week box, the party slots, the partner card's keys and `FocusBars`.
+  - **What wraps or shortens.** Rows of controls wrap (`Theme.wrappingRow`). Data's day totals wrap (`Theme.wrapping`). The partner card's species and save lines shorten only after the portrait has given all it can.
+  - **Tests.** `TextFitTest` checks every size at 1280×900 and at the smallest window for that size, and now also inspects wrapped task titles, combo boxes and spinners. `TextSizeTest` covers the preference and the Settings row. At 100% every page render matches `main` apart from the new Settings row and time-dependent text.
 
 ## Released 1.0.10 — September 15, 2026
 

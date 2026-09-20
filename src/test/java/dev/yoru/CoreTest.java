@@ -70,6 +70,13 @@ public final class CoreTest {
         later.plan(id,now,now.plusSeconds(1200));
         rejects(()->later.plan(id,now.plusSeconds(30),now.plusSeconds(90)),"plan overlap");
         check(Analytics.adherence(later.state(),later.state().blocks().getFirst(),now.plusSeconds(1200))==0.5,"schedule overlap ratio");
+        // The same sessions the totals and the grid count: a stored session
+        // under the floor must not show as time matched against a block.
+        var floored=new Tracker(mem,Clock.fixed(now.plusSeconds(1200),ZoneOffset.UTC));
+        floored.settings(new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,3600));
+        check(Analytics.adherence(floored.state(),floored.state().blocks().getFirst(),now.plusSeconds(1200))==0,
+            "a session under the minimum matches no block, as it counts toward no total");
+        floored.settings(new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300));
         ZoneId ny=ZoneId.of("America/New_York");
         LocalDate spring=LocalDate.of(2026,3,8);
         Instant a=spring.atStartOfDay(ny).toInstant(),b=spring.plusDays(1).atStartOfDay(ny).toInstant();

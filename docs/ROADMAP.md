@@ -1,14 +1,41 @@
 # Yoru roadmap
 
+## Release candidate 1.0.11 — September 20, 2026
+
+Built on `claude/code-review`. Notes: [RELEASE-1.0.11.md](RELEASE-1.0.11.md).
+It carries the text size setting (#31), the withdrawal of the companion
+artwork at the owner's request, and the fixes from a full review of the source.
+
+The review read every file outside three UI areas — the main window and vault
+launcher, the theme and dialog foundation, and the Today, Settings and task
+pages — and put each finding to verifiers whose job was to refute it. Of 135
+findings, 89 survived, 40 were refuted and 6 were left undecided. The confirmed
+domain, application, save-format, vault and importer set is fixed here; each bug
+arrived with a test that fails without its fix. The three unreviewed UI areas,
+and the confirmed cleanups in the emulator, artwork and remaining UI code, are
+the next pass.
+
+| Gate | Evidence | State |
+|---|---|---|
+| Isolated suite | `./test.sh`, including the named-module check | Passing |
+| Every page, every theme, both sizes | `PreviewInventoryTest`: 100 renders | Passing |
+| Every page at every text size | `TextFitTest`: 100, 125, 150, 200% | Passing |
+| Old vaults and saves still open | `LegacyVaultTest` opens a vault written by the 1.0.10 build | Passing |
+| No personal data or game assets | `PrivacyTest`, `DistributionTest`: the jar now ships no images at all | Passing |
+| Installers | `release.yml` on the version tag | Pending the release |
+| Clean-machine install, full campaign, real libretro core | By hand | Not verified |
+
 ## After 1.0.10 — September 16, 2026
 
-On `claude/text-fit`, from main after the release. #9's acceptance asked for
-long names and 200% text, and neither had been checked.
+#9's acceptance asked for long names and 200% text, and neither had been
+checked. #30 was merged from `claude/text-fit`; #31 is on `claude/text-size`.
+Neither is released yet.
 
 | Issue | State |
 |---|---|
 | [#30](https://github.com/Rabadakku/Yoru/issues/30) longest names | Done. `TextFitTest`, in the suite, checks every page with the longest names at both sizes. Long activity names shorten with a tooltip instead of hiding their figures, Today's focus controls wrap onto a line they make room for, and a planned block keeps its match figure. |
-| [#31](https://github.com/Rabadakku/Yoru/issues/31) text size setting | Open for the owner: where the setting lives and which steps it offers. `Theme.textScale` is the hook; at 2× the fit test still finds 96 places. |
+| Companion artwork removed | Done, at the owner's request. The Waifu theme, its five bundled portraits, the Settings picker, the Today panel and the page galleries are gone, and Yoru now ships no images at all. A vault that names the withdrawn theme opens as Moonlight; `LegacyVaultTest` opens a real 1.0.10 vault to prove it. |
+| [#31](https://github.com/Rabadakku/Yoru/issues/31) text size setting | Done. Settings → Appearance offers 100, 125, 150 and 200%, kept per computer so vaults stay readable by older versions. Each page holds every size at the desktop size and at that size's smallest window, which grows with the navigation bar. `TextFitTest` checks all four. |
 
 ## Released 1.0.10 — September 15, 2026
 

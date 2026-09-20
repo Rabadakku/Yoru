@@ -188,6 +188,78 @@ public final class NotionTest {
         check(NotionImport.colourFor("Biology")==NotionImport.colourFor("biology"),"An imported tag's colour is stable for its name");
         check((NotionImport.colourFor("Biology")&~0xFFFFFF)==0,"And is a plain 24-bit colour");
 
+        // ---- two classes, one assignment name --------------------------------
+        // The same title and deadline in two classes is two pieces of work.
+        var classes=NotionImport.read(("Name,Class,Due\n"
+            +"Quiz 1,Biology,2026-09-12\n"
+            +"Quiz 1,Chemistry,2026-09-12\n").getBytes(),"Classes.csv");
+        var byClass=new NotionImport.Mapping("Name",null,"Due","Class");
+        var twoClasses=new Memory();
+        var classTracker=new Tracker(twoClasses,Clock.systemUTC());
+        var bothQuizzes=NotionImport.prepare(NotionImport.preview(classes,byClass),classTracker.state(),"Classes");
+        check(bothQuizzes.tasks().size()==2,"An assignment of the same name in two classes imports as two tasks");
+        check(classTracker.importTasks(bothQuizzes.newTags(),bothQuizzes.tasks())==2,"and the tracker keeps both");
+        check(classTracker.alreadyHas("Quiz 1",LocalDate.of(2026,9,12),"Biology"),"Biology's quiz is recorded");
+        check(!classTracker.alreadyHas("Quiz 1",LocalDate.of(2026,9,12),"Physics"),
+            "and a third class's quiz of that name is not already in Yoru");
+        var quizAgain=NotionImport.prepare(NotionImport.preview(classes,byClass),classTracker.state(),"Classes");
+        check(quizAgain.tasks().isEmpty(),"Re-importing the same two rows still adds nothing");
+
+        // ---- dates are read or refused, never rounded -------------------------
+        var impossible=NotionImport.read("Name,Due\nRead it,2/30/2026\n".getBytes(),"Dates.csv");
+        refuses(()->NotionImport.preview(impossible,new NotionImport.Mapping("Name",null,"Due",null)),"Row 1");
+        var ordinary=NotionImport.read("Name,Due\nRead it,9/22/2026\n".getBytes(),"Dates.csv");
+        check(NotionImport.preview(ordinary,new NotionImport.Mapping("Name",null,"Due",null))
+            .getFirst().due().equals(LocalDate.of(2026,9,22)),"An ordinary month-first date still reads");
+
+        // ---- a title that cannot be stored as typed ---------------------------
+        var control=NotionImport.read("Name,Class\n\"Read\tchapter\",Biology\n".getBytes(),"Control.csv");
+        var cleaned=NotionImport.preview(control,new NotionImport.Mapping("Name",null,null,"Class")).getFirst();
+        check(cleaned.title().equals("Read chapter"),"A tab inside a title becomes a space rather than failing the import");
+        var prepared=NotionImport.prepare(List.of(cleaned),State.empty(),"Control");
+        check(prepared.tasks().size()==1,"and the row imports");
+
+        // ---- notes belong to one page ----------------------------------------
+        var shared=zipOf("Study.csv","Name,Class\nReading,Biology\nReading,History\n");
+        var twoPages=new java.io.ByteArrayOutputStream();
+        try (var zip=new ZipOutputStream(twoPages)) {
+            zip.putNextEntry(new ZipEntry("Study.csv"));
+            zip.write("Name,Class\nReading,Biology\nReading,History\n".getBytes());
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("Study/Reading 1111111111111111111111111111aaaa.md"));
+            zip.write("# Reading\n\nChapter four of the set text.\n".getBytes());
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("Study/Reading 2222222222222222222222222222bbbb.md"));
+            zip.write("# Reading\n\nThe primary sources packet.\n".getBytes());
+            zip.closeEntry();
+        }
+        check(shared.length>0,"the single-page fixture is built");
+        var ambiguous=NotionImport.read(twoPages.toByteArray(),"Study.zip");
+        for (var candidate:NotionImport.preview(ambiguous,new NotionImport.Mapping("Name",null,null,"Class")))
+            check(candidate.notes().isEmpty(),
+                "Two pages share the title, so neither row takes the other's notes");
+
+        // ---- a title too long for a task -------------------------------------
+        // The page is found by the whole title, so its heading and property
+        // lines are still recognised and left out of the notes.
+        String longTitle="Read the chapter and answer every question at the end of it, "
+            +"including the optional ones, before the seminar on Thursday morning in the usual room, "
+            +"and bring the worked solutions with you";
+        var longRows=new java.io.ByteArrayOutputStream();
+        try (var zip=new ZipOutputStream(longRows)) {
+            zip.putNextEntry(new ZipEntry("Study.csv"));
+            zip.write(("Name,Class\n\""+longTitle+"\",Biology\n").getBytes());
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("Study/"+longTitle+" 3333333333333333333333333333cccc.md"));
+            zip.write(("# "+longTitle+"\n\nClass: Biology\n\nThe reading itself.\n").getBytes());
+            zip.closeEntry();
+        }
+        var longCandidate=NotionImport.preview(NotionImport.read(longRows.toByteArray(),"Study.zip"),
+            new NotionImport.Mapping("Name",null,null,"Class")).getFirst();
+        check(longCandidate.title().length()<=160&&longCandidate.title().endsWith("…"),"An over-long title is shortened");
+        check(longCandidate.notes().equals("The reading itself."),
+            "and its page's heading and property lines still stay out of the notes");
+
         System.out.println("PASS: "+checks+" Notion import checks (zip and CSV, auto-map, remap, notes, tags, duplicates, one transaction)");
     }
 

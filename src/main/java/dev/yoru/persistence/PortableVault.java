@@ -60,9 +60,6 @@ public final class PortableVault {
         m.put("dailyGoalHours", s.dailyGoalHours());
         m.put("minSessionSeconds", s.minSessionSeconds());
         m.put("weekStartsOn", s.weekStartsOn().name());
-        // Null when no decorative folder is set; an export taken before this
-        // setting existed imports the same way, because the reader tolerates it.
-        m.put("waifu", s.waifu());
         return m;
     }
 
@@ -204,17 +201,18 @@ public final class PortableVault {
             list(root, "habits", PortableVault::readHabit),
             list(root, "tags", PortableVault::readTag),
             new Settings(
-                enumeration(ThemeId.class, text(settings, "theme")),
+                // Not enumeration(): a workspace exported with the withdrawn
+                // Waifu theme still opens, as the palette it was split from.
+                ThemeId.known(text(settings, "theme")),
                 enumeration(TrainerId.class, text(settings, "trainer")),
-                (int) integer(settings, "dailyGoalHours"),
-                (int) integer(settings, "minSessionSeconds"),
-                enumeration(java.time.DayOfWeek.class, text(settings, "weekStartsOn")),
-                optionalText(settings, "waifu")),
+                int32(settings, "dailyGoalHours"),
+                int32(settings, "minSessionSeconds"),
+                enumeration(java.time.DayOfWeek.class, text(settings, "weekStartsOn"))),
             campaign, rewards, game);
     }
 
     private static Activity readActivity(Map<?, ?> m) {
-        return new Activity(id(m, "id"), text(m, "name"), (int) integer(m, "targetMinutes"));
+        return new Activity(id(m, "id"), text(m, "name"), int32(m, "targetMinutes"));
     }
 
     private static Session readSession(Map<?, ?> m) {
@@ -239,7 +237,7 @@ public final class PortableVault {
         return new Task(id(m, "id"), optionalId(m, "activityId"), optionalId(m, "tagId"),
             text(m, "title"), text(m, "notes"), optionalDate(m, "due"),
             enumeration(TaskStatus.class, text(m, "status")), text(m, "source"),
-            instant(m, "createdAt"), (int) integer(m, "order"), optionalDate(m, "plannedFor"));
+            instant(m, "createdAt"), int32(m, "order"), optionalDate(m, "plannedFor"));
     }
 
     private static Habit readHabit(Map<?, ?> m) {
@@ -252,7 +250,7 @@ public final class PortableVault {
     }
 
     private static Reward readReward(Map<?, ?> m) {
-        return new Reward(id(m, "id"), (int) integer(m, "nationalDex"), (int) integer(m, "level"),
+        return new Reward(id(m, "id"), int32(m, "nationalDex"), int32(m, "level"),
             instant(m, "earnedAt"), m.get("deliveredAt") == null ? null : instant(m, "deliveredAt"));
     }
 
@@ -269,8 +267,8 @@ public final class PortableVault {
         for (var value : Json.array(required(m, "captures"))) {
             var c = Json.object(value);
             try {
-                caught.add(new LegacyCollection.Caught(id(c, "id"), (int) integer(c, "species"), instant(c, "caughtAt")));
-                LegacyCollection.national((int) integer(c, "species"));
+                caught.add(new LegacyCollection.Caught(id(c, "id"), int32(c, "species"), instant(c, "caughtAt")));
+                LegacyCollection.national(int32(c, "species"));
             } catch (RuntimeException e) {
                 throw new IllegalArgumentException("collection.captures[" + index + "]: " + e.getMessage(), e);
             }
@@ -323,6 +321,18 @@ public final class PortableVault {
             try { return number.longValueExact(); }
             catch (ArithmeticException e) { throw new IllegalArgumentException("\"" + key + "\" must be a whole number."); }
         throw new IllegalArgumentException("Expected a number for \"" + key + "\".");
+    }
+
+    /**
+     * A whole number that fits an int. A cast would turn one that does not into
+     * a different number that passes every check — 4294967300 hours read as 4,
+     * or a species read as the first one — so it is refused by name instead.
+     */
+    private static int int32(Map<?, ?> m, String key) {
+        long value = integer(m, key);
+        if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE)
+            throw new IllegalArgumentException("\"" + key + "\" is out of range.");
+        return (int) value;
     }
 
     private static UUID id(Map<?, ?> m, String key) {

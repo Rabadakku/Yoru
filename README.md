@@ -37,6 +37,9 @@ Everything a study session needs, and nothing that gets in the way:
 - **A study buddy** — the lead of your game's party sits beside the timer,
   animating while you record, and the card keeps the time you have studied
   together.
+- **Text size** — Settings → Appearance draws every page at 100%, 125%, 150%
+  or 200%. The choice belongs to this computer rather than the vault, and the
+  test suite checks every page at each size with the longest names allowed.
 
 ### 2. Earn encounters
 
@@ -280,9 +283,13 @@ java --enable-native-access=ALL-UNNAMED -cp build/classes dev.yoru.game.InGameCh
      path/to/game.gba path/to/a-copy-of-a-save.srm path/to/empty-work-dir
 # Keyboard focus in real dialogs; skipped headless.
 java -ea -cp build/classes dev.yoru.ui.DialogFocusTest
-# Every page with the longest names at doubled text, also written out as PNGs
-# to look at. It fails until Yoru has a text size setting (#31).
-java -Djava.awt.headless=true -Duser.home=path/to/empty-dir -Dtextfit.scale=2 \
+```
+
+`./test.sh` already checks every page at every text size. To look at the pages
+as well, write them out as PNGs; `-Dtextfit.size=200` limits the run to one size:
+
+```bash
+java -Djava.awt.headless=true -Duser.home=path/to/empty-dir \
      -cp build/classes dev.yoru.ui.TextFitTest path/to/render-dir
 ```
 

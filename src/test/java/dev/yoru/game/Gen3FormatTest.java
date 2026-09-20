@@ -221,6 +221,49 @@ public final class Gen3FormatTest {
     }
 
     /**
+     * Every byte the table knows reads as its own character and writes back as
+     * itself. The game's ellipsis and curly quotes (charmap B0-B4) once read as
+     * plain '.', '"' and '\'', which other bytes also stand for, so a name that
+     * held one was written back as a different name.
+     */
+    private static void everyKnownByteWritesBackAsItself() {
+        check(Gen3Text.encode('…') == 0xB0 && Gen3Text.encode('“') == 0xB1 && Gen3Text.encode('”') == 0xB2
+            && Gen3Text.encode('‘') == 0xB3 && Gen3Text.encode('’') == 0xB4,
+            "the ellipsis and the four curly quotes sit where the game's charmap puts them");
+        check(Gen3Text.encode('\'') == 0xB4, "a typed apostrophe is the game's own, 0xB4, as in FARFETCH'D");
+        check(Gen3Text.encode('"') == 0xB1, "and a typed double quote opens a quotation");
+        check(Gen3Text.encode('.') == 0xAD, "a full stop is 0xAD, not the ellipsis");
+
+        var one = new byte[2];
+        for (int value = 0; value < Gen3Text.TERMINATOR; value++) {
+            one[0] = (byte) value;
+            one[1] = (byte) Gen3Text.TERMINATOR;
+            String text = Gen3Text.read(one, 0, 2);
+            if (text.equals("?") && value != 0xAC) continue;      // a byte the table has no character for
+            check(Gen3Text.bytes(text, 1)[0] == (byte) value,
+                "byte 0x" + Integer.toHexString(value) + " reads as '" + text + "' and writes back as itself");
+        }
+
+        // '\0' marks a byte with no character; it is never a character itself,
+        // or a pasted NUL would be stored as 0x01.
+        check(Gen3Text.encode('\0') < 0, "NUL has no byte, got " + Gen3Text.encode('\0'));
+    }
+
+    /** Every species' default name is stored in the game's own letters, with nothing lost as '?'. */
+    private static void everySpeciesNameIsStoredWhole() {
+        for (int national = 1; national <= SpeciesNames.COUNT; national++) {
+            String name = StudyGift.defaultName(national);
+            for (int i = 0; i < name.length(); i++)
+                check(Gen3Text.encode(name.charAt(i)) >= 0,
+                    name + " (" + national + ") has no byte for '" + name.charAt(i) + "'");
+        }
+        byte[] farfetchd = Gen3Text.bytes(StudyGift.defaultName(83), 10);
+        check((farfetchd[8] & 0xFF) == 0xB4, "FARFETCH'D's apostrophe is the game's 0xB4, got 0x"
+            + Integer.toHexString(farfetchd[8] & 0xFF));
+        check(Gen3Text.read(farfetchd, 0, 10).equals("FARFETCH’D"), "and reads back as the name it is");
+    }
+
+    /**
      * Byte 0x13 is the game's flag bitfield, not free space.
      *
      * Bit 0 marks a bad egg, bit 1 says a species is present, bit 2 says it is
@@ -263,6 +306,8 @@ public final class Gen3FormatTest {
         partyEntriesCarryStats();
         derivedValues();
         namesUseTheGamesAlphabet();
+        everyKnownByteWritesBackAsItself();
+        everySpeciesNameIsStoredWhole();
         flagsFollowTheGame();
         System.out.println("PASS: "+checks+" Gen 3 format checks (layout, shuffle, encryption, checksum, names)");
     }

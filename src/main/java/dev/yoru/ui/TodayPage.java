@@ -73,16 +73,7 @@ final class TodayPage {
         // Two columns while there is room for both, stacked when there is not:
         // the companion card used to be a fixed 315 px in an EAST slot, which
         // broke the page below about 900 px rather than reflowing.
-        String portrait=WaifuCatalog.forTheme(tracker.state().settings());
-        if (portrait!=null && !WaifuCatalog.imagesFor(portrait).isEmpty()) {
-            p.add(new Hero(focusCard(),new WaifuPanel(portrait)));
-            gap(p,SPACE_LG);
-            p.add(companionColumn());
-        } else {
-            // No companion chosen: Today is the timer and the partner. Choosing
-            // one, and any recommendation of one, lives in Settings (#3).
-            p.add(new Hero(focusCard(),companionColumn()));
-        }
+        p.add(new Hero(focusCard(),companionColumn()));
         gap(p,SPACE_XL);
 
         var daily=Analytics.daily(tracker.state(),null,zone,Instant.now());
@@ -136,7 +127,7 @@ final class TodayPage {
         // stopped 74 px short of the clock and the column below it, and two right
         // edges that nearly agree read as a mistake. The height stays on the
         // control ladder (PAD_V either side of a 16 px line).
-        choose.setMaximumSize(new Dimension(Integer.MAX_VALUE,SPACE_XXL));
+        choose.setMaximumSize(new Dimension(Integer.MAX_VALUE,controlHeight()));
         choose.setAlignmentX(0);
         choose.getAccessibleContext().setAccessibleName("Activity to track");
         if(active!=null)
@@ -351,7 +342,7 @@ final class TodayPage {
         var tracker=tracker();
         var zone=zone();
         var box = card();
-        var top = row();
+        var top = wrappingRow();
         top.add(sectionHeader("TODAY · SCHEDULE"));
         top.add(button("Expand calendar ↗", () -> shell.show("Schedule")));
         top.add(button("+ Plan block", () -> shell.timeDialog(true)));
@@ -368,7 +359,7 @@ final class TodayPage {
             line.setOpaque(false); line.setBorder(listRow());
             line.add(label(b.start().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")) + " — "
                     + b.end().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")), TYPE_BODY, GOLD_TEXT), BorderLayout.WEST);
-            line.add(label(shell.activityName(b.activityId()), TYPE_BODY, TEXT), BorderLayout.CENTER);
+            line.add(shortenable(shell.activityName(b.activityId()), TYPE_BODY, TEXT), BorderLayout.CENTER);
             line.add(label(String.format("%.0f%% matched",100*Analytics.adherence(tracker.state(),b,Instant.now())), TYPE_CAPTION, MUTED), BorderLayout.EAST);
             box.add(line);
         }

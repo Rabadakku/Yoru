@@ -53,11 +53,7 @@ public final class SchemaTest {
         check(t.state().campaign().encountersUsed()==0,"no encounter opened yet");
         check(t.state().game()!=null,"the game save is kept in the vault");
 
-        // The waifu choice is a per-vault preference like the theme, so it is
-        // stored in the vault rather than in this machine's Preferences.
-        t.settings(new Settings(ThemeId.SAKURA,TrainerId.MAY,6,120,DayOfWeek.MONDAY,"waifu-fixture"));
-        check(new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY,"  ").waifu()==null,
-            "a blank waifu choice is the same as none");
+        t.settings(new Settings(ThemeId.SAKURA,TrainerId.MAY,6,120,DayOfWeek.MONDAY));
 
         var saved=t.state();
         check(saved.settings().theme()==ThemeId.SAKURA,"settings applied");
@@ -68,11 +64,10 @@ public final class SchemaTest {
         try(var v=new EncryptedVault(vault,password.toCharArray())) { v.save(saved); }
         try(var v=new EncryptedVault(vault,password.toCharArray())) {
             var loaded=v.load();
-            check(loaded.equals(saved),"full schema 12 state round trips");
+            check(loaded.equals(saved),"full schema 13 state round trips");
             check(loaded.settings().trainer()==TrainerId.MAY,"trainer choice persists");
             check(loaded.settings().dailyGoalHours()==6,"daily goal persists");
             check(loaded.settings().minSessionSeconds()==120,"minimum session persists");
-            check(loaded.settings().waifu().equals("waifu-fixture"),"the waifu choice persists");
             check(loaded.tags().getFirst().name().equals("Reading"),"tag persists");
             check(loaded.tasks().stream().anyMatch(x->x.status()==TaskStatus.DOING),"task status persists");
             check(loaded.tasks().stream().anyMatch(x->tag.id().equals(x.tagId())),"task tag persists");
@@ -92,22 +87,22 @@ public final class SchemaTest {
         check(reopened.state().tags().isEmpty(),"tag removed");
 
         // A reset of one section must not quietly clear the others.
-        reopened.settings(new Settings(ThemeId.LINEN,TrainerId.MAY,5,60,DayOfWeek.MONDAY,"waifu-fixture"));
+        reopened.settings(new Settings(ThemeId.LINEN,TrainerId.MAY,5,60,DayOfWeek.MONDAY));
         reopened.addTag("Japanese",0xD8B074);
         reopened.reset(EnumSet.of(Tracker.ResetPart.TASKS));
         check(reopened.state().tasks().isEmpty(),"tasks reset");
+        check(reopened.state().tags().stream().anyMatch(x->x.name().equals("Japanese")),
+            "a tasks reset keeps the tags, which are their own section");
         check(reopened.state().settings().theme()==ThemeId.LINEN,"reset keeps settings it was not asked to clear");
-        check(reopened.state().settings().waifu().equals("waifu-fixture"),"reset keeps the waifu choice it was not asked to clear");
         check(reopened.state().rewards().size()==2,"reset keeps the rewards");
         check(reopened.state().game()!=null,"reset keeps the game save");
 
         reopened.reset(EnumSet.of(Tracker.ResetPart.SETTINGS));
         check(reopened.state().settings().theme()==ThemeId.MIDNIGHT,"settings reset returns defaults");
-        check(reopened.state().settings().waifu()==null,"settings reset clears the waifu choice");
 
         try(var walk=Files.walk(dir)) {
             for(var p:walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p);
         }
-        System.out.println("PASS: "+checks+" schema 12 checks (tags, status, campaign, rewards, game save, settings, reset scoping)");
+        System.out.println("PASS: "+checks+" schema 13 checks (tags, status, campaign, rewards, game save, settings, reset scoping)");
     }
 }
