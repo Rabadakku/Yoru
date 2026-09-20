@@ -396,6 +396,15 @@ public final class TaskBoardTest {
             "without overlapping another row");
         var status=button(narrow,"task.status."+wordy);
         check(status.getWidth()<=status.getPreferredSize().width,"A status pill keeps its own width rather than filling its column");
+
+        // A row is a control, so it answers the pointer like one.
+        var hovered=rowOf(narrow,wordy);
+        hovered.dispatchEvent(new MouseEvent(hovered,MouseEvent.MOUSE_ENTERED,0,0,10,5,0,false));
+        check(hovered.isOpaque(),"A row lights up under the pointer");
+        hovered.dispatchEvent(new MouseEvent(hovered,MouseEvent.MOUSE_EXITED,0,0,10,5,0,false));
+        check(hovered.isOpaque(),"and stays lit while the pointer only crosses onto a control inside it");
+        hovered.dispatchEvent(new MouseEvent(hovered,MouseEvent.MOUSE_EXITED,0,0,10,hovered.getHeight()+20,0,false));
+        check(!hovered.isOpaque(),"and goes back to the page when the pointer leaves the row");
     }
 
     private static Object sortNamed(JComboBox<?> combo,String label){

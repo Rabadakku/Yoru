@@ -75,7 +75,18 @@ final class TodayPage {
         // Two columns while there is room for both, stacked when there is not:
         // the companion card used to be a fixed 315 px in an EAST slot, which
         // broke the page below about 900 px rather than reflowing.
-        p.add(new Hero(focusCard(),companionColumn()));
+        //
+        // What is next sits beside what is now. The companion alone left the
+        // right of the hero empty down to the focus card's floor, and the
+        // agenda is the one thing a running timer wants next to it.
+        var agenda=schedulePreview();
+        agenda.setName("today.agenda");
+        var rail=stack();
+        rail.add(companionColumn());
+        gap(rail,SPACE_LG);
+        rail.add(agenda);
+        glue(rail);
+        p.add(new Hero(focusCard(),rail));
         gap(p,SPACE_XL);
 
         var daily=Analytics.daily(tracker.state(),null,zone,Instant.now());
@@ -87,13 +98,11 @@ final class TodayPage {
         stats.setAlignmentX(0);
         stats.setOpaque(false);
         stats.add(stat("TODAY",Analytics.duration(daily.getOrDefault(today,0L))));
-        stats.add(stat("LAST 7 DAYS",Analytics.report(weekSeconds)));
+        stats.add(week(stat("LAST 7 DAYS",Analytics.report(weekSeconds)),daily,today,
+            tracker.state().settings().dailyGoalHours()));
         stats.add(stat("CURRENT STREAK",plural(Analytics.streak(daily,today),"day")));
-        // The agenda before the statistics (#9): what comes next, then how it has gone.
-        var agenda=schedulePreview();
-        agenda.setName("today.agenda");
-        p.add(agenda);
-        gap(p,SPACE_LG);
+        // The agenda before the statistics (#9): what comes next, then how it
+        // has gone. The agenda is in the hero above, so that order still holds.
         p.add(stats);
         gap(p,SPACE_LG);
         p.add(heatCard(today));
@@ -164,9 +173,13 @@ final class TodayPage {
         trainerScene=new TrainerScene(tracker.state().settings().trainer()==TrainerId.MAY?"may":"brendan");
         focus.add(trainerScene);
         if (!trainerScene.hasTrainerArtwork()) {
+            // The sentence wraps and the control sits under it: at the window's
+            // minimum the line alone is wider than this column, so the two
+            // cannot share a row at any text size.
             gap(focus,SPACE_SM);
             focus.add(bodyLabel("Add your own trainer artwork to bring this trail to life."));
-            focus.add(button("Restore scene artwork", () -> shell.show("Settings")));
+            gap(focus,SPACE_SM);
+            focus.add(ghost(button("Restore scene artwork", () -> shell.show("Settings"))));
         }
         gap(focus,SPACE_LG);
         return focus;
@@ -223,7 +236,8 @@ final class TodayPage {
             heat.add(emptyState("No time recorded yet.","Your first session fills this in.",null));
             return heat;
         }
-        heat.add(new Heatmap(days,today,tracker.state().settings().dailyGoalHours()));
+        heat.add(new Heatmap(days,today,tracker.state().settings().dailyGoalHours(),
+            tracker.state().settings().weekStartsOn()));
         heat.add(heatLegend(today,tracker.state().settings().dailyGoalHours()));
         return heat;
     }
@@ -283,11 +297,11 @@ final class TodayPage {
             long sec=Analytics.daily(tracker.state(),a.id(),zone(),Instant.now()).getOrDefault(today,0L);
             // Management sits with the picker's own list, by identity: the buttons
             // carry the activity's id, so renaming one can never move another's time.
-            var rename=button("Rename",()->ActivityManager.rename(shell.owner(),tracker,a,()->shell.show("Today")));
+            var rename=ghost(button("Rename",()->ActivityManager.rename(shell.owner(),tracker,a,()->shell.show("Today"))));
             rename.setName("activity.rename."+a.id());
             // "Delete", not "Remove": this is the control that can destroy the
             // recorded time, and the dialog it opens says so.
-            var remove=button("Delete",()->ActivityManager.remove(shell.owner(),tracker,a,()->shell.show("Today")));
+            var remove=ghost(button("Delete",()->ActivityManager.remove(shell.owner(),tracker,a,()->shell.show("Today"))));
             remove.setName("activity.remove."+a.id());
             boolean timing=!ActivityManager.canRemove(tracker,a.id());
             remove.setEnabled(!timing);
@@ -362,9 +376,14 @@ final class TodayPage {
             gap(box,SPACE_LG);
             box.add(emptyState("No blocks planned today.","Drag on the Schedule grid, or plan one here.",null));
         }
-        for (var b : blocks.stream().limit(3).toList()) {
+        var shown = blocks.stream().limit(3).toList();
+        for (var b : shown) {
             var line = new JPanel(new BorderLayout(SPACE_XL, 0));
-            line.setOpaque(false); line.setBorder(listRow());
+            line.setOpaque(false);
+            // The rule divides one block from the next; under the last one it
+            // divides it from the card's own edge, which is not a division.
+            boolean ends = b == shown.getLast() && blocks.size() <= 3;
+            line.setBorder(ends ? listEnd() : listRow());
             line.add(label(b.start().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")) + " — "
                     + b.end().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")), TYPE_BODY, GOLD_TEXT), BorderLayout.WEST);
             line.add(shortenable(shell.activityName(b.activityId()), TYPE_BODY, TEXT), BorderLayout.CENTER);
@@ -377,11 +396,82 @@ final class TodayPage {
 
     private JPanel stat(String title,String value) {
         var p=card();
-        p.add(label(title,TYPE_CAPTION,MUTED));
+        // The same signpost every other card carries: these are cards, and a
+        // muted caption made the three of them read as a footnote to the page.
+        p.add(sectionHeader(title));
         gap(p,SPACE_MD);
         p.add(label(value,TYPE_FIGURE,TEXT));
         return p;
     }
+
+    /**
+     * The week behind the figure: one bar a day, in the heat map's own colours.
+     *
+     * The tile said nine hours and nothing about how they fell — four long days
+     * and three empty ones read the same as seven even ones. The bars are the
+     * chart on the Data page at a glance, and the same colour means the same
+     * thing on both.
+     */
+    private JPanel week(JPanel tile,java.util.Map<LocalDate,Long> daily,LocalDate today,int goalHours) {
+        gap(tile,SPACE_MD);
+        // Bars of their own width rather than a seventh of the tile: stretched
+        // across it they were seven wide slabs a few pixels apart, which read
+        // as a row of chips and not as a week. Narrow ones, taller than they
+        // are wide, are a chart even at this size.
+        int height=grow(SPACE_XXL);
+        // Wide enough for the widest initial, measured rather than assumed: a
+        // bar's own width is a spacing step, and on a machine whose caption face
+        // draws a broader W than this one's, the letter under the bar was cut.
+        int letters=0;
+        for(int i=0;i<7;i++)
+            letters=Math.max(letters,label(initial(today.minusDays(i).getDayOfWeek()),
+                TYPE_CAPTION,MUTED).getPreferredSize().width);
+        int wide=Math.max(grow(SPACE_MD),letters+SPACE_XS);
+        int width=7*wide+6*SPACE_SM;
+        var days=new JPanel(new GridLayout(1,7,SPACE_SM,0));
+        days.setOpaque(false);
+        days.setAlignmentX(0);
+        days.setMaximumSize(new Dimension(width,height));
+        var initials=new JPanel(new GridLayout(1,7,SPACE_SM,0));
+        initials.setOpaque(false);
+        initials.setAlignmentX(0);
+        long most=3600;
+        for(int i=6;i>=0;i--) most=Math.max(most,daily.getOrDefault(today.minusDays(i),0L));
+        for(int i=6;i>=0;i--) {
+            LocalDate day=today.minusDays(i);
+            long seconds=daily.getOrDefault(day,0L);
+            var column=stack();
+            glue(column);
+            // A day with nothing recorded is a hairline on the floor, as it is
+            // in the fourteen-day chart: a stub reads as a bar that failed.
+            int tall=seconds==0?HAIRLINE:Math.max(RING,(int)(height*seconds/most));
+            var bar=new Theme.Bar(seconds==0?LINE:Heatmap.colour(day,seconds,goalHours));
+            bar.setMaximumSize(new Dimension(wide,tall));
+            bar.setPreferredSize(new Dimension(wide,tall));
+            bar.setToolTipText(day+" · "+Analytics.report(seconds));
+            column.add(bar);
+            days.add(column);
+            // The day under its bar, as the fourteen-day chart numbers its own:
+            // seven unlabelled bars leave the reader counting backwards from
+            // whichever end they guess is today. Today's is the one in body ink.
+            var initial=label(initial(day.getDayOfWeek()),TYPE_CAPTION,day.equals(today)?TEXT:MUTED);
+            initial.setHorizontalAlignment(SwingConstants.CENTER);
+            initial.getAccessibleContext().setAccessibleName(day.getDayOfWeek().getDisplayName(
+                java.time.format.TextStyle.FULL,java.util.Locale.getDefault()));
+            initials.add(initial);
+        }
+        tile.add(days);
+        gap(tile,SPACE_XS);
+        initials.setMaximumSize(new Dimension(width,initials.getPreferredSize().height));
+        tile.add(initials);
+        return tile;
+    }
+    /** A weekday in one letter, in the reader's own language. */
+    private static String initial(java.time.DayOfWeek day) {
+        return day.getDisplayName(java.time.format.TextStyle.NARROW,java.util.Locale.getDefault())
+            .toUpperCase(java.util.Locale.getDefault());
+    }
+
     private void updateTimer() {
         var a=tracker().active();
         timerLabel.setText(a==null?"00:00:00":Analytics.duration(Math.max(0,Duration.between(a.start(),tracker().now()).getSeconds())));

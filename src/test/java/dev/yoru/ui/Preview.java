@@ -45,8 +45,18 @@ public final class Preview {
         return null;
     }
     static void layout(Container c) {
+        // Twice, because a row that wraps only learns how tall it is once it has
+        // been given a width: the first pass settles the widths and the second
+        // the heights that follow from them. One pass draws the focus card's
+        // controls as the running app draws them for a single frame and no
+        // longer — there, a width that changes makes the row ask again.
+        pass(c);
+        pass(c);
+    }
+
+    private static void pass(Container c) {
         c.doLayout();
-        for (var child : c.getComponents()) if (child instanceof Container nested) layout(nested);
+        for (var child : c.getComponents()) if (child instanceof Container nested) pass(nested);
     }
 
     /** Steps the animated scenes so previews show motion, not the idle pose. */

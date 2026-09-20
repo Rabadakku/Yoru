@@ -19,15 +19,20 @@ final class Heatmap extends JPanel {
     private final Map<LocalDate,Long> days;
     private final LocalDate today,start;
     private final int goalHours;
+    private final DayOfWeek weekStart;
 
     /** The day the keyboard is on, or -1 while the mouse is the only reader. */
     private int cursorCol=-1,cursorRow=-1;
 
-    Heatmap(Map<LocalDate,Long> days,LocalDate today,int goalHours) {
+    Heatmap(Map<LocalDate,Long> days,LocalDate today,int goalHours,DayOfWeek weekStart) {
         this.days=days;
         this.today=today;
         this.goalHours=goalHours;
-        start=today.minusWeeks(51).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        // The vault's own week start, not Monday: the task calendar and the
+        // habit grids break their weeks where the setting says, and a column
+        // here that began on a different day made the same week two shapes.
+        this.weekStart=weekStart;
+        start=today.minusWeeks(51).with(TemporalAdjusters.previousOrSame(weekStart));
         setOpaque(false);
         // Room under the grid for the readout line the keyboard cursor draws.
         setPreferredSize(new Dimension(760,158+Theme.SPACE_LG));
@@ -75,6 +80,12 @@ final class Heatmap extends JPanel {
         return d+": "+Analytics.duration(seconds)+note;
     }
 
+    /** A weekday in one letter, in the reader's own language. */
+    private static String initial(DayOfWeek day) {
+        return day.getDisplayName(java.time.format.TextStyle.NARROW,java.util.Locale.getDefault())
+            .toUpperCase(java.util.Locale.getDefault());
+    }
+
     private int step() {
         return Math.max(9,(getWidth()-38)/52);
     }
@@ -102,7 +113,11 @@ final class Heatmap extends JPanel {
     }
 
     private Color colour(LocalDate day,long seconds) {
-        if(day.isAfter(today))return Theme.BG;
+        // A day that has not happened is the card it is drawn on, not the page
+        // behind it: painted in the page's ink the rest of this week was a
+        // black notch out of the map's last column, which reads as damage
+        // rather than as a week still to come.
+        if(day.isAfter(today))return Theme.PANEL;
         return colour(day,seconds,goalHours);
     }
 
@@ -110,15 +125,25 @@ final class Heatmap extends JPanel {
         var g=(Graphics2D)graphics.create();
         g.setFont(Theme.captionFont());
         g.setColor(Theme.MUTED);
-        g.drawString("M",7,40);
-        g.drawString("W",7,74);
-        g.drawString("F",7,108);
-        int last=-1;
+        // Monday, Wednesday and Friday, wherever the week start puts them:
+        // seven labels in a 13 px band would collide, three are enough to read
+        // the rows by, and every other row from the top gives two identical S's
+        // on a week that starts on Sunday.
+        for(DayOfWeek named:new DayOfWeek[]{DayOfWeek.MONDAY,DayOfWeek.WEDNESDAY,DayOfWeek.FRIDAY})
+            g.drawString(initial(named),7,40+Math.floorMod(named.getValue()-weekStart.getValue(),7)*17);
+        int last=-1,named=-3;
         for(int c=0;c<52;c++) {
             LocalDate first=start.plusWeeks(c);
+            // A month is named once, over the first full column it owns, and
+            // only where there is room for the word: the left edge is a few
+            // days of the month before it, and two months that turn a week
+            // apart printed "SEPOCT" across the top of the map.
             if(first.getMonthValue()!=last) {
-                g.setColor(Theme.MUTED);
-                g.drawString(first.getMonth().toString().substring(0,3),32+c*step(),15);
+                if(c>0&&c-named>=3) {
+                    g.setColor(Theme.MUTED);
+                    g.drawString(first.getMonth().toString().substring(0,3),32+c*step(),15);
+                    named=c;
+                }
                 last=first.getMonthValue();
             }
             for(int r=0;r<7;r++) {

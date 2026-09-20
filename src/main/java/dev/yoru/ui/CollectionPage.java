@@ -57,19 +57,26 @@ final class CollectionPage {
         var p = stack();
         p.add(YoruApp.pageHeaderFor("Collection",
             "YOUR GAME'S POKÉMON · ONE ENCOUNTER FOR EVERY 30 MINUTES RECORDED"));
+        // The line that vouches for the Pokémon goes on the floor of the card
+        // that holds them, inside its padding and on its title's left edge —
+        // floating in the gutter above the card it read as a stray caption
+        // belonging to nothing, which is the same reason Today's encounters
+        // line sits inside the companion card.
         var status = saveStatus(read);
-        if (status != null) { p.add(status); gap(p, SPACE_LG); }
         if (shell.game().running()) {
             p.add(label("The game is running. This is its last save; what you catch now appears when it saves again.", TYPE_BODY, GOLD_TEXT));
             gap(p, SPACE_LG);
         }
         if (read.kind() != GameView.SaveKind.READABLE) {
+            // No party card to stand on: a save that is failing or still being
+            // written says so above the card that explains the rest.
+            if (status != null) { p.add(status); gap(p, SPACE_LG); }
             p.add(unavailable(read));
             gap(p, SPACE_XL);
             p.add(rewards(state));
             return p;
         }
-        storage(p, read.save());
+        storage(p, read.save(), status);
         return p;
     }
 
@@ -122,7 +129,7 @@ final class CollectionPage {
     }
 
     /** The party, the rewards row and the PC boxes, sharing one selection and one arrangement. */
-    private void storage(JPanel page, Gen3Save save) {
+    private void storage(JPanel page, Gen3Save save, JComponent status) {
         boolean gameOpen = shell.game().running();
         // The edits live here, and only while the game is closed: while it runs,
         // the controls say so rather than pretending to work.
@@ -181,7 +188,7 @@ final class CollectionPage {
         screen.select(chosen);
         describe(details, chosen, shown);
 
-        page.add(party(save, strip));
+        page.add(party(save, strip, status));
         gap(page, SPACE_XL);
         page.add(rewards(shell.tracker().state()));
         gap(page, SPACE_XL);
@@ -222,13 +229,14 @@ final class CollectionPage {
         return Region.NONE;
     }
 
-    private JPanel party(Gen3Save save, PartyStrip strip) {
+    private JPanel party(Gen3Save save, PartyStrip strip, JComponent status) {
         var c = card();
         c.setName("collection.party");
         c.add(sectionHeader("YOUR PARTY · " + save.trainer().name() + " · " + save.ownedCount() + " caught · "
             + Theme.plural(save.badges(), "badge")));
         gap(c, SPACE_MD);
         c.add(strip);
+        if (status != null) { gap(c, SPACE_MD); c.add(status); }
         return c;
     }
 
@@ -316,29 +324,30 @@ final class CollectionPage {
                          JPanel details, Arrangement arrangement, boolean gameOpen) {
         var c = card();
         c.setName("collection.boxes");
-        c.add(sectionHeader("PC BOXES"));
-        gap(c, SPACE_SM);
         var previous = button("‹ Previous", () -> screen.turn(-1));
         previous.setName("collection.previousBox");
         var next = button("Next ›", () -> screen.turn(1));
         next.setName("collection.nextBox");
-        c.add(flushRow(previous, selector, next, occupancy));
 
         var arrange = button(gameOpen ? "The game is running" : "Arrange", () -> setArranging(arrangement, true));
         arrange.setName("collection.arrange");
         arrange.setEnabled(!gameOpen);
-        var rename = button("Rename box…", this::renameBox);
+        var rename = ghost(button("Rename box…", this::renameBox));
         rename.setName("collection.rename");
         rename.setEnabled(!gameOpen);
-        var paper = button("Wallpaper", this::nextWallpaper);
+        var paper = ghost(button("Wallpaper", this::nextWallpaper));
         paper.setName("collection.wallpaper");
         paper.setEnabled(!gameOpen);
         // Three controls that are disabled for one reason, said on each of them.
         if (gameOpen) for (var control : new JComponent[] {arrange, rename, paper})
             control.setToolTipText("Close the game first: while it runs it holds its own copy of the save");
-        // Arrange last: it hides while arranging, and a hidden control first in
-        // a flush row would leave its gap behind and push the row off the margin.
-        c.add(flushRow(rename, paper, arrange));
+        // What the box is, then which box, then what can be done to it: the
+        // card's name carries its own controls, and turning the pages sits with
+        // the box being turned. Arrange last: it hides while arranging, and a
+        // hidden control first in a flush row would leave its gap behind.
+        c.add(cardHead(sectionHeader("PC BOXES"), rename, paper, arrange));
+        gap(c, SPACE_MD);
+        c.add(flushRow(previous, selector, next, occupancy));
 
         // Arranging is a mode with its instruction in words, a way to put a
         // Pokémon back, and a way out, rather than a hint painted on the box.

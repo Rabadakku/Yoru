@@ -1,5 +1,56 @@
 # Yoru roadmap
 
+## Release 1.0.13 — September 20, 2026
+
+Built on `claude/ui-craft` from released 1.0.12, and released as
+[1.0.13](https://github.com/Rabadakku/Yoru/releases/tag/v1.0.13).
+Notes: [RELEASE-1.0.13.md](RELEASE-1.0.13.md).
+
+A run of UI work, each change committed on its own green suite, and one defect
+that was worth a release on its own: a control drawn outside the row that held
+it could not be clicked.
+
+| Gate | Evidence | State |
+|---|---|---|
+| Isolated suite | `./test.sh`, 78 groups, after every change | Passing |
+| Every page, every theme, both sizes | `PreviewInventoryTest`: 100 renders, each read by eye | Passing |
+| Every page at every text size | `TextFitTest`: 100, 125, 150, 200% | Passing |
+| Rows hold their controls | `VisualSystemTest`: every page at the smallest window | Passing |
+| The week starts where the vault says | `HabitGridTest`: all seven starts, grid and heat map | Passing |
+| Installers | `release.yml` on the version tag | Pending the release |
+| Clean-machine install, full campaign, real libretro core | By hand | Not verified |
+
+- Done, page by page. Every page: one header line, the repeated controls
+  quieted, and wrapping rows that start on the card's margin. Tasks: the
+  toolbars fold at the window's minimum, and a row lights under the pointer.
+  Habits: a daily habit's days stand in seven weekday columns four weeks deep,
+  under the initials of the days, breaking the week where the vault's own
+  setting breaks it. Today: the three figures carry the same signpost as every
+  other card, the week behind the seven-day figure is a chart with its days
+  named, and the agenda's last block is no longer ruled off from the card's
+  edge. Data: the fortnight is drawn against the daily goal with a dashed line
+  where the goal falls, and a day with nothing recorded no longer captions its
+  hairline "0m". The year's heat map follows the same week start, names each
+  month once where there is room for the word, and leaves the days still to
+  come unpainted. Collection: the line that says what the vault holds stands on
+  the card it vouches for. Settings: Appearance writes its captions over its
+  controls, as Tracking already did.
+- One defect, not a polish: at the window's minimum the focus card's Edit timer
+  button was drawn outside the row that held it, which put it out of reach. A
+  row that wraps now asks to be measured again the moment its width changes,
+  and estimates from the room inside what holds it when it has no width yet.
+- Checks: the full isolated suite (78 groups) after every change, including
+  `TextFitTest` at 100, 125, 150 and 200%, and `PreviewInventoryTest`'s 100
+  renders. Every page was read as a render in all five themes at both window
+  sizes, and again at 150% text. Two new checks hold the wrapping-row fix —
+  every page's rows contain their controls at the minimum window, and a row
+  given less width asks for more height — and a new `HabitGridTest` holds the
+  weekday columns and the week start for every one of the seven starts.
+- Limits: nothing in the vault format, the reward economy or the game code was
+  touched. The activity tables on Today and Data, which repeat three buttons a
+  row, and the Game page's two setup cards were looked at and deliberately left
+  alone: both are explicit and keyboard-reachable as they stand.
+
 ## UI improvements for 1.0.12 — September 20, 2026
 
 On `codex/ui-polish`, based on released 1.0.11. Tracked in

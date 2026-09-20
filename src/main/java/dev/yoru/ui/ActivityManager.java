@@ -103,7 +103,7 @@ final class ActivityManager {
 
     /** The control that opens {@link #retarget(Component, Tracker, Activity, Runnable)}, named for the activity. */
     static JButton targetButton(Component parent, Tracker tracker, Activity activity, Runnable changed) {
-        var target = button("Target", () -> retarget(parent, tracker, activity, changed));
+        var target = ghost(button("Target", () -> retarget(parent, tracker, activity, changed)));
         target.setName("activity.target." + activity.id());
         target.setToolTipText(activity.targetMinutes() == 0 ? "No daily target · set one"
             : "Daily target " + activity.targetMinutes() + " min · change it");
@@ -265,9 +265,9 @@ final class ActivityManager {
             // Named so the count and duration a removal quotes can be read back
             // off the page that offers it.
             recorded.setName("activity.recorded." + activity.id());
-            var rename = button("Rename", () -> rename(parent, tracker, activity, changed));
+            var rename = ghost(button("Rename", () -> rename(parent, tracker, activity, changed)));
             rename.setName("activity.rename." + activity.id());
-            var remove = button("Delete", () -> remove(parent, tracker, activity, changed));
+            var remove = ghost(button("Delete", () -> remove(parent, tracker, activity, changed)));
             remove.setName("activity.remove." + activity.id());
             boolean timing = !canRemove(tracker, activity.id());
             remove.setEnabled(!timing);

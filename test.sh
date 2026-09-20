@@ -22,6 +22,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TextFitTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ExpansionTest
 
 java -ea -cp build/classes dev.yoru.HabitsTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.HabitGridTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.InputTest
 java -ea -cp build/classes dev.yoru.ui.DateTextTest
 java -ea -cp build/classes dev.yoru.ui.AgoTest
