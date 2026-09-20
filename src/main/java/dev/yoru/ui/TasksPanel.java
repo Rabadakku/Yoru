@@ -84,19 +84,16 @@ final class TasksPanel extends JPanel implements Scrollable {
         create.setToolTipText("Add a task");
         p.add(YoruApp.pageHeaderFor("Tasks","TASKS · NOTES · DUE DATES",create));
 
-        var top=new JPanel(new BorderLayout(SPACE_MD,0));
-        top.setOpaque(false);
-        var tabs=new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_XS,0));
+        var tabs=new JPanel(new WrapFlowLayout(FlowLayout.LEFT,SPACE_XS,SPACE_XS));
         tabs.setOpaque(false);
         for(var value:View.values()) {
             var b=button(value.label,()->{view=value;rebuildRows();});
             b.setName("view."+value.name().toLowerCase());
             viewButtons.put(value,b);tabs.add(b);
         }
-        top.add(tabs,BorderLayout.CENTER);
-        // What the list is showing belongs beside the views that decide it.
-        top.add(summary,BorderLayout.EAST);
-        p.add(top);gap(p,SPACE_MD);
+        // What the list is showing belongs beside the views that decide it, and
+        // folds under them at the window's minimum rather than running off it.
+        p.add(splitRow(tabs,summary));gap(p,SPACE_MD);
 
         var order=plainCombo(new JComboBox<>(Sort.values()));
         order.setName("task.sort");
@@ -112,12 +109,9 @@ final class TasksPanel extends JPanel implements Scrollable {
         var importer=button("Import ▾",()->{});
         importer.setName("task.import");
         importer.addActionListener(e->importMenu().show(importer,0,importer.getHeight()));
-        var tools=new JPanel(new BorderLayout(SPACE_MD,0));
-        tools.setOpaque(false);
-        var left=new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_SM,0));
+        var left=new JPanel(new WrapFlowLayout(FlowLayout.LEFT,SPACE_SM,SPACE_XS));
         left.setOpaque(false);
         left.add(sortControls);left.add(tags);left.add(importer);
-        tools.add(left,BorderLayout.WEST);
         var find=new JPanel(new BorderLayout(SPACE_SM,0));
         find.setOpaque(false);
         var caption=label("Search",TYPE_LABEL,MUTED);
@@ -134,7 +128,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         find.add(caption,BorderLayout.WEST);
         find.add(search,BorderLayout.CENTER);
         find.add(clearSearch,BorderLayout.EAST);
-        tools.add(find,BorderLayout.EAST);
+        var tools=splitRow(left,find);
         search.getInputMap().put(KeyStroke.getKeyStroke("ESCAPE"),"clearSearch");
         search.getActionMap().put("clearSearch",new AbstractAction() {
             public void actionPerformed(java.awt.event.ActionEvent e) { search.setText(""); }

@@ -1050,20 +1050,32 @@ final class Theme {
         words.add(subtitle(subtitle));
         var right=wrappingRow();
         for(var action:actions) right.add(action);
-        var head=new JPanel(new HeadRow()) {
-            // Its own height, and the height depends on whether the actions
-            // fold, so it is asked for rather than frozen at construction.
+        p.add(splitRow(words,right));
+        gap(p,SPACE_XL);
+        return p;
+    }
+
+    /**
+     * Two groups on one line while both fit, the second folding onto its own
+     * line below when they do not.
+     *
+     * A toolbar built from a BorderLayout keeps its groups on one line at any
+     * width, so at the window's minimum the right-hand group simply ran off the
+     * page: the Tasks summary and the search box were both cut in half.
+     */
+    static JPanel splitRow(JComponent left,JComponent right) {
+        var row=new JPanel(new HeadRow()) {
+            // Its own height, and the height depends on whether the second
+            // group folds, so it is asked for rather than frozen at construction.
             @Override public Dimension getMaximumSize() {
                 return new Dimension(Integer.MAX_VALUE,getPreferredSize().height);
             }
         };
-        head.setOpaque(false);
-        head.setAlignmentX(0);
-        head.add(words);
-        head.add(right);
-        p.add(head);
-        gap(p,SPACE_XL);
-        return p;
+        row.setOpaque(false);
+        row.setAlignmentX(0);
+        row.add(left);
+        row.add(right);
+        return row;
     }
 
     /**
