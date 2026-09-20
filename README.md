@@ -22,7 +22,8 @@ Everything a study session needs, and nothing that gets in the way:
 - **Timer** — open-ended clock in/out, with no forced pomodoro. A running timer
   survives closing the app, and a forgotten clock-out can be corrected.
 - **Tasks** — a local inbox with due dates, statuses, class tags, sorting,
-  drag-to-reorder and a month calendar. Tasks can be pasted in from an AI
+  drag-to-reorder and a month calendar. Search titles, notes and tags across
+  every view. Tasks can be pasted in from an AI
   proposal, or imported from a Notion export.
 - **Schedule** — a real week grid with plan and actual lanes. Drag on empty
   space to create, drag to move, drag the edges to resize, and repeat a block
@@ -81,6 +82,8 @@ An open-ended clock with no forced pomodoro. Clock in, clock out, and correct
 either afterwards; sessions under a configurable minimum are recorded but earn
 nothing, so the totals and the reward economy can never disagree. Track as many
 activities as you like — the heat map totals them all and each one separately.
+The recording indicator stays visible across pages and returns to the timer in
+one click. Today shows progress against the daily goal.
 A running timer survives closing the app, and a session recovered when the
 vault opens still starts the right music.
 
@@ -195,9 +198,9 @@ in this repository.
 
 ![The collection, read from the game's own save](docs/media/collection.png)
 
-**Settings** — six themes, each shown in its own colours.
+**Settings** — five themes, each shown in its own colours.
 
-![Settings: the six themes](docs/media/settings.png)
+![Settings: the five themes](docs/media/settings.png)
 
 ---
 
