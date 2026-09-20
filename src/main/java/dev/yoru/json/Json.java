@@ -7,9 +7,9 @@ import java.util.*;
  * maps, lists, strings, booleans and BigDecimal, and callers build their own
  * records from that.
  *
- * Its own leaf package because two unrelated callers need it and neither should
- * depend on the other: the OpenAI boundary in {@code ai}, and the portable
- * vault export in {@code persistence}.
+ * Its own leaf package because several unrelated callers need it and none
+ * should depend on another: the OpenAI boundary in {@code ai}, the release feed
+ * in {@code update}, and the portable vault export in {@code persistence}.
  */
 public final class Json {
     private Json() { }
@@ -17,14 +17,25 @@ public final class Json {
         if (value == null) return "null";
         if (value instanceof String s) {
             var out = new StringBuilder("\"");
-            for (char c : s.toCharArray()) {
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
                 switch (c) {
                     case '"' -> out.append("\\\"");
                     case '\\' -> out.append("\\\\");
                     case '\n' -> out.append("\\n");
                     case '\r' -> out.append("\\r");
                     case '\t' -> out.append("\\t");
-                    default -> { if (c < 32) out.append(String.format("\\u%04x", (int)c)); else out.append(c); }
+                    default -> {
+                        if (Character.isHighSurrogate(c) && i + 1 < s.length() && Character.isLowSurrogate(s.charAt(i + 1))) {
+                            out.append(c).append(s.charAt(++i));
+                        }
+                        // Half of a pair on its own — text cut between the two —
+                        // is escaped rather than written raw: no encoding can
+                        // write it, so the whole file would fail to save. The
+                        // reader turns the escape back into the same character.
+                        else if (c < 32 || Character.isSurrogate(c)) out.append(String.format("\\u%04x", (int) c));
+                        else out.append(c);
+                    }
                 }
             }
             return out.append('"').toString();
@@ -73,7 +84,14 @@ public final class Json {
     private static final class Parser {
         final String s; int i;
         Parser(String s) { this.s = s; }
-        IllegalArgumentException bad() { return new IllegalArgumentException("Invalid JSON response."); }
+        /**
+         * Where the text stops being JSON, and never the text itself: a vault
+         * export is somebody's own data, and this reaches a dialog.
+         */
+        IllegalArgumentException bad() {
+            return new IllegalArgumentException(i >= s.length() ? "Invalid JSON: the text ends too soon."
+                : "Invalid JSON near character " + (i + 1) + ".");
+        }
         void space() { while (i < s.length() && " \n\r\t".indexOf(s.charAt(i)) >= 0) i++; }
         boolean take(char c) { space(); if (i < s.length() && s.charAt(i) == c) { i++; return true; } return false; }
         Object value(int depth) {
@@ -90,7 +108,9 @@ public final class Json {
             }
             if (take('[')) {
                 var list = new ArrayList<>(); if (take(']')) return list;
-                do { if (list.size() >= 100_000) throw bad(); list.add(value(depth + 1)); } while (take(','));
+                // A limit, not a malformed file, so it says which.
+                do { if (list.size() >= 100_000) throw new IllegalArgumentException("A JSON list holds more than 100000 items.");
+                    list.add(value(depth + 1)); } while (take(','));
                 if (!take(']')) throw bad(); return list;
             }
             for (String word : List.of("true", "false", "null")) if (s.startsWith(word, i)) {
@@ -115,8 +135,10 @@ public final class Json {
                     case '"', '\\', '/' -> out.append(escape);
                     case 'b' -> out.append('\b'); case 'f' -> out.append('\f');
                     case 'n' -> out.append('\n'); case 'r' -> out.append('\r'); case 't' -> out.append('\t');
+                    // Exactly four hexadecimal digits. Integer.parseInt would take
+                    // a sign too, and read "\\u-001" as a character nobody wrote.
                     case 'u' -> { if (i + 4 > s.length()) throw bad();
-                        try { out.append((char)Integer.parseInt(s.substring(i, i + 4), 16)); } catch (NumberFormatException e) { throw bad(); } i += 4; }
+                        try { out.append((char) HexFormat.fromHexDigits(s, i, i + 4)); } catch (IllegalArgumentException e) { throw bad(); } i += 4; }
                     default -> throw bad();
                 }
             }

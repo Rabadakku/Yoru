@@ -14,9 +14,11 @@ import java.util.*;
 public final class Model {
     private Model() {
     }
+    /** The first moment a record may hold, and the first one past the last it may. */
+    private static final Instant EARLIEST = Instant.parse("1900-01-01T00:00:00Z"), LATEST = Instant.parse("2200-01-01T00:00:00Z");
     private static void requireTime(Instant time) {
         Objects.requireNonNull(time);
-        if(time.isBefore(Instant.parse("1900-01-01T00:00:00Z")) || !time.isBefore(Instant.parse("2200-01-01T00:00:00Z")))
+        if(time.isBefore(EARLIEST) || !time.isBefore(LATEST))
             throw new IllegalArgumentException("Choose a date between 1900 and 2199.");
     }
     private static void requireSpan(Instant start, Instant end) {
@@ -117,6 +119,7 @@ public final class Model {
         public Activity retargeted(int targetMinutes) {
             return new Activity(id,name,targetMinutes);
         }
+        @Override
         public String toString() {
             return name;
         }
@@ -139,7 +142,7 @@ public final class Model {
             name = requireName(name,40,"tag name");
             colour = requireColour(colour);
         }
-        public String toString() { return name; }
+        @Override public String toString() { return name; }
     }
 
     public record Session(UUID id, UUID activityId, Instant start, Instant end) {
@@ -185,7 +188,6 @@ public final class Model {
             if(!endTime.isAfter(startTime))
                 throw new IllegalArgumentException("A repeating block must end after it starts, on the same day.");
         }
-        public Duration length() { return Duration.between(startTime,endTime); }
     }
 
     /**
@@ -334,7 +336,6 @@ public final class Model {
             this.updatedAt = updatedAt;
         }
         public byte[] bytes() { return bytes.clone(); }
-        public int size() { return bytes.length; }
         public Instant updatedAt() { return updatedAt; }
         /** Whether these are exactly the bytes this save holds. */
         public boolean holds(byte[] other) { return Arrays.equals(bytes, other); }
