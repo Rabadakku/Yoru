@@ -23,7 +23,7 @@ public final class TextSizeTest {
             // The window built here leaves Swing's threads running.
             System.exit(1);
         }
-        System.out.println("PASS: " + checks + " text size checks (default, saved, refused, faces, Settings)");
+        System.out.println("PASS: " + checks + " text size checks (default, saved, refused, faces, Settings, drawn views)");
         System.exit(0);
     }
 
@@ -60,6 +60,44 @@ public final class TextSizeTest {
         named(app, "textSize.125").doClick();
         check(TextSize.saved() == 125 && TextSize.current() == 125, "choosing 125% in Settings keeps it for this computer");
         TextSize.use(100);
+        drawnViews();
+        TextSize.use(100);
+    }
+
+    /**
+     * The views that are drawn rather than laid out follow the text too.
+     *
+     * A layout grows because its labels do; a painted view only grows if its
+     * own measurements are asked to. The heat map's were not, so at 200% the
+     * month names were drawn half above the top of it, the weekday initials ran
+     * into the first column of days, and the cells stayed the size they were
+     * designed at under text twice as tall.
+     */
+    private static void drawnViews() {
+        var today = java.time.LocalDate.now();
+        TextSize.use(100);
+        var designed = new Heatmap(java.util.Map.of(), today, 4, java.time.DayOfWeek.MONDAY);
+        int small = designed.getPreferredSize().height;
+        designed.setSize(1000, small);
+        check(reading(designed, 40, 30) != null, "at 100% the map's first row of days is where it was");
+
+        TextSize.use(200);
+        var large = new Heatmap(java.util.Map.of(), today, 4, java.time.DayOfWeek.MONDAY);
+        int tall = large.getPreferredSize().height;
+        check(tall > small * 3 / 2, "at 200% the heat map asks for the room its text needs: "
+            + tall + " against " + small);
+        large.setSize(1000, tall);
+        check(reading(large, 100, 30) == null, "the band the months are written in has grown with them");
+        check(reading(large, 100, tall / 2) != null, "and the days are still read under it");
+        // The column the weekday initials sit in has grown with them as well:
+        // a point that was the first day of a week at 100% is now beside it.
+        check(reading(large, 40, tall / 2) == null, "the initials' column has grown with them too");
+    }
+
+    /** What the map says about the day under a point, or null where there is no day. */
+    private static String reading(Heatmap map, int x, int y) {
+        return map.getToolTipText(new java.awt.event.MouseEvent(map,
+            java.awt.event.MouseEvent.MOUSE_MOVED, 0, 0, x, y, 0, false));
     }
 
     private static JButton named(java.awt.Container root, String name) {
