@@ -33,6 +33,7 @@ final class TodayPage {
     private final Shell shell;
     private JLabel timerLabel, statusLabel, encounterLabel;
     private BuddyCard buddyCard;
+    private DailyGoal dailyGoal;
     private TrainerScene trainerScene;
     /** The heat map's activity filter; null shows every activity. */
     private UUID heatActivity;
@@ -52,11 +53,12 @@ final class TodayPage {
         if (trainerScene != null) trainerScene.advance(animate,
             running==null?0:Duration.between(running.start(),Instant.now()).getSeconds());
         if(timerLabel!=null&&onScreen)updateTimer();
+        if(dailyGoal!=null&&onScreen)dailyGoal.update();
     }
 
     /** Another page is going on screen: nothing here needs the ticker until Today is built again. */
     void leave() {
-        buddyCard=null;trainerScene=null;encounterLabel=null;
+        buddyCard=null;trainerScene=null;encounterLabel=null;dailyGoal=null;
         timerLabel=null;statusLabel=null;
     }
 
@@ -136,20 +138,12 @@ final class TodayPage {
         focus.add(choose);
         gap(focus,SPACE_LG);
         timerLabel=label("00:00:00",TYPE_TIMER,TEXT);
+        timerLabel.setName("today.timer");
         focus.add(timerLabel);
         gap(focus,SPACE_SM);
         statusLabel=bodyLabel("");
         focus.add(statusLabel);
         updateTimer();
-        gap(focus,SPACE_LG);
-        // The trainer sits with the clock, since the clock is what drives it.
-        trainerScene=new TrainerScene(tracker.state().settings().trainer()==TrainerId.MAY?"may":"brendan");
-        focus.add(trainerScene);
-        if (!trainerScene.hasTrainerArtwork()) {
-            gap(focus,SPACE_SM);
-            focus.add(bodyLabel("Trainer artwork is missing. Import your existing scene artwork in Settings to restore walking and running."));
-            focus.add(button("Restore scene artwork", () -> shell.show("Settings")));
-        }
         gap(focus,SPACE_LG);
         // Wrapping: at the window's minimum the four controls take two lines.
         var controls=wrappingRow();
@@ -160,7 +154,21 @@ final class TodayPage {
         controls.add(button("+ Activity",shell::addActivity));
         controls.add(button("+ Log time",()->shell.timeDialog(false)));
         if(active!=null)controls.add(button("Edit timer",()->shell.editTime(active)));
+        controls.setName("today.timer.controls");
         focus.add(controls);
+        gap(focus,SPACE_LG);
+        dailyGoal=new DailyGoal(tracker,zone());
+        focus.add(dailyGoal);
+        gap(focus,SPACE_LG);
+        // The trainer sits with the clock, since the clock is what drives it.
+        trainerScene=new TrainerScene(tracker.state().settings().trainer()==TrainerId.MAY?"may":"brendan");
+        focus.add(trainerScene);
+        if (!trainerScene.hasTrainerArtwork()) {
+            gap(focus,SPACE_SM);
+            focus.add(bodyLabel("Add your own trainer artwork to bring this trail to life."));
+            focus.add(button("Restore scene artwork", () -> shell.show("Settings")));
+        }
+        gap(focus,SPACE_LG);
         return focus;
     }
 
@@ -376,7 +384,7 @@ final class TodayPage {
     }
     private void updateTimer() {
         var a=tracker().active();
-        timerLabel.setText(a==null?"00:00:00":Analytics.duration(Duration.between(a.start(),Instant.now()).getSeconds()));
+        timerLabel.setText(a==null?"00:00:00":Analytics.duration(Math.max(0,Duration.between(a.start(),tracker().now()).getSeconds())));
         updateEncounterLine();
         statusLabel.setText(a==null?"OPEN-ENDED · ready when you are":"● CLOCKED IN · "+shell.activityName(a.activityId()));
     }
