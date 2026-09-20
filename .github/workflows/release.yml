@@ -30,8 +30,20 @@ permissions:
   contents: write  # gh release create and gh release upload
 
 jobs:
+  verify:
+    name: Verify the release on its bundled Java version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '22'
+      - run: ./test.sh
+
   installers:
     name: ${{ matrix.label }}
+    needs: verify
     runs-on: ${{ matrix.runner }}
     strategy:
       # One platform failing should not cancel the other two: the release job
@@ -136,7 +148,12 @@ jobs:
           notes="$(mktemp)"
           # Written here rather than committed, so the first-open explanation
           # ships with the release that needs it.
-          cat > "$notes" <<'NOTES'
+          release_notes="docs/RELEASE-${TAG#v}.md"
+          if [ -f "$release_notes" ]; then
+            cat "$release_notes" > "$notes"
+            printf '\n\n' >> "$notes"
+          fi
+          cat >> "$notes" <<'NOTES'
           ## Install
 
           Each file below was built by CI with `jpackage` from this tag, and each
