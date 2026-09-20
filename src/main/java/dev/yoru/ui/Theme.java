@@ -1136,7 +1136,9 @@ final class Theme {
         var p=stack();
         p.add(label(headline,TYPE_HEADING,TEXT));
         gap(p,SPACE_SM);
-        if(detail!=null&&!detail.isEmpty()) { p.add(bodyLabel(detail)); gap(p,SPACE_MD); }
+        // The gap belongs to the action, not to the detail: without one it was
+        // a band of nothing under the last line, which reads as a missing control.
+        if(detail!=null&&!detail.isEmpty()) { p.add(bodyLabel(detail)); if(action!=null) gap(p,SPACE_MD); }
         if(action!=null) p.add(action);
         return p;
     }

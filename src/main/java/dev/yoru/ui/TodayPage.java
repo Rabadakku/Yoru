@@ -172,9 +172,13 @@ final class TodayPage {
         trainerScene=new TrainerScene(tracker.state().settings().trainer()==TrainerId.MAY?"may":"brendan");
         focus.add(trainerScene);
         if (!trainerScene.hasTrainerArtwork()) {
+            // The sentence wraps and the control sits under it: at the window's
+            // minimum the line alone is wider than this column, so the two
+            // cannot share a row at any text size.
             gap(focus,SPACE_SM);
             focus.add(bodyLabel("Add your own trainer artwork to bring this trail to life."));
-            focus.add(button("Restore scene artwork", () -> shell.show("Settings")));
+            gap(focus,SPACE_SM);
+            focus.add(ghost(button("Restore scene artwork", () -> shell.show("Settings"))));
         }
         gap(focus,SPACE_LG);
         return focus;
