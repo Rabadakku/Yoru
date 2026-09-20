@@ -376,9 +376,14 @@ final class TodayPage {
             gap(box,SPACE_LG);
             box.add(emptyState("No blocks planned today.","Drag on the Schedule grid, or plan one here.",null));
         }
-        for (var b : blocks.stream().limit(3).toList()) {
+        var shown = blocks.stream().limit(3).toList();
+        for (var b : shown) {
             var line = new JPanel(new BorderLayout(SPACE_XL, 0));
-            line.setOpaque(false); line.setBorder(listRow());
+            line.setOpaque(false);
+            // The rule divides one block from the next; under the last one it
+            // divides it from the card's own edge, which is not a division.
+            boolean ends = b == shown.getLast() && blocks.size() <= 3;
+            line.setBorder(ends ? listEnd() : listRow());
             line.add(label(b.start().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")) + " — "
                     + b.end().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")), TYPE_BODY, GOLD_TEXT), BorderLayout.WEST);
             line.add(shortenable(shell.activityName(b.activityId()), TYPE_BODY, TEXT), BorderLayout.CENTER);

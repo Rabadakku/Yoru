@@ -120,6 +120,11 @@ public final class VisualSystemTest {
         var repo = new Memory();
         var tracker = new Tracker(repo, Clock.systemUTC());
         tracker.addActivity("Study", 30);
+        // Two blocks today, so the agenda has a list to end.
+        var activity = tracker.state().activities().getFirst().id();
+        var noon = java.time.LocalDate.now().atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant();
+        tracker.plan(activity, noon, noon.plusSeconds(3600));
+        tracker.plan(activity, noon.plusSeconds(7200), noon.plusSeconds(10800));
         var app = new YoruApp(tracker, repo);
         app.setSize(900, 640);
 
@@ -132,6 +137,21 @@ public final class VisualSystemTest {
         var agenda = named(app, "today.agenda");
         var stats = named(app, "today.stats");
         check(agenda != null && stats != null && agenda.getY() < stats.getY(), "Today's agenda comes before its statistics");
+        // The rules inside a list divide its rows; the last row has nothing
+        // below it but the card's own edge, so it carries no rule.
+        var rows = new ArrayList<JComponent>();
+        for (var child : ((Container) agenda).getComponents())
+            if (child instanceof JPanel row && row.getLayout() instanceof BorderLayout) rows.add(row);
+        check(rows.size() == 2, "the agenda lists the blocks planned today, got " + rows.size());
+        check(rows.getFirst().getBorder() instanceof javax.swing.border.CompoundBorder,
+            "a block is ruled off from the one after it");
+        check(rows.getLast().getBorder() instanceof javax.swing.border.EmptyBorder,
+            "and the last block is not ruled off from the card's edge");
+        check(rows.getFirst().getBorder().getBorderInsets(rows.getFirst()).bottom
+            + rows.getFirst().getBorder().getBorderInsets(rows.getFirst()).top
+            == rows.getLast().getBorder().getBorderInsets(rows.getLast()).bottom
+            + rows.getLast().getBorder().getBorderInsets(rows.getLast()).top,
+            "without standing any shorter for it");
 
         tracker.start(tracker.state().activities().getFirst().id());
         open(app,"Tasks");

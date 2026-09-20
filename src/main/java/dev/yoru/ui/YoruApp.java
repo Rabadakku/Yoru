@@ -620,7 +620,9 @@ public final class YoruApp extends JPanel implements Shell {
             // a longer activity name.
             var line=new JPanel(new BorderLayout(SPACE_LG,0));
             line.setOpaque(false);
-            line.setBorder(listRow());
+            // Under the last block the rule divides it from the card's edge
+            // rather than from another block, and reads as a row lost.
+            line.setBorder(b==planned.getLast()?listEnd():listRow());
             var when=b.start().atZone(zone);
             // A locale-stable day and a 24-hour time: the grid, the list and the
             // editor all say the same thing about when a block starts.
