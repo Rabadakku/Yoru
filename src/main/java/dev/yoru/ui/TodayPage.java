@@ -419,7 +419,14 @@ final class TodayPage {
         // as a row of chips and not as a week. Narrow ones, taller than they
         // are wide, are a chart even at this size.
         int height=grow(SPACE_XXL);
-        int wide=grow(SPACE_MD);
+        // Wide enough for the widest initial, measured rather than assumed: a
+        // bar's own width is a spacing step, and on a machine whose caption face
+        // draws a broader W than this one's, the letter under the bar was cut.
+        int letters=0;
+        for(int i=0;i<7;i++)
+            letters=Math.max(letters,label(initial(today.minusDays(i).getDayOfWeek()),
+                TYPE_CAPTION,MUTED).getPreferredSize().width);
+        int wide=Math.max(grow(SPACE_MD),letters+SPACE_XS);
         int width=7*wide+6*SPACE_SM;
         var days=new JPanel(new GridLayout(1,7,SPACE_SM,0));
         days.setOpaque(false);
@@ -447,9 +454,7 @@ final class TodayPage {
             // The day under its bar, as the fourteen-day chart numbers its own:
             // seven unlabelled bars leave the reader counting backwards from
             // whichever end they guess is today. Today's is the one in body ink.
-            var initial=label(day.getDayOfWeek().getDisplayName(java.time.format.TextStyle.NARROW,
-                java.util.Locale.getDefault()).toUpperCase(java.util.Locale.getDefault()),
-                TYPE_CAPTION,day.equals(today)?TEXT:MUTED);
+            var initial=label(initial(day.getDayOfWeek()),TYPE_CAPTION,day.equals(today)?TEXT:MUTED);
             initial.setHorizontalAlignment(SwingConstants.CENTER);
             initial.getAccessibleContext().setAccessibleName(day.getDayOfWeek().getDisplayName(
                 java.time.format.TextStyle.FULL,java.util.Locale.getDefault()));
@@ -461,6 +466,12 @@ final class TodayPage {
         tile.add(initials);
         return tile;
     }
+    /** A weekday in one letter, in the reader's own language. */
+    private static String initial(java.time.DayOfWeek day) {
+        return day.getDisplayName(java.time.format.TextStyle.NARROW,java.util.Locale.getDefault())
+            .toUpperCase(java.util.Locale.getDefault());
+    }
+
     private void updateTimer() {
         var a=tracker().active();
         timerLabel.setText(a==null?"00:00:00":Analytics.duration(Math.max(0,Duration.between(a.start(),tracker().now()).getSeconds())));
