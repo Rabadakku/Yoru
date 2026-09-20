@@ -10,11 +10,14 @@ import java.time.*;
 import java.util.UUID;
 
 /**
- * A daily habit's grid stands in weekday columns (#9).
+ * A daily habit's grid stands in weekday columns, and every grid in the app
+ * breaks its weeks where the vault says (#9).
  *
  * The grid is the page: whether a habit is kept on weekends or only on work
  * days is the question it answers, and it can only answer it if every column
- * is one weekday. Lives in dev.yoru.ui because HabitsPanel is package-private.
+ * is one weekday. The heat map on Today is the same promise over a year, so it
+ * starts its columns on the same day. Lives in dev.yoru.ui because HabitsPanel
+ * and Heatmap are package-private.
  */
 public final class HabitGridTest {
     private static int checks;
@@ -46,7 +49,7 @@ public final class HabitGridTest {
         SwingUtilities.invokeAndWait(()->{
             try{run();}catch(Exception e){throw new RuntimeException(e);}
         });
-        System.out.println("PASS: "+checks+" habit grid checks (weekday columns, week start, no future days)");
+        System.out.println("PASS: "+checks+" week grid checks (weekday columns, week start, no future days, heat map)");
     }
 
     private static void run()throws Exception{
@@ -84,6 +87,17 @@ public final class HabitGridTest {
             }
             check(cell(page,today).getParent().getComponentCount()==28,
                 "The grid keeps its four rows of seven whatever the week holds");
+        }
+
+        // The year on Today runs in the same weeks as the four on Habits.
+        for(DayOfWeek start:DayOfWeek.values()){
+            var map=new Heatmap(java.util.Map.of(),today,4,start);
+            map.setSize(760,180);
+            var corner=map.getToolTipText(new java.awt.event.MouseEvent(map,
+                java.awt.event.MouseEvent.MOUSE_MOVED,0,0,34,30,0,false));
+            var oldest=today.minusWeeks(51).with(java.time.temporal.TemporalAdjusters.previousOrSame(start));
+            check(corner!=null&&corner.startsWith(oldest.toString()),
+                "The heat map's first cell is the "+start+" fifty-two weeks back, got "+corner);
         }
 
         // The grid is still the way a day is corrected.

@@ -236,7 +236,8 @@ final class TodayPage {
             heat.add(emptyState("No time recorded yet.","Your first session fills this in.",null));
             return heat;
         }
-        heat.add(new Heatmap(days,today,tracker.state().settings().dailyGoalHours()));
+        heat.add(new Heatmap(days,today,tracker.state().settings().dailyGoalHours(),
+            tracker.state().settings().weekStartsOn()));
         heat.add(heatLegend(today,tracker.state().settings().dailyGoalHours()));
         return heat;
     }
