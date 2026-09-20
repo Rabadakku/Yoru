@@ -43,6 +43,7 @@ public final class VisualSystemTest {
     public static void main(String[] args) throws Exception {
         edt(VisualSystemTest::titlesAndCards);
         edt(VisualSystemTest::pages);
+        edt(VisualSystemTest::dailyGoal);
         System.out.println("PASS: " + checks + " visual system checks (titles, cards, breadcrumb, Today order, Settings sections, scroll)");
         // The windows built here leave Swing's threads running.
         System.exit(0);
@@ -69,6 +70,28 @@ public final class VisualSystemTest {
         Theme.apply(ThemeId.MIDNIGHT);
     }
 
+    private static void dailyGoal() throws Exception {
+        var repo=new Memory();
+        var now=java.time.Instant.parse("2026-09-20T12:00:00Z");
+        var tracker=new Tracker(repo,Clock.fixed(now,java.time.ZoneOffset.UTC));
+        tracker.addActivity("Invented study",30);
+        var activity=tracker.state().activities().getFirst().id();
+        var goal=new DailyGoal(tracker,java.time.ZoneOffset.UTC);
+        var progress=(JProgressBar)named(goal,"today.goal.progress");
+        check(progress.getValue()==0,"A new day starts at zero");
+        int hours=tracker.state().settings().dailyGoalHours();
+        tracker.log(activity,now.minusSeconds(hours*1800L),now);
+        goal=new DailyGoal(tracker,java.time.ZoneOffset.UTC);
+        progress=(JProgressBar)named(goal,"today.goal.progress");
+        check(progress.getValue()==50,"Recorded time fills half of the daily goal");
+        tracker.log(activity,now.minusSeconds(hours*5400L),now.minusSeconds(hours*1800L));
+        goal=new DailyGoal(tracker,java.time.ZoneOffset.UTC);
+        progress=(JProgressBar)named(goal,"today.goal.progress");
+        check(progress.getValue()==100,"Over-goal time caps the bar");
+        check(progress.getAccessibleContext().getAccessibleDescription().contains("Goal reached"),
+            "Goal completion is announced in words as well as colour");
+    }
+
     private static void pages() throws Exception {
         var repo = new Memory();
         var tracker = new Tracker(repo, Clock.systemUTC());
@@ -78,6 +101,10 @@ public final class VisualSystemTest {
 
         open(app, "Today");
         check(labels(app).stream().noneMatch(text -> text.startsWith("~/")), "no page carries a breadcrumb");
+        var controls=named(app,"today.timer.controls");
+        var goal=named(app,"today.goal");
+        check(controls!=null && goal!=null && controls.getY()<goal.getY(),
+            "The timer action comes before progress and scenery");
         var agenda = named(app, "today.agenda");
         var stats = named(app, "today.stats");
         check(agenda != null && stats != null && agenda.getY() < stats.getY(), "Today's agenda comes before its statistics");

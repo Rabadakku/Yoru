@@ -134,14 +134,13 @@ public final class YoruApp extends JPanel implements Shell {
         // strip would be twice as tall.
         var tabs = new JPanel(new FlowLayout(FlowLayout.LEFT,0,0)); tabs.setOpaque(false);
         for (var entry : PAGES) {
-            var button = button(entry.nav().toLowerCase(), () -> showPage(entry.nav()));
+            var button = button(entry.nav(), () -> showPage(entry.nav()));
             button.setName(entry.nav());
             button.getAccessibleContext().setAccessibleName(entry.nav());
             button.setContentAreaFilled(false);
-            // SPACE_XS per side, not SPACE_SM: the padding is the last thing that
-            // could push a label into an ellipsis, and the underline already
-            // separates one tab from the next.
-            button.setBorder(new EmptyBorder(SPACE_SM, SPACE_XS, SPACE_SM, SPACE_XS));
+            // Give navigation labels room to read as separate destinations.
+            // The measured window minimum includes this padding at every text size.
+            button.setBorder(new EmptyBorder(SPACE_SM, SPACE_MD, SPACE_SM, SPACE_MD));
             navigation.put(entry.nav(), button);
             tabs.add(button);
         }
@@ -291,7 +290,9 @@ public final class YoruApp extends JPanel implements Shell {
         heading.setOpaque(false);
         heading.setBorder(new EmptyBorder(0,0,SPACE_XL,0));
         // No breadcrumb: the pages are flat, and the title below already names the page (#9).
-        heading.add(label(LocalDate.now()+" · "+zone,TYPE_CAPTION,MUTED),BorderLayout.EAST);
+        var date=label(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d",Locale.ENGLISH)),TYPE_CAPTION,MUTED);
+        date.setToolTipText("Times shown in "+zone);
+        heading.add(date,BorderLayout.EAST);
         content.add(heading,BorderLayout.NORTH);
         JPanel view=switch(page) {
             case "Schedule"->schedule();
@@ -332,7 +333,7 @@ public final class YoruApp extends JPanel implements Shell {
     }
     /**
      * The tab strip at its natural width: every tab's longest label plus its two
-     * {@link Theme#SPACE_XS} insets, measured at the tab font.
+     * {@link Theme#SPACE_MD} insets, measured at the tab font.
      *
      * The Game tab grows a dot while the game runs, so that label is measured at
      * its widest. Measuring rather than guessing is what makes the window's floor
@@ -342,8 +343,8 @@ public final class YoruApp extends JPanel implements Shell {
         var metrics=getFontMetrics(labelFont());
         int strip=0;
         for(var entry:PAGES) {
-            String label=entry.nav().toLowerCase();
-            strip+=Math.max(metrics.stringWidth(label),metrics.stringWidth(label+" ●"))+2*SPACE_XS;
+            String label=entry.nav();
+            strip+=Math.max(metrics.stringWidth(label),metrics.stringWidth(label+" ●"))+2*SPACE_MD;
         }
         return strip;
     }
@@ -367,14 +368,14 @@ public final class YoruApp extends JPanel implements Shell {
         navigation.forEach((name, button) -> {
             boolean running=name.equals("Game")&&game.running();
             boolean current=name.equals(page);
-            button.setText(running?"game ●":name.toLowerCase());
-            button.setForeground(current ? CYAN : MUTED);
+            button.setText(running?"Game ●":name);
+            button.setForeground(current ? ACCENT_TEXT : MUTED);
             // The underline is drawn inside the tab's own padding and that padding
             // keeps the resting height exactly: the strip no longer stretches its
             // tabs to a shared cell, so a tab that changed height when it was
             // opened would nudge every tab beside it.
-            button.setBorder(new CompoundBorder(new MatteBorder(0,0,RING,0,current?CYAN:shade(BG,DARK?-8:-14)),
-                new EmptyBorder(SPACE_SM,SPACE_XS,SPACE_SM-RING,SPACE_XS)));
+            button.setBorder(new CompoundBorder(new MatteBorder(0,0,RING,0,current?ACCENT_TEXT:shade(BG,DARK?-8:-14)),
+                new EmptyBorder(SPACE_SM,SPACE_MD,SPACE_SM-RING,SPACE_MD)));
             // Which page is open was said in colour alone, and the Game tab's dot
             // was painted but never spoken. Both ride on the accessible name, in
             // the one place the colours are applied, so nothing can drift.
