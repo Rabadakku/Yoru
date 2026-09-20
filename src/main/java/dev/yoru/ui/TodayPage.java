@@ -390,7 +390,9 @@ final class TodayPage {
 
     private JPanel stat(String title,String value) {
         var p=card();
-        p.add(label(title,TYPE_CAPTION,MUTED));
+        // The same signpost every other card carries: these are cards, and a
+        // muted caption made the three of them read as a footnote to the page.
+        p.add(sectionHeader(title));
         gap(p,SPACE_MD);
         p.add(label(value,TYPE_FIGURE,TEXT));
         return p;
