@@ -1,10 +1,11 @@
 # Yoru roadmap
 
-## UI improvements for 1.0.12 — September 20, 2026
+## Tagged 1.0.12 — September 20, 2026
 
-On `codex/ui-polish`, based on released 1.0.11. Tracked in
-[issue #34](https://github.com/Rabadakku/Yoru/issues/34) and
-[PR #35](https://github.com/Rabadakku/Yoru/pull/35).
+Merged from `codex/ui-polish` in
+[PR #35](https://github.com/Rabadakku/Yoru/pull/35), based on 1.0.11, and tagged
+[v1.0.12](https://github.com/Rabadakku/Yoru/releases/tag/v1.0.12).
+The release handoff is tracked in [issue #34](https://github.com/Rabadakku/Yoru/issues/34).
 See [RELEASE-1.0.12.md](RELEASE-1.0.12.md) for the scope.
 
 - Done: task search across titles, notes and tags, retained task view state,
@@ -12,7 +13,9 @@ See [RELEASE-1.0.12.md](RELEASE-1.0.12.md) for the scope.
   pages, navigation spacing, light-theme action contrast and rounded borders.
 - Checks: full isolated suite passes, including 100 rendered views and 3,888
   long-name layout checks across all four text sizes. All five theme galleries
-  were visually reviewed. Installer builds remain the release gate.
+  were visually reviewed. GitHub checks passed on Java 25 and the release's
+  Java 22 runtime. The tag workflow builds the three platform installers and
+  attaches them to the release.
 - Limits: no claim of a new full-source audit, clean-machine install or native
   campaign verification. No changes to the vault format or reward economy.
 
