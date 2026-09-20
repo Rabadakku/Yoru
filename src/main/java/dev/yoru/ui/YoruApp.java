@@ -57,6 +57,8 @@ public final class YoruApp extends JPanel implements Shell {
 
     /** The size the pages are reviewed at: the frame never opens smaller than this. */
     private static final int MIN_WINDOW_WIDTH=900, MIN_WINDOW_HEIGHT=640;
+    /** How tall the fourteen-day chart's plot stands, goal line and all. */
+    private static final int CHART_HEIGHT=120;
 
     /**
      * One row per page: the tab's label, the id the breadcrumb shows, and the
@@ -746,13 +748,60 @@ public final class YoruApp extends JPanel implements Shell {
             chart.add(emptyState("No time recorded yet.","Your first session fills this in.",null));
         } else {
             int goal=tracker.state().settings().dailyGoalHours();
-            var bars=new JPanel(new GridLayout(1,14,SPACE_SM,0));
-            bars.setOpaque(false);
             long max=3600;
             for(int i=0;i<14;i++)max=Math.max(max,days.getOrDefault(LocalDate.now().minusDays(i),0L));
-            // The day numbers sit in their own row under the floor, so the
-            // bars share one baseline instead of each ending wherever its own
-            // column's label began.
+            // The goal is part of the scale, so the fortnight is drawn against
+            // what the days were for and not only against their own best one: a
+            // quiet fortnight used to stretch to fill the card and look like a
+            // busy one. The dashes across the bars are where the goal falls, so
+            // the chart answers "did I get there" without any arithmetic.
+            long goalSeconds=Math.max(1,goal*3600L);
+            max=Math.max(max,goalSeconds);
+            int floor=grow(CHART_HEIGHT);
+            int span=floor-SPACE_XL; // air over the goal line, so it reads as part of the chart
+                                     // rather than as a rule under the durations above it
+            int goalLine=(int)(span*goalSeconds/max);
+            // The chart keeps its full height whatever the fortnight held, so
+            // the goal line has somewhere to be drawn even when no day reached
+            // it, and two visits to this page compare like with like.
+            var bars=new JPanel(new GridLayout(1,14,SPACE_SM,0)) {
+                @Override public Dimension getPreferredSize() { return tall(super.getPreferredSize()); }
+                @Override public Dimension getMinimumSize() { return tall(super.getMinimumSize()); }
+                @Override public Dimension getMaximumSize() { return tall(super.getMaximumSize()); }
+                private Dimension tall(Dimension d) { return new Dimension(d.width,floor); }
+                @Override protected void paintComponent(Graphics g) {
+                    super.paintComponent(g);
+                    var ink=(Graphics2D)g.create();
+                    ink.setColor(LINE);
+                    // A miter limit under 1 is rejected outright, and dashes are
+                    // the only thing this stroke ever draws.
+                    ink.setStroke(new BasicStroke(HAIRLINE,BasicStroke.CAP_BUTT,BasicStroke.JOIN_ROUND,
+                        HAIRLINE,new float[]{SPACE_XS,SPACE_XS},0));
+                    int y=getHeight()-goalLine;
+                    ink.drawLine(0,y,getWidth(),y);
+                    ink.dispose();
+                }
+            };
+            bars.setOpaque(false);
+            bars.setToolTipText("The dashed line is your "+goal+"h daily goal");
+            // The day numbers sit in their own row under the floor, and the
+            // durations in their own row over it, so the bars share one
+            // baseline and one ceiling instead of each starting and ending
+            // wherever its own column's label left off.
+            // Two lines of room whatever the text size: a column is narrow, and
+            // at 200% "2h 45m" wraps. A grid asks its cells how tall they are
+            // before it has told them how wide they will be, so a wrapping
+            // caption reports one line and loses its second — the band is sized
+            // for the wrap up front, and the captions sit on its floor.
+            int caption=label("0m",TYPE_CAPTION,MUTED).getPreferredSize().height;
+            var durations=new JPanel(new GridLayout(1,14,SPACE_SM,0)) {
+                @Override public Dimension getPreferredSize() { return band(super.getPreferredSize()); }
+                @Override public Dimension getMinimumSize() { return band(super.getMinimumSize()); }
+                @Override public Dimension getMaximumSize() { return band(super.getMaximumSize()); }
+                private Dimension band(Dimension d) { return new Dimension(d.width,2*caption); }
+            };
+            durations.setOpaque(false);
+            durations.setAlignmentX(0);
             var dayNumbers=new JPanel(new GridLayout(1,14,SPACE_SM,0));
             dayNumbers.setOpaque(false);
             dayNumbers.setAlignmentX(0);
@@ -761,8 +810,6 @@ public final class YoruApp extends JPanel implements Shell {
                 long sec=days.getOrDefault(d,0L);
                 boolean none=sec==0;
                 var cell=stack();
-                // Wraps onto two lines when a larger text size leaves the column too narrow (#31).
-                cell.add(wrapping(Analytics.report(sec),TYPE_CAPTION,MUTED));
                 glue(cell);
                 // A day with nothing on it is a hairline on the baseline rather
                 // than the two-pixel stub of the lightest tier it used to be:
@@ -770,16 +817,27 @@ public final class YoruApp extends JPanel implements Shell {
                 // week looked like a broken chart instead of a quiet week. The
                 // rest are coloured by the time recorded, not by the column's
                 // index, so the chart agrees with the heat map above it.
-                int height=none?HAIRLINE:Math.max(RING,(int)(100*sec/max));
+                int height=none?HAIRLINE:Math.max(RING,(int)(span*sec/max));
                 var bar=new Theme.Bar(none?LINE:Heatmap.colour(d,sec,goal));
                 bar.setPreferredSize(new Dimension(25,height));
                 bar.setMaximumSize(new Dimension(60,height));
+                bar.setToolTipText(d+" · "+Analytics.report(sec));
                 cell.add(bar);
                 bars.add(cell);
-                dayNumbers.add(label(""+d.getDayOfMonth(),TYPE_CAPTION,MUTED));
+                // A day with nothing on it says nothing: fourteen captions, half
+                // of them "0m", were a row of noise over a row of hairlines.
+                // Wraps onto two lines when a larger text size leaves the column too narrow (#31).
+                var duration=wrapping(none?"":Analytics.report(sec),TYPE_CAPTION,MUTED);
+                duration.setVerticalAlignment(SwingConstants.BOTTOM);
+                durations.add(duration);
+                // Today's number is the one in body ink: the chart then says
+                // which end is now without counting the columns.
+                dayNumbers.add(label(""+d.getDayOfMonth(),TYPE_CAPTION,d.equals(LocalDate.now())?TEXT:MUTED));
             }
             bars.setAlignmentX(0);
             bars.setBorder(new javax.swing.border.MatteBorder(0,0,HAIRLINE,0,LINE));
+            chart.add(durations);
+            gap(chart,SPACE_SM);
             chart.add(bars);
             gap(chart,SPACE_SM);
             chart.add(dayNumbers);
