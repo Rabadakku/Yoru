@@ -326,17 +326,17 @@ final class GamePage {
      */
     private void needCore(JPanel p, Path looked) {
         var box = card();
-        box.add(emptyState("No emulator core yet.",
-            "Yoru plays the game through mGBA's libretro core. RetroArch's core downloader installs it,"
-                + " or point Yoru at one you have.", null));
-        gap(box, SPACE_LG);
         var choose = button("Choose core…", () -> {
             var picked = Dialogs.chooseFile(shell.owner(), "Choose the emulator core", "libretro core", "dylib", "so", "dll");
             if (picked != null) { GameFiles.rememberCore(picked); shell.show("Game"); }
         });
         // The full path, for when the caption is clipped in a narrow window.
         choose.setToolTipText("Yoru looked in " + looked);
-        box.add(choose);
+        // The control belongs to the empty state, as it does on every other one:
+        // added after it, the card carried a band of nothing between the two.
+        box.add(emptyState("No emulator core yet.",
+            "Yoru plays the game through mGBA's libretro core. RetroArch's core downloader installs it,"
+                + " or point Yoru at one you have.", choose));
         gap(box, SPACE_MD);
         box.add(bodyLabel("Choose the mGBA core installed by RetroArch. Your existing save remains available above."));
         p.add(box);
