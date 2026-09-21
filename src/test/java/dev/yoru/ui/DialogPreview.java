@@ -54,17 +54,12 @@ public final class DialogPreview {
             try {
                 Theme.install();
 
-                // The launcher's welcome card: the first screen anyone sees.
-                var welcome = card();
-                welcome.add(Logo.lockup(34, CYAN));
-                gap(welcome, 14);
-                welcome.add(label("Your local workspace", 18, TEXT));
-                gap(welcome, 12);
-                welcome.add(label("Create a workspace once. Reopen it here next time.", 13, MUTED));
-                gap(welcome, 12);
-                welcome.add(label("Your data stays on this computer. No account required.", 12, MUTED));
+                // The launcher's welcome card: the first screen anyone sees,
+                // drawn by the launcher itself so this cannot drift from it.
+                // The vault names are invented, as every fixture's are.
+                var welcome = VaultLauncher.welcome(java.util.List.of("Invented", "Second"), null);
                 render(out, "welcome", welcome,
-                    new String[]{"Open recent", "Create workspace", "Browse…", "Cancel"});
+                    new String[]{"Open Invented", "Another vault…", "New vault…", "Rename or delete…", "Quit"});
 
                 // Mirrors Dialogs.error.
                 var failure = stack();
@@ -108,9 +103,12 @@ public final class DialogPreview {
                     public void close() { }
                 };
                 var tracker = new Tracker(memory, Clock.systemUTC());
+                // Three invented tags, and three distinct names: a repeated one
+                // is refused, and the refusal stopped this preview before it
+                // drew the tag editor or anything after it.
                 tracker.addTag("Reading", 0x90D8DA);
                 tracker.addTag("Language", 0xE8B24C);
-                tracker.addTag("Reading", 0xA98BD4);
+                tracker.addTag("Practice", 0xA98BD4);
                 render(out, "tags", new TagEditor(tracker, () -> { }), new String[]{"Done"});
 
                 // The weekly template: the only dialog that groups by weekday.
