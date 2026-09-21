@@ -1,5 +1,43 @@
 # Yoru roadmap
 
+## Defects found after 1.0.13 — September 21, 2026
+
+On `claude/defects`, from released 1.0.13. Not released yet.
+
+The text size setting (#31) reached every label in the app and none of the
+three views that are drawn rather than laid out. At 200% the heat map wrote
+its month names half above its own top edge, the month calendar cut the tops
+off its weekday names and stood its day numbers over the chips beneath them,
+and the week grid printed the day names over the PLAN and ACTUAL labels under
+them, ran the hours into the first column and wrote every block's title
+outside the block. All three now measure their bands, gutters, rows and
+baselines against the face in use, with the designed numbers kept as floors.
+
+Two of them held metrics taken once for the life of the JVM, so a reader who
+changed the size while the app was open had every later chip measured and
+elided in the old one. Metrics are now held for the life of a face.
+
+Beside that: the vault launcher, the first screen anybody sees, wrote its own
+11, 13, 18 and 20 px type and spaced itself in tens and fourteens; it is on
+the scale now and in the foundation check's list. The dialog gallery the eye
+reviews those screens in had been drawing its own stale copy of the launcher's
+welcome card ("Your local workspace", "Browse…"), and had added the same tag
+name twice, which the tracker refuses — the refusal had been stopping the
+gallery three dialogs in, so the tag editor and the weekly template had not
+been drawn in some time. Both fixed; the gallery draws the launcher's own card.
+
+- Checks: the full isolated suite after every change. `TextSizeTest` now holds
+  the three drawn views to the setting: each asks for more room at 200%, the
+  bands their headings are written in grow with them, and the week grid still
+  reports a block where it drew it. Every page was read as a render at 100%,
+  125% and 200%.
+- Found and deliberately left: the app writes clock times two ways — the
+  schedule grid, the agenda and the planned list in 24 hours, the fields and
+  the weekly template in 12 — and a comment in the grid claims they agree.
+  Which way round is the owner's call, not a defect to fix in passing.
+  `Theme` offers nine role faces and three have no caller; the set is a
+  vocabulary, not dead weight, so it stays whole.
+
 ## Release 1.0.13 — September 20, 2026
 
 Built on `claude/ui-craft` from released 1.0.12, and released as
