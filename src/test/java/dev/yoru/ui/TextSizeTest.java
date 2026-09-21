@@ -73,7 +73,7 @@ public final class TextSizeTest {
      * into the first column of days, and the cells stayed the size they were
      * designed at under text twice as tall.
      */
-    private static void drawnViews() {
+    private static void drawnViews() throws Exception {
         var today = java.time.LocalDate.now();
         TextSize.use(100);
         var designed = new Heatmap(java.util.Map.of(), today, 4, java.time.DayOfWeek.MONDAY);
@@ -93,6 +93,7 @@ public final class TextSizeTest {
         // a point that was the first day of a week at 100% is now beside it.
         check(reading(large, 40, tall / 2) == null, "the initials' column has grown with them too");
         drawnCalendar();
+        drawnWeek();
     }
 
     /**
@@ -123,6 +124,43 @@ public final class TextSizeTest {
         check(large.dateAt(new java.awt.Point(20, 30)) == null,
             "the band the weekday names are written in has grown with them");
         check(large.dateAt(new java.awt.Point(20, tall / 2)) != null, "and the days are still under it");
+    }
+
+    /**
+     * The week grid is the third drawn view, and was the worst cut of the
+     * three: at 200% the day names were printed over the lane labels beneath
+     * them, the hours ran into the grid, and every block's title sat outside
+     * the block it belonged to.
+     */
+    private static void drawnWeek() throws Exception {
+        var repo = new Memory();
+        var tracker = new dev.yoru.application.Tracker(repo, java.time.Clock.systemUTC());
+        tracker.addActivity("Invented study", 0);
+        var activity = tracker.state().activities().getFirst().id();
+        var monday = java.time.LocalDate.parse("2026-09-07");
+        var zone = java.time.ZoneId.of("UTC");
+        tracker.plan(activity, java.time.Instant.parse("2026-09-08T09:00:00Z"),
+            java.time.Instant.parse("2026-09-08T11:00:00Z"));
+        var block = tracker.state().blocks().getFirst().id();
+        var now = java.time.Instant.parse("2026-09-09T15:00:00Z");
+
+        TextSize.use(100);
+        int small = new ScheduleGrid(tracker.state(), monday, zone, now).getPreferredSize().height;
+        TextSize.use(200);
+        var large = new ScheduleGrid(tracker.state(), monday, zone, now);
+        int tall = large.getPreferredSize().height;
+        check(tall > small, "at 200% the week grid asks for the room its text needs: " + tall + " against " + small);
+        large.setSize(900, tall);
+        // Self-consistent at that size: the grid reports a block where it drew it.
+        check(block.equals(large.actionableAt(large.pointOn(block))),
+            "and a block is still where the grid says it is");
+    }
+
+    private static final class Memory implements dev.yoru.application.Repository {
+        dev.yoru.domain.Model.State state = dev.yoru.domain.Model.State.empty();
+        public dev.yoru.domain.Model.State load() { return state; }
+        public void save(dev.yoru.domain.Model.State next) { state = next; }
+        public void close() { }
     }
 
     /** What the map says about the day under a point, or null where there is no day. */
