@@ -21,7 +21,8 @@ import java.util.UUID;
  * the information worth seeing.
  */
 final class ScheduleGrid extends JPanel {
-    private static final int GUTTER=46, HEADER=30, MIN_ROW=34;
+    /** The designed measurements: floors that the text in them may raise. */
+    private static final int GUTTER=46, HEADER=30, MIN_ROW=34, MIN_ROW_TIGHT=24, FLOOR_ROW=18;
     /** Grab band at a block's edges, and the quarter-hour the grid snaps to. */
     private static final int EDGE=7, SNAP=15;
     /**
@@ -37,20 +38,61 @@ final class ScheduleGrid extends JPanel {
     /** The shortest any block is drawn, so a span of a few minutes is still a mark on the grid. */
     private static final int MIN_BLOCK=14;
 
-    /**
-     * Where a block writes its own name, and then its length or the word
-     * "running": the two baselines measured down from the block's top edge, and
-     * the heights at which each line has room to be drawn at all.
-     *
-     * The four numbers are named because two parts of the grid depend on them:
-     * the painter below, and the room a live block has to leave the block it
-     * lands on (see {@link #liveCeiling}). A block's own words are the only
-     * thing a short block has to say, so nothing may be drawn over them.
-     */
-    private static final int LABEL_TITLE=14, LABEL_LENGTH=26;
-    private static final int LABEL_TITLE_MIN=16, LABEL_LENGTH_MIN=30;
     /** How far the ink of a label reaches below its baseline: the air the growth must leave. */
     private static final int LABEL_DESCENT=Theme.SPACE_XS;
+
+    // ---- measurements ------------------------------------------------------
+    //
+    // The grid is drawn rather than laid out, so each number above is a floor
+    // rather than the answer: the text size the reader chose (#31) grows the
+    // lettering and would otherwise leave the room it is drawn in exactly where
+    // it was. At 200% the day names were printed over the lane labels beneath
+    // them, the hours ran into the grid, and a block's own title sat outside
+    // the block. The faces are measured once per face, not once per JVM: the
+    // reader can change the size while the app is open.
+
+    private static Font measuredFace;
+    private static FontMetrics captionHeld, bodyHeld;
+
+    private static void measure() {
+        var face=Theme.captionFont();
+        if(face.equals(measuredFace)) return;
+        var scratch=new java.awt.image.BufferedImage(1,1,java.awt.image.BufferedImage.TYPE_INT_ARGB).createGraphics();
+        captionHeld=scratch.getFontMetrics(face);
+        bodyHeld=scratch.getFontMetrics(Theme.bodyFont());
+        scratch.dispose();
+        measuredFace=face;
+    }
+    private static FontMetrics caption() { measure(); return captionHeld; }
+    private static FontMetrics body() { measure(); return bodyHeld; }
+
+    /** The column the hours are written in, left of the grid. */
+    private static int gutter() { return Math.max(Theme.grow(GUTTER),caption().stringWidth("00")+Theme.SPACE_XL); }
+
+    /** The band over the grid: the day's name, and the two lane labels under it. */
+    private static int header() { return Math.max(Theme.grow(HEADER),2*caption().getHeight()+Theme.SPACE_XS); }
+
+    private static int minRow() { return Math.max(Theme.grow(MIN_ROW),caption().getHeight()+Theme.SPACE_MD); }
+    private static int tightRow() { return Math.max(Theme.grow(MIN_ROW_TIGHT),caption().getHeight()+Theme.SPACE_XS); }
+    private static int floorRow() { return Math.max(Theme.grow(FLOOR_ROW),caption().getHeight()); }
+
+    /**
+     * A block's own two lines: where each sits, and the height each one needs.
+     *
+     * A block writes its own name, and then its length or the word "running",
+     * in the first lines under its top edge, and for a block too short to hold
+     * a chart those lines are all it has to say. Two parts of the grid read
+     * them: the painter below, and the room a live block has to leave the block
+     * it lands on (see {@link #liveCeiling}), so nothing may be drawn over a
+     * short block's only words.
+     */
+    private static int titleBaseline() { return body().getAscent()+Theme.SPACE_XS; }
+    private static int lengthBaseline() { return titleBaseline()+caption().getHeight(); }
+    private static int titleRoom() { return titleBaseline()+Theme.grow(LABEL_DESCENT); }
+    private static int lengthRoom() { return lengthBaseline()+Theme.grow(LABEL_DESCENT); }
+
+    private static int runningMin() { return Math.max(Theme.grow(RUNNING_MIN),titleRoom()); }
+    private static int minBlock() { return Theme.grow(MIN_BLOCK); }
 
     /**
      * The mark a shortened title ends in: one glyph, U+2026.
@@ -129,16 +171,16 @@ final class ScheduleGrid extends JPanel {
         endHour=Math.min(24,Math.max(startHour+6,latest+1));
 
         int rows=endHour-startHour;
-        setPreferredSize(new Dimension(880,HEADER+rows*MIN_ROW+8));
-        setMinimumSize(new Dimension(420,HEADER+rows*24+8));
+        setPreferredSize(new Dimension(880,header()+rows*minRow()+Theme.SPACE_SM));
+        setMinimumSize(new Dimension(420,header()+rows*tightRow()+Theme.SPACE_SM));
         getAccessibleContext().setAccessibleName("Week of "+weekStart+", recorded sessions, planned blocks and the weekly template");
         if(edits!=null) install(edits);
     }
 
     private static int snap(int minute) { return Math.max(0,Math.min(24*60,Math.round(minute/(float)SNAP)*SNAP)); }
-    private int minuteAt(int y) { return startHour*60+(y-HEADER)*60/Math.max(1,rowHeight()); }
-    private int columnAt(int x) { return Math.max(0,Math.min(6,(x-GUTTER)/Math.max(1,columnWidth()))); }
-    private boolean inGrid(Point at) { return at.x>=GUTTER && at.y>=HEADER && at.y<=yFor(endHour*60); }
+    private int minuteAt(int y) { return startHour*60+(y-header())*60/Math.max(1,rowHeight()); }
+    private int columnAt(int x) { return Math.max(0,Math.min(6,(x-gutter())/Math.max(1,columnWidth()))); }
+    private boolean inGrid(Point at) { return at.x>=gutter() && at.y>=header() && at.y<=yFor(endHour*60); }
     private Instant instantAt(int day,int minute) {
         return weekStart.plusDays(day).atStartOfDay(zone).plusMinutes(minute).toInstant();
     }
@@ -266,21 +308,21 @@ final class ScheduleGrid extends JPanel {
         }
     }
 
-    private int columnWidth() { return Math.max(40,(getWidth()-GUTTER)/7); }
-    private int rowHeight() { return Math.max(18,(getHeight()-HEADER-8)/Math.max(1,endHour-startHour)); }
-    private int yFor(int minute) { return HEADER+(minute-startHour*60)*rowHeight()/60; }
+    private int columnWidth() { return Math.max(40,(getWidth()-gutter())/7); }
+    private int rowHeight() { return Math.max(floorRow(),(getHeight()-header()-Theme.SPACE_SM)/Math.max(1,endHour-startHour)); }
+    private int yFor(int minute) { return header()+(minute-startHour*60)*rowHeight()/60; }
 
     /** Where the two lanes of a day begin. Plan on the left, actual on the right. */
     private int laneX(int day,boolean planned) {
         int colW=columnWidth();
-        return GUTTER+day*colW+(planned?0:colW/2);
+        return gutter()+day*colW+(planned?0:colW/2);
     }
     private int laneWidth() { return Math.max(12,columnWidth()/2); }
 
     private Rectangle boundsOf(Segment s) {
         int y=yFor(s.fromMinute());
         int bottom=yFor(s.toMinute());
-        int height=Math.max(MIN_BLOCK,bottom-y);
+        int height=Math.max(minBlock(),bottom-y);
         // A live session grows up from the now-line, never down past it: the
         // block may not claim minutes that have not happened yet, and anchoring
         // it keeps it joined to the recorded block above rather than floating
@@ -288,14 +330,14 @@ final class ScheduleGrid extends JPanel {
         // that had just started was drawn straight over the session that had
         // just ended and cut its "01:30" in half, so the live block reaches only
         // as far up as the text above it leaves blank — and never starts below
-        // the line itself. Where the two leave it less than MIN_BLOCK, the label
+        // the line itself. Where the two leave it less than a block's floor, the label
         // wins and the live block is drawn short: a pill on the now-line still
         // says a session is running, a covered label says nothing at all.
         if(s.running()) {
             // The two bounds are the text above and the line below; where they
             // meet, the live block is as tall as the gap between them allows.
             int ceiling=Math.min(liveCeiling(s,bottom),bottom-Theme.HAIRLINE);
-            y=Math.max(bottom-Math.max(RUNNING_MIN,height),ceiling);
+            y=Math.max(bottom-Math.max(runningMin(),height),ceiling);
             height=bottom-y;
         }
         // Two lanes per day (#35): the plan and what actually happened, side by
@@ -316,7 +358,7 @@ final class ScheduleGrid extends JPanel {
      * the whole of it.
      */
     private int liveCeiling(Segment running,int bottom) {
-        int ceiling=bottom-RUNNING_MIN;
+        int ceiling=bottom-runningMin();
         for(var other:segments) {
             // The plan lane is never reached, and a block starting below the
             // now-line is never grown into: only what this block lands on counts.
@@ -330,8 +372,8 @@ final class ScheduleGrid extends JPanel {
 
     /** How far under its own top edge a block's text reaches, at the height it is drawn. */
     private static int labelFoot(int height) {
-        if(height>=LABEL_LENGTH_MIN) return LABEL_LENGTH+LABEL_DESCENT;
-        if(height>=LABEL_TITLE_MIN) return LABEL_TITLE+LABEL_DESCENT;
+        if(height>=lengthRoom()) return lengthRoom();
+        if(height>=titleRoom()) return titleRoom();
         return 0;
     }
 
@@ -376,16 +418,16 @@ final class ScheduleGrid extends JPanel {
         for(int d=0;d<7;d++) {
             var day=weekStart.plusDays(d);
             boolean isToday=day.equals(today);
-            int x=GUTTER+d*colW;
+            int x=gutter()+d*colW;
             if(isToday) {
                 g.setColor(Theme.shade(Theme.PANEL,Theme.DARK?12:-10));
                 g.fillRect(x,0,colW,getHeight());
             }
             g.setColor(isToday?Theme.CYAN:Theme.MUTED);
             String text=day.getDayOfWeek().toString().substring(0,3)+" "+day.getDayOfMonth();
-            g.drawString(text,x+(colW-g.getFontMetrics().stringWidth(text))/2,14);
+            g.drawString(text,x+(colW-g.getFontMetrics().stringWidth(text))/2,caption().getAscent()+Theme.SPACE_XS);
             // Lane labels, only where there is room for them to be read.
-            if(colW>=96) {
+            if(colW>=2*(caption().stringWidth("ACTUAL")+Theme.SPACE_SM)) {
                 g.setFont(Theme.captionFont());
                 // Muted as it stands on a light ground, a shade back on a dark
                 // one. Lightening muted on Linen and Sakura measured 3.3:1 —
@@ -394,8 +436,9 @@ final class ScheduleGrid extends JPanel {
                 // exactly the shade they had.
                 g.setColor(Theme.DARK?Theme.shade(Theme.MUTED,-25):Theme.MUTED);
                 var metrics=g.getFontMetrics();
-                g.drawString("PLAN",x+(colW/2-metrics.stringWidth("PLAN"))/2,26);
-                g.drawString("ACTUAL",x+colW/2+(colW/2-metrics.stringWidth("ACTUAL"))/2,26);
+                int lane=caption().getHeight()+caption().getAscent()+Theme.SPACE_XS;
+                g.drawString("PLAN",x+(colW/2-metrics.stringWidth("PLAN"))/2,lane);
+                g.drawString("ACTUAL",x+colW/2+(colW/2-metrics.stringWidth("ACTUAL"))/2,lane);
                 g.setFont(Theme.captionFont());
             }
         }
@@ -405,22 +448,22 @@ final class ScheduleGrid extends JPanel {
         for(int hour=startHour;hour<=endHour;hour++) {
             int y=yFor(hour*60);
             g.setColor(Theme.LINE);
-            g.drawLine(GUTTER,y,w,y);
+            g.drawLine(gutter(),y,w,y);
             g.setColor(Theme.MUTED);
-            g.drawString(String.format("%02d",hour),10,y+4);
+            g.drawString(String.format("%02d",hour),(gutter()-caption().stringWidth("00"))/2,y+caption().getAscent()/2);
             if(hour<endHour) {
                 g.setColor(Theme.shade(Theme.LINE,Theme.DARK?-8:10));
                 int half=y+rowH/2;
-                for(int x=GUTTER;x<w;x+=6) g.drawLine(x,half,x+2,half);
+                for(int x=gutter();x<w;x+=6) g.drawLine(x,half,x+2,half);
             }
         }
         g.setColor(Theme.LINE);
-        for(int d=0;d<=7;d++) g.drawLine(GUTTER+d*colW,HEADER,GUTTER+d*colW,yFor(endHour*60));
+        for(int d=0;d<=7;d++) g.drawLine(gutter()+d*colW,header(),gutter()+d*colW,yFor(endHour*60));
         // The lane divider, lighter than the day rule so a day still reads as one.
         g.setColor(Theme.shade(Theme.LINE,Theme.DARK?-10:12));
         for(int d=0;d<7;d++) {
-            int x=GUTTER+d*colW+colW/2;
-            for(int y=HEADER;y<yFor(endHour*60);y+=5) g.drawLine(x,y,x,y+2);
+            int x=gutter()+d*colW+colW/2;
+            for(int y=header();y<yFor(endHour*60);y+=5) g.drawLine(x,y,x,y+2);
         }
 
         // Planned first, so recorded time reads on top of the intention.
@@ -435,12 +478,14 @@ final class ScheduleGrid extends JPanel {
             if(minute>=startHour*60&&minute<=endHour*60) {
                 int y=yFor(minute);
                 g.setColor(Theme.DANGER);
-                g.fillRoundRect(2,y-9,42,18,Theme.RADIUS,Theme.RADIUS);
+                int chip=caption().getHeight()+Theme.SPACE_XS;
+                g.fillRoundRect(2,y-chip/2,caption().stringWidth("00:00")+Theme.SPACE_SM,chip,
+                    Theme.RADIUS,Theme.RADIUS);
                 g.setColor(Theme.DARK?Theme.BG:Theme.PANEL);
                 g.setFont(Theme.captionFont());
-                g.drawString(String.format("%02d:%02d",minute/60,minute%60),7,y+4);
+                g.drawString(String.format("%02d:%02d",minute/60,minute%60),2+Theme.SPACE_XS,y+caption().getAscent()/2);
                 g.setColor(Theme.DANGER);
-                g.drawLine(GUTTER,y,w,y);
+                g.drawLine(gutter(),y,w,y);
             }
         }
         // The block being dragged, drawn over everything so it is never hidden.
@@ -456,7 +501,8 @@ final class ScheduleGrid extends JPanel {
             g.setColor(Theme.CYAN);
             g.drawRoundRect(x,y,laneWidth()-6,height,8,8);
             g.setFont(Theme.captionFont());
-            g.drawString(String.format("%02d:%02d – %02d:%02d",span[0]/60,span[0]%60,span[1]/60,span[1]%60),x+4,y+14);
+            g.drawString(String.format("%02d:%02d – %02d:%02d",span[0]/60,span[0]%60,span[1]/60,span[1]%60),
+                x+4,y+caption().getAscent()+Theme.SPACE_XS);
         }
         g.dispose();
     }
@@ -474,7 +520,8 @@ final class ScheduleGrid extends JPanel {
             g.setStroke(plain);
             g.setFont(Theme.captionFont());
             g.setColor(Theme.MUTED);
-            if(box.height>=18) g.drawString(s.repeating()?"weekly":"planned",box.x+6,box.y+12);
+            if(box.height>=titleRoom())
+                g.drawString(s.repeating()?"weekly":"planned",box.x+6,box.y+caption().getAscent()+Theme.SPACE_XS);
             return;
         }
         g.setColor(s.colour());
@@ -494,14 +541,14 @@ final class ScheduleGrid extends JPanel {
         // Labels only where they will not be clipped mid-glyph, and shortened on
         // grapheme boundaries when they are. The heights are the ones liveCeiling
         // reads to know how much room a live block has to leave.
-        if(box.height<LABEL_TITLE_MIN) return;
+        if(box.height<titleRoom()) return;
         g.setColor(Theme.DARK?Theme.BG:Theme.PANEL);
         g.setFont(Theme.bodyFont());
-        g.drawString(clip(g,s.label(),box.width-12),box.x+6,box.y+LABEL_TITLE);
-        if(box.height>=LABEL_LENGTH_MIN) {
+        g.drawString(clip(g,s.label(),box.width-12),box.x+6,box.y+titleBaseline());
+        if(box.height>=lengthRoom()) {
             g.setFont(Theme.captionFont());
             g.drawString(s.running()?"running"
-                :Analytics.duration((s.toMinute()-s.fromMinute())*60L).substring(0,5),box.x+6,box.y+LABEL_LENGTH);
+                :Analytics.duration((s.toMinute()-s.fromMinute())*60L).substring(0,5),box.x+6,box.y+lengthBaseline());
         }
     }
 
