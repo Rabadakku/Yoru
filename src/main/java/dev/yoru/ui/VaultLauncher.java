@@ -40,6 +40,32 @@ final class VaultLauncher {
     record Opened(VaultStore store, String name, EncryptedVault vault, char[] secret) { }
 
     /**
+     * The first screen anybody sees: what Yoru holds, and where it holds it.
+     *
+     * Built here rather than inside the flow below so that the preview the eye
+     * is reviewed against draws this card and not a copy of it — the copy said
+     * "Your local workspace" for two releases after this one stopped.
+     */
+    static JPanel welcome(List<String> names, String notice) {
+        var welcome = card();
+        welcome.add(Logo.lockup(34, CYAN)); gap(welcome, SPACE_LG);
+        welcome.add(label("Your vaults", TYPE_HEADING, TEXT)); gap(welcome, SPACE_MD);
+        if (names.isEmpty()) {
+            welcome.add(label("Yoru keeps your vaults in its own folder on this computer,", TYPE_LABEL, TEXT));
+            welcome.add(label("so there is no file to find and no save path to choose.", TYPE_LABEL, TEXT));
+        } else {
+            welcome.add(label(names.size() + " vault" + (names.size() == 1 ? "" : "s")
+                + " on this computer, kept by Yoru.", TYPE_LABEL, TEXT));
+            gap(welcome, SPACE_SM);
+            welcome.add(label("Open, rename or delete one here. Nothing asks you for a file.", TYPE_CAPTION, MUTED));
+        }
+        gap(welcome, SPACE_MD);
+        welcome.add(label("Your data stays on this computer. No account required.", TYPE_CAPTION, MUTED));
+        if (notice != null) { gap(welcome, SPACE_SM); welcome.add(label(notice, TYPE_CAPTION, CYAN)); }
+        return welcome;
+    }
+
+    /**
      * The welcome flow: pick a vault, make one, manage them, or leave.
      *
      * Runs the migration first, so a person who has vaults from an older build
@@ -57,21 +83,7 @@ final class VaultLauncher {
             try { names = store.names(); }
             catch (Exception e) { Dialogs.error(null, "Yoru could not read its vault folder", e.getMessage()); return null; }
 
-            var welcome = card();
-            welcome.add(Logo.lockup(34, CYAN)); gap(welcome, 14);
-            welcome.add(label("Your vaults", 18, TEXT)); gap(welcome, 12);
-            if (names.isEmpty()) {
-                welcome.add(label("Yoru keeps your vaults in its own folder on this computer,", 13, TEXT));
-                welcome.add(label("so there is no file to find and no save path to choose.", 13, TEXT));
-            } else {
-                welcome.add(label(names.size() + " vault" + (names.size() == 1 ? "" : "s")
-                    + " on this computer, kept by Yoru.", 13, TEXT));
-                gap(welcome, 8);
-                welcome.add(label("Open, rename or delete one here. Nothing asks you for a file.", 12, MUTED));
-            }
-            gap(welcome, 12);
-            welcome.add(label("Your data stays on this computer. No account required.", 12, MUTED));
-            if (notice != null) { gap(welcome, 10); welcome.add(label(notice, 12, CYAN)); }
+            var welcome = welcome(names, notice);
             notice = null;
 
             String last = lastUsed(names);
@@ -220,8 +232,8 @@ final class VaultLauncher {
         }
         var pass = new JPasswordField(24);
         var form = stack();
-        form.add(label(name, 20, CYAN)); gap(form, 12);
-        form.add(label("Password · 12 or more characters", 12, TEXT)); form.add(pass);
+        form.add(label(name, TYPE_HEADING, CYAN)); gap(form, SPACE_MD);
+        form.add(label("Password · 12 or more characters", TYPE_CAPTION, TEXT)); form.add(pass);
         while (true) {
             if (!Dialogs.confirm(parent, form, "Unlock vault", "Unlock")) return null;
             char[] secret = pass.getPassword();
@@ -270,14 +282,14 @@ final class VaultLauncher {
         group.add(noPassword);
         group.add(protect);
         var form = stack();
-        form.add(label(name, 20, CYAN)); gap(form, 12);
+        form.add(label(name, TYPE_HEADING, CYAN)); gap(form, SPACE_MD);
         form.add(noPassword);
         form.add(protect);
-        form.add(label("Without a password, anyone who can read your files can open this vault.", 11, MUTED));
-        form.add(label("Yoru keeps the unlock key beside it, and keeps both together.", 11, MUTED));
-        gap(form, 12);
-        form.add(label("Password · 12 or more characters", 12, TEXT)); form.add(pass);
-        form.add(label("Repeat password", 12, TEXT)); form.add(repeat);
+        form.add(label("Without a password, anyone who can read your files can open this vault.", TYPE_CAPTION, MUTED));
+        form.add(label("Yoru keeps the unlock key beside it, and keeps both together.", TYPE_CAPTION, MUTED));
+        gap(form, SPACE_MD);
+        form.add(label("Password · 12 or more characters", TYPE_CAPTION, TEXT)); form.add(pass);
+        form.add(label("Repeat password", TYPE_CAPTION, TEXT)); form.add(repeat);
         // Emptied as well as disabled, and focused the moment it is asked for: a
         // password typed before the choice was changed is not the password of the
         // vault that gets made, and leaving it on screen says that it is.
@@ -427,13 +439,13 @@ final class VaultLauncher {
      */
     static boolean confirmRemovePassword(Component parent, String name) {
         var message = stack();
-        message.add(label("\"" + name + "\" will open without a password.", 14, TEXT));
-        gap(message, 10);
-        message.add(label("·  Yoru keeps the unlock key in a file beside the vault.", 12, MUTED));
-        message.add(label("·  Anyone who can read your files can then open it.", 12, MUTED));
-        message.add(label("·  Everything in the vault is kept, and stays encrypted on disk.", 12, MUTED));
-        gap(message, 12);
-        message.add(label("Yoru cannot put the password back from this screen.", 11, MUTED));
+        message.add(label("\"" + name + "\" will open without a password.", TYPE_BODY, TEXT));
+        gap(message, SPACE_SM);
+        message.add(label("·  Yoru keeps the unlock key in a file beside the vault.", TYPE_CAPTION, MUTED));
+        message.add(label("·  Anyone who can read your files can then open it.", TYPE_CAPTION, MUTED));
+        message.add(label("·  Everything in the vault is kept, and stays encrypted on disk.", TYPE_CAPTION, MUTED));
+        gap(message, SPACE_MD);
+        message.add(label("Yoru cannot put the password back from this screen.", TYPE_CAPTION, MUTED));
         return Dialogs.confirmDestructive(parent, message, "Remove the password from \"" + name + "\"",
             "Remove it");
     }
@@ -444,12 +456,12 @@ final class VaultLauncher {
      */
     static boolean confirmDelete(Component parent, String name, VaultStore.Contents contents) {
         var message = stack();
-        message.add(label("Everything in \"" + name + "\" goes:", 14, TEXT));
-        gap(message, 10);
-        for (String line : contents.lines()) message.add(label("·  " + line, 12, MUTED));
-        gap(message, 12);
-        message.add(label("The vault file itself goes too. Yoru takes a verified copy first and puts", 11, MUTED));
-        message.add(label("it back if any part of the deletion fails — a failure costs nothing.", 11, MUTED));
+        message.add(label("Everything in \"" + name + "\" goes:", TYPE_BODY, TEXT));
+        gap(message, SPACE_SM);
+        for (String line : contents.lines()) message.add(label("·  " + line, TYPE_CAPTION, MUTED));
+        gap(message, SPACE_MD);
+        message.add(label("The vault file itself goes too. Yoru takes a verified copy first and puts", TYPE_CAPTION, MUTED));
+        message.add(label("it back if any part of the deletion fails — a failure costs nothing.", TYPE_CAPTION, MUTED));
         return Dialogs.confirmDestructive(parent, message, "Delete \"" + name + "\"", "Delete it");
     }
 
