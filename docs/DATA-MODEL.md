@@ -190,6 +190,19 @@ Until 1.0, none of that is built.
 
 ---
 
+## 5a. Sessions recorded from Anki (1.0.15)
+
+Anki study time is stored as ordinary `Session`s, with no new field and no
+schema change. What marks one as Anki's is its id: a version-8 UUID (RFC 9562's
+custom layout) that reads "Anki" in its first four bytes and carries the
+sitting's first answer, as Anki's epoch-millisecond review id, in its low bits
+(`AnkiTime.sittingId`). A random session id is version 4, so the two can never
+collide. The id is also what makes recording idempotent: every refresh works
+the sittings out again from Anki's log, and a sitting whose id is already in the
+vault is left alone, even after it has been edited.
+
+---
+
 ## 6. Open questions
 
 - Second masculine theme: what direction? (Current `MIDNIGHT` is blue/cyan

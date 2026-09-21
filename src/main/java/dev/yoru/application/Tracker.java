@@ -263,6 +263,31 @@ public final class Tracker {
         list.add(new Session(UUID.randomUUID(),id,start,end));
         commit(state.withCore(state.activities(),list,state.blocks()));
     }
+    /**
+     * Adds finished Anki sittings to the tracked time (see {@link AnkiTime}).
+     *
+     * complete is the moment the answers are known to be complete from. Safe to
+     * call on every refresh: a sitting already recorded, one still going and
+     * one that would overlap recorded time are all left out, and when nothing
+     * is left nothing is written. Otherwise one write adds every sitting, and
+     * the activity they go under when this is the first.
+     *
+     * @return the sessions added, empty when there was nothing new
+     */
+    public List<Session> addAnkiTime(Collection<AnkiTime.Review> reviews, Instant complete) throws IOException {
+        var now=clock.instant();
+        var sittings=AnkiTime.sittings(reviews,complete);
+        var existing=AnkiTime.activity(state);
+        var activity=existing!=null?existing:UUID.randomUUID();
+        var added=AnkiTime.toRecord(state,sittings,activity,now);
+        if(added.isEmpty()) return List.of();
+        var activities=new ArrayList<>(state.activities());
+        if(existing==null) activities.add(new Activity(activity,AnkiTime.ACTIVITY,0));
+        var sessions=new ArrayList<>(state.sessions());
+        sessions.addAll(added);
+        commit(state.withCore(activities,sessions,state.blocks()));
+        return added;
+    }
     public void editSession(UUID sessionId, UUID activityId, Instant start, Instant end) throws IOException {
         requireActivity(activityId);
         requireLongEnough(start,end);

@@ -1,5 +1,29 @@
 # Yoru roadmap
 
+## Release 1.0.15 — Anki study time
+
+Anki study time is tracked time. `application.AnkiTime` groups Anki's answers
+into sittings (under ten minutes apart) and `Tracker.addAnkiTime` records each
+finished sitting as a session. The length is the answer times added together,
+which is Anki's own figure. Sittings go under an **Anki** activity, or whichever
+activity the latest sitting was moved to. Each refresh works the sittings out
+again, and a sitting is added once only: its session id is made from its first
+answer (a version-8 UUID that marks it as Anki's), anything overlapping recorded
+time is left out whole, and a sitting that might begin before the reach is left
+for a longer read. No schema change. `AnkiConnect` gained `findCards` and
+batched `getReviewsOfCards`, still read-only. The card catches up seven days on
+connect, then reads one day per minute. Switching vaults disconnects it.
+
+Validated with `AnkiTimeTest`, the extended `AnkiConnectTest` and
+`AnkiCardTest`. Each rule was also broken on purpose to confirm a test caught
+it. The client and tracker ran against the upstream AnkiConnect handler on a
+synthetic collection. See [release notes](RELEASE-1.0.15.md).
+
+Left alone: deleting a sitting from the last week does not stick while Anki is
+connected (it would need a tombstone in the vault, which means a schema change).
+Answers synced late that run into a recorded sitting are not added. Both are
+documented.
+
 ## Release 1.0.14 — Anki reviews
 
 [PR #42](https://github.com/Rabadakku/Yoru/pull/42) adds Anki review totals,

@@ -1,11 +1,16 @@
 package dev.yoru.ui;
 
 import dev.yoru.anki.AnkiConnect;
+import dev.yoru.application.AnkiTime;
+import dev.yoru.application.Repository;
+import dev.yoru.application.Tracker;
+import dev.yoru.domain.Model.State;
 import dev.yoru.domain.Model.ThemeId;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.nio.file.*;
 import java.time.*;
+import java.util.ArrayList;
 import java.util.TreeMap;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
@@ -51,23 +56,55 @@ public final class AnkiCardTest {
         var started = new CountDownLatch(1);
         var days = new TreeMap<LocalDate, Long>();
         days.put(LocalDate.now(), 24L); days.put(LocalDate.now().minusDays(1), 16L);
-        var snapshot = new AnkiConnect.Snapshot("Practice", 24, days, Instant.now());
+        // A zone where it is about noon now, so a sitting forty minutes ago is
+        // today's whatever time the suite runs.
+        int utc = LocalTime.now(ZoneOffset.UTC).toSecondOfDay();
+        int shift = Math.floorMod(12 * 3600 - utc + 12 * 3600, 24 * 3600) - 12 * 3600;
+        var zone = ZoneOffset.ofTotalSeconds(shift / 60 * 60);
+        // Fifteen minutes of answers that finished twenty-five minutes ago.
+        var reviews = new ArrayList<AnkiTime.Review>();
+        long answered = Instant.now().minus(Duration.ofMinutes(40)).toEpochMilli();
+        for (int i = 0; i < 90; i++) { answered += 10_000; reviews.add(new AnkiTime.Review(answered, 10_000)); }
+        var now = Instant.now();
+        var snapshot = new AnkiConnect.Snapshot("Practice", 24, days, reviews, now.minus(Duration.ofDays(7)), now);
+        var tracker = new Tracker(new Repository() {
+            State state = State.empty();
+            public State load() { return state; }
+            public void save(State next) { state = next; }
+            public void close() { }
+        }, Clock.systemUTC());
+        var reaches = new CopyOnWriteArrayList<Integer>();
+        var rebuilds = new AtomicInteger();
         SwingUtilities.invokeAndWait(() -> {
             Theme.apply(ThemeId.values()[0]);
-            card = new AnkiCard(key -> {
+            card = new AnkiCard((key, reach) -> {
                 assert !SwingUtilities.isEventDispatchThread();
+                reaches.add(reach);
                 if (blocked.get()) {
                     started.countDown();
                     try { gate.await(); } catch (InterruptedException e) { cancelled.set(true); throw e; }
                 }
                 if (fail.get()) throw new java.io.IOException("fixture error");
                 return snapshot;
-            });
+            }, () -> tracker, () -> zone, rebuilds::incrementAndGet);
             Preview.button(card, "Connect Anki").doClick();
         });
         await("24 reviews today");
         await("Anki profile: Practice");
+        await("15m studied in Anki today · 15m in your tracked time");
+        await("1 sitting · 15m to your tracked time.");
+        await("under “Anki” once nothing has been answered for 10 minutes");
+        SwingUtilities.invokeAndWait(() -> { });
+        assert rebuilds.get() == 1 : "the page is rebuilt once to show the new totals";
+        var sittings = tracker.state().sessions();
+        assert sittings.size() == 1 && AnkiTime.isSitting(sittings.getFirst()) : sittings;
+        assert tracker.state().activities().getFirst().name().equals("Anki");
+        assert reaches.getFirst() == AnkiCard.CATCH_UP_DAYS : "the first refresh catches up on a week";
         render("connected");
+        SwingUtilities.invokeAndWait(card::refresh);
+        await("Updated");
+        assert reaches.getLast() == 1 : "later refreshes read a day: " + reaches;
+        assert tracker.state().sessions().size() == 1 && rebuilds.get() == 1 : "and add nothing twice";
         fail.set(true); SwingUtilities.invokeAndWait(card::refresh); await("Showing previous data.");
         SwingUtilities.invokeAndWait(() -> { assert text(card).contains("24 reviews today"); });
         render("stale");
@@ -82,7 +119,9 @@ public final class AnkiCardTest {
         assert cancelled.get() : "disconnect cancels pending refresh";
         gate.countDown();
         render("disconnected");
-        System.out.println("PASS: Anki card asynchronous refresh, stale data, disconnect race and theme renders");
+        SwingUtilities.invokeAndWait(() -> card.disconnect("Another vault is open. Connect Anki again to add your Anki time to it."));
+        await("Connect Anki again");
+        System.out.println("PASS: Anki card asynchronous refresh, study time into the tracker, stale data, disconnect race and theme renders");
         System.exit(0);
     }
 }

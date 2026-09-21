@@ -5,6 +5,7 @@ import dev.yoru.json.Json;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -14,6 +15,19 @@ public final class AnkiConnectTest {
         var changeProfile = new java.util.concurrent.atomic.AtomicBoolean();
         var profileReads = new java.util.concurrent.atomic.AtomicInteger();
         var envelope = new AtomicReference<String>();
+        // 250 cards, so the logs are asked for in more than one batch. Each
+        // card's log: an answer an hour ago (the cards a second apart), one
+        // three days ago, and a reschedule, which is not an answer.
+        long now = System.currentTimeMillis(), hour = now - 3_600_000, days3 = now - 3 * 86_400_000L;
+        var cardIds = new java.util.ArrayList<Long>();
+        for (long i = 1; i <= 250; i++) cardIds.add(i);
+        var found = new AtomicReference<>(cardIds.toString());
+        var log = new AtomicReference<java.util.function.LongFunction<String>>(card ->
+            "[{\"id\":" + (hour + card * 1000) + ",\"usn\":1,\"ease\":3,\"ivl\":4,\"lastIvl\":1,\"factor\":2500,\"time\":5000,\"type\":1},"
+            + "{\"id\":" + (days3 + card * 1000) + ",\"usn\":1,\"ease\":1,\"ivl\":1,\"lastIvl\":1,\"factor\":2300,\"time\":8000,\"type\":2},"
+            + "{\"id\":" + (hour + card * 1000 + 7) + ",\"usn\":1,\"ease\":0,\"ivl\":0,\"lastIvl\":4,\"factor\":2500,\"time\":0,\"type\":4}]");
+        var searches = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var batches = new java.util.concurrent.CopyOnWriteArrayList<Integer>();
         var server = new ServerSocket(0, 10, InetAddress.getByName("127.0.0.1"));
         var serverFailure = new AtomicReference<Throwable>();
         Thread worker = Thread.ofPlatform().daemon().start(() -> {
@@ -30,8 +44,24 @@ public final class AnkiConnectTest {
                 assert "fixture-key".equals(request.get("key"));
                 assert request.get("version").toString().equals("6");
                 String action = (String) request.get("action");
-                assert action.equals("getNumCardsReviewedToday") || action.equals("getNumCardsReviewedByDay") || action.equals("getActiveProfile");
+                assert action.equals("getNumCardsReviewedToday") || action.equals("getNumCardsReviewedByDay") || action.equals("getActiveProfile")
+                    || action.equals("findCards") || action.equals("getReviewsOfCards") : action;
                 String response = "{\"error\":null,\"result\":" + (action.equals("getNumCardsReviewedToday") ? "12" : reply.get()) + "}";
+                if (action.equals("findCards")) {
+                    var params = (Map<?, ?>) request.get("params");
+                    searches.add((String) params.get("query"));
+                    response = "{\"error\":null,\"result\":" + found.get() + "}";
+                }
+                if (action.equals("getReviewsOfCards")) {
+                    var cards = (List<?>) ((Map<?, ?>) request.get("params")).get("cards");
+                    batches.add(cards.size());
+                    var byCard = new StringBuilder("{");
+                    for (Object card : cards) {
+                        if (byCard.length() > 1) byCard.append(',');
+                        byCard.append('"').append(card).append("\":").append(log.get().apply(((Number) card).longValue()));
+                    }
+                    response = "{\"error\":null,\"result\":" + byCard.append('}') + "}";
+                }
                 if (action.equals("getActiveProfile")) {
                     String profile = changeProfile.get() && profileReads.incrementAndGet() % 2 == 0 ? "Other" : "Practice";
                     response = "{\"error\":null,\"result\":\"" + profile + "\"}";
@@ -51,6 +81,36 @@ public final class AnkiConnectTest {
             assert snapshot.lastSevenDays(LocalDate.parse("2026-01-02")) == 17;
             assert snapshot.lastSevenDays(LocalDate.parse("2026-01-09")) == 0;
             assert client.read("fixture-key").days().equals(snapshot.days()) : "refresh does not accumulate duplicates";
+            // Review times: one day's reach asks Anki for two of its days, in batches.
+            assert searches.getFirst().equals("rated:2") : searches;
+            assert batches.stream().allMatch(n -> n <= 100) && batches.stream().mapToInt(Integer::intValue).sum() == 500 : batches;
+            assert snapshot.reviews().size() == 250 : "the hour-old answers, without the old one or the reschedule";
+            assert snapshot.reviews().stream().allMatch(r -> r.millis() == 5000);
+            assert Math.abs(snapshot.complete().toEpochMilli() - (now - 86_400_000L)) < 60_000 : snapshot.complete();
+            searches.clear();
+            var week = client.read("fixture-key", 7);
+            assert searches.getFirst().equals("rated:8") && week.reviews().size() == 500 : "a week's reach keeps the older answers";
+            for (int days : new int[]{0, AnkiConnect.MAX_DAYS + 1}) {
+                try { client.read("fixture-key", days); throw new AssertionError("accepted a reach of " + days); }
+                catch (IllegalArgumentException expected) { }
+            }
+            try { snapshot.reviews().clear(); throw new AssertionError("mutable reviews"); }
+            catch (UnsupportedOperationException expected) { }
+            var goodLog = log.get();
+            for (java.util.function.LongFunction<String> invalid : List.<java.util.function.LongFunction<String>>of(
+                    card -> "{}", card -> "[1]", card -> "[{\"id\":" + hour + ",\"ease\":3}]",
+                    card -> "[{\"id\":-5,\"ease\":3,\"time\":1000}]", card -> "[{\"id\":" + hour + ",\"ease\":3,\"time\":-1}]")) {
+                log.set(invalid);
+                try { client.read("fixture-key"); throw new AssertionError("accepted an invalid review log"); }
+                catch (java.io.IOException expected) { assert expected.getMessage().contains("invalid review data"); }
+            }
+            log.set(goodLog);
+            for (String invalid : new String[]{"{}", "[0]", "[\"1\"]"}) {
+                found.set(invalid);
+                try { client.read("fixture-key"); throw new AssertionError("accepted invalid card ids"); }
+                catch (java.io.IOException expected) { }
+            }
+            found.set(cardIds.toString());
             changeProfile.set(true);
             try { client.read("fixture-key"); throw new AssertionError("mixed profiles"); }
             catch (AnkiConnect.Failure expected) { assert expected.getMessage().contains("profile changed"); }
@@ -80,7 +140,7 @@ public final class AnkiConnectTest {
         try { new AnkiConnect().read(null); throw new AssertionError("interrupted request continued"); }
         catch (InterruptedIOException expected) { }
         finally { Thread.interrupted(); }
-        System.out.println("PASS: Anki local transport, API key, review history, idempotent refresh and invalid responses");
+        System.out.println("PASS: Anki local transport, API key, review history, review times in batches, idempotent refresh and invalid responses");
     }
     private static void transport(String response, boolean slow, String expectedMessage) throws Exception {
         try (var socket = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
