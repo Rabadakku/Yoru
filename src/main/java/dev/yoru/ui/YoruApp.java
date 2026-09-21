@@ -274,6 +274,7 @@ public final class YoruApp extends JPanel implements Shell {
     @Override public Component owner() { return this; }
     @Override public boolean reducedMotion() { return reducedMotion; }
     @Override public void show(String next) { showPage(next); }
+    @Override public void refresh() { if(!closed) showPage(page); }
     @Override public ZoneId zone() { return zone; }
     @Override public String activityName(UUID id) { return name(id); }
     @Override public void reducedMotion(boolean on) { reducedMotion=on; }
@@ -1060,6 +1061,7 @@ public final class YoruApp extends JPanel implements Shell {
         forgetSecret();
         secret=next.secret();
         VaultLauncher.remember(vaultName);
+        todayPage.vaultChanged();
         rebuildTo(page);
     }
 

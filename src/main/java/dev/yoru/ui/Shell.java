@@ -25,6 +25,9 @@ interface Shell {
     /** Shows a page by name, rebuilding it. */
     void show(String page);
 
+    /** Rebuilds the page on screen in place, after a change made outside {@link #perform}. */
+    void refresh();
+
     /** Runs a change, reports a failure in a dialog, then rebuilds the current page. */
     void perform(Work work);
 
