@@ -37,6 +37,7 @@ final class TodayPage {
     private TrainerScene trainerScene;
     /** The heat map's activity filter; null shows every activity. */
     private UUID heatActivity;
+    private final AnkiCard ankiCard = new AnkiCard();
 
     /**
      * Constructed with the window, before the window's own fields are set, so
@@ -61,6 +62,8 @@ final class TodayPage {
         buddyCard=null;trainerScene=null;encounterLabel=null;dailyGoal=null;
         timerLabel=null;statusLabel=null;
     }
+
+    void close() { ankiCard.disconnect(); leave(); }
 
     /** A reset may remove the activity the heat map was filtered to. */
     void forgetActivityFilter() { heatActivity=null; }
@@ -108,6 +111,9 @@ final class TodayPage {
         p.add(heatCard(today));
         gap(p,SPACE_LG);
         p.add(activitiesCard(today));
+        gap(p,SPACE_LG);
+        ankiCard.render();
+        p.add(ankiCard);
         gap(p,SPACE_XL);
         return p;
     }

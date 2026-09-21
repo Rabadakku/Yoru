@@ -1,3 +1,9 @@
+# v1.0.14 — Anki review tracking
+
+Today now displays Anki review totals, seven dates of history and the active
+profile through AnkiConnect. See [setup and release notes](docs/RELEASE-1.0.14.md).
+No vault migration or game reward changes.
+
 # v1.0.2 — functionality and artwork repairs
 
 - Importing the supported Emerald game now extracts all 386 normal sprites,
