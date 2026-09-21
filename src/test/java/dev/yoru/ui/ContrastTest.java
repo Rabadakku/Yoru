@@ -60,7 +60,11 @@ public final class ContrastTest {
         "src/main/java/dev/yoru/ui/CalendarPanel.java",
         "src/main/java/dev/yoru/ui/PagesPage.java",
         "src/main/java/dev/yoru/ui/PageExplorer.java",
-        "src/main/java/dev/yoru/ui/PageReader.java");
+        "src/main/java/dev/yoru/ui/PageReader.java",
+        // The front door: the first screen anybody sees was the last one off
+        // the scale, writing its own 11, 13 and 20 px text and spacing itself
+        // in tens and fourteens.
+        "src/main/java/dev/yoru/ui/VaultLauncher.java");
 
     private static double luminance(int rgb) {
         double[] channel=new double[3];
