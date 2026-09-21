@@ -91,9 +91,10 @@ Analytics shows a 52-week heat map whose tiers scale to your own daily goal,
 with a rainbow tier for days that beat it, and a breakdown of where the week
 actually went.
 
-### Anki reviews
+### Anki reviews and study time
 
-On **Today → Anki reviews**, connect Anki to see today's review count and the
+On **Today → Anki reviews**, connect Anki to add your Anki study time to your
+tracked time, and to see today's review count and the
 last seven dates of review history, labelled with the active Anki profile. Repeated reviews of one card count as
 separate reviews. Anki's configured day boundary controls the today total;
 history uses the dates returned by Anki, so the two can differ around midnight.
@@ -109,10 +110,25 @@ as previous data with its last successful refresh time. Profile changes during a
 refresh are rejected to avoid mixing collections. **Disconnect** clears the snapshot and API key; reconnect to
 change the key. Closing the vault also clears them. Connect again after reopening.
 
-This reads only the active profile name and review totals from AnkiConnect on `127.0.0.1:8765`. Yoru does not
-modify Anki, copy card content, store Anki data in the vault, or turn review
-counts into study time or game rewards. Custom ports and remote Anki instances
-are not supported. The API key stays in memory for the connected window only.
+**Study time.** Answers less than ten minutes apart are one sitting. Once
+nothing has been answered for ten minutes, the sitting is added as a session
+under an activity called **Anki**. The session lasts as long as the answer times
+Anki logged, which is the same figure Anki reports as time studied. From then on
+it counts like any other session: totals, heat map, daily goal, streak and
+study encounters. Connecting catches up on the last seven days. A sitting is
+never added twice, and one that overlaps time you clocked in Yoru, or is shorter
+than your minimum session, is left out. The card shows Anki's minutes for today
+beside how many of them are in your tracked time. Rename the Anki activity or
+move a sitting elsewhere, and later sittings follow the latest one. Edit a
+sitting rather than deleting it: while Anki is connected, a deleted sitting
+from the last week is read again and put back.
+
+This reads the active profile name, review totals and the time of each answer
+from AnkiConnect on `127.0.0.1:8765`. Yoru does not modify Anki. The only Anki
+data kept in the vault is the start and end of each sitting, with no card
+content, answers or deck names. Switching vaults disconnects Anki. Custom ports
+and remote Anki instances are not supported. The API key stays in memory for the
+connected window only.
 
 ### Tasks
 

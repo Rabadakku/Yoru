@@ -1,3 +1,9 @@
+# v1.0.15 — Anki study time counts
+
+Finished Anki sittings are now added to your tracked time while Anki is
+connected, at the length Anki itself reports, and never twice. See
+[release notes](docs/RELEASE-1.0.15.md). No vault migration.
+
 # v1.0.14 — Anki review tracking
 
 Today now displays Anki review totals, seven dates of history and the active
