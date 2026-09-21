@@ -14,6 +14,8 @@ find src/test/java -name '*.java' > build/tests.txt
 javac --release 22 -encoding UTF-8 -cp build/classes -d build/classes @build/tests.txt
 # First, so a wrapper that stopped isolating fails before any test can touch the machine.
 java -ea -cp build/classes dev.yoru.ui.IsolationTest
+java -ea -cp build/classes dev.yoru.anki.AnkiConnectTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiCardTest
 java -ea -cp build/classes dev.yoru.CoreTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.UiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.VisualSystemTest
