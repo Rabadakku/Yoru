@@ -1,5 +1,22 @@
 # Yoru roadmap
 
+## Anki tracker integration — in review
+
+On `codex/anki-tracker`: Today displays Anki review totals and seven dates of
+review history through the local AnkiConnect add-on. Explicit connection, optional
+in-memory API key, background refresh, stale-data status and disconnect are included.
+No vault schema change or review-to-reward mapping. Requires Anki to be open;
+closing the vault clears the connection and snapshot.
+
+Validation: synthetic local HTTP and UI tests cover review history, API keys,
+invalid responses, failed refreshes and disconnect races. All five themes were
+visually reviewed. Live Anki verification remains unavailable because AnkiConnect
+is not running on the development machine.
+
+Follow-up integrations: [Apple Health #40](https://github.com/Rabadakku/Yoru/issues/40)
+is limited to workouts and steps; [LeetCode #41](https://github.com/Rabadakku/Yoru/issues/41)
+tracks the coding-practice integration.
+
 ## Release 1.0.13 — September 20, 2026
 
 Built on `claude/ui-craft` from released 1.0.12, and released as
