@@ -17,6 +17,7 @@ final class AnkiCard extends JPanel {
     private String key = "", message = "Connect to show your Anki reviews here.";
     private boolean connected, busy;
     private long generation;
+    private SwingWorker<AnkiConnect.Snapshot, Void> worker;
 
     AnkiCard() { this(new AnkiConnect()::read); }
     AnkiCard(Source source) {
@@ -30,7 +31,9 @@ final class AnkiCard extends JPanel {
     }
     @Override public void removeNotify() { timer.stop(); super.removeNotify(); }
     void disconnect() {
-        generation++; connected = false; busy = false; timer.stop();
+        generation++;
+        if (worker != null) { worker.cancel(true); worker = null; }
+        connected = false; busy = false; timer.stop();
         snapshot = null; key = ""; message = "Disconnected. Anki data has been cleared from this view."; render();
     }
     void refresh() {
@@ -38,30 +41,36 @@ final class AnkiCard extends JPanel {
         busy = true; message = "Refreshing Anki…"; render();
         long ticket = generation;
         String requestKey = key;
-        new SwingWorker<AnkiConnect.Snapshot, Void>() {
+        worker = new SwingWorker<AnkiConnect.Snapshot, Void>() {
             protected AnkiConnect.Snapshot doInBackground() throws Exception { return source.read(requestKey); }
             protected void done() {
                 if (ticket != generation) return;
-                busy = false;
+                busy = false; worker = null;
                 try {
                     snapshot = get();
                     message = "Updated " + DateTimeFormatter.ofPattern("MMM d, HH:mm:ss").withZone(ZoneId.systemDefault()).format(snapshot.fetchedAt())
                         + " · refreshes every minute while visible";
                 } catch (Exception e) {
+                    Throwable cause = e instanceof java.util.concurrent.ExecutionException ? e.getCause() : e;
+                    String reason = cause instanceof AnkiConnect.Failure ? cause.getMessage()
+                        : "Open Anki with AnkiConnect enabled; check the API key, then retry.";
                     message = (snapshot == null ? "Could not connect. " : "Showing previous data. ")
-                        + "Open Anki with AnkiConnect enabled; check the API key, then retry."
+                        + reason
                         + (snapshot == null ? "" : " Last updated " + DateTimeFormatter.ofPattern("MMM d, HH:mm:ss")
                             .withZone(ZoneId.systemDefault()).format(snapshot.fetchedAt()) + ".");
                 }
                 render();
             }
-        }.execute();
+        };
+        worker.execute();
     }
     void render() {
         removeAll();
         var content = card(); content.add(sectionHeader("ANKI REVIEWS")); gap(content, SPACE_MD);
         content.add(wrapping(message, TYPE_CAPTION, MUTED)); gap(content, SPACE_MD);
         if (snapshot != null) {
+            content.add(wrapping("Anki profile: " + snapshot.profile(), TYPE_CAPTION, MUTED));
+            gap(content, SPACE_SM);
             LocalDate fetchedDate = snapshot.fetchedAt().atZone(ZoneId.systemDefault()).toLocalDate();
             content.add(wrapping(snapshot.today() + (fetchedDate.equals(LocalDate.now())
                 ? " reviews today" : " reviews at last refresh"), TYPE_TITLE, TEXT));
