@@ -242,6 +242,7 @@ public final class YoruApp extends JPanel implements Shell {
     private void quit() {
         if(closed)return;
         closed=true;
+        todayPage.close();
         gamePage.leave();
         music.close();
         // The session's encounter tables go with it (#12).

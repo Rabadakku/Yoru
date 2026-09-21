@@ -1,5 +1,24 @@
 # Yoru roadmap
 
+## Release 1.0.14 — Anki reviews
+
+[PR #42](https://github.com/Rabadakku/Yoru/pull/42) adds Anki review totals,
+seven dates of history and the active profile to Today. Connection is explicit;
+refresh runs in the background, with bounded responses, actionable failures,
+stale-data timestamps and cancellation on disconnect. A profile switch during
+refresh is rejected so collections cannot be mixed. Closing the vault clears
+the snapshot and in-memory API key. No vault migration or reward changes.
+
+Validation includes synthetic HTTP and UI tests, the full isolated suite, all
+five themes, and the actual upstream AnkiConnect server with the installed
+Anki 25.09.4 backend and a fresh synthetic collection. Personal profiles were
+not opened. The tag workflow verifies Java 22 before building all three installers.
+See [release notes](RELEASE-1.0.14.md) for setup and scope.
+
+Follow-up integrations: [Apple Health #40](https://github.com/Rabadakku/Yoru/issues/40)
+is limited to workouts and steps; [LeetCode #41](https://github.com/Rabadakku/Yoru/issues/41)
+tracks coding practice.
+
 ## Release 1.0.13 — September 20, 2026
 
 Built on `claude/ui-craft` from released 1.0.12, and released as

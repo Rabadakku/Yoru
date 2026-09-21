@@ -91,6 +91,29 @@ Analytics shows a 52-week heat map whose tiers scale to your own daily goal,
 with a rainbow tier for days that beat it, and a breakdown of where the week
 actually went.
 
+### Anki reviews
+
+On **Today → Anki reviews**, connect Anki to see today's review count and the
+last seven dates of review history, labelled with the active Anki profile. Repeated reviews of one card count as
+separate reviews. Anki's configured day boundary controls the today total;
+history uses the dates returned by Anki, so the two can differ around midnight.
+
+1. In Anki, open **Tools → Add-ons → Get Add-ons**, enter **2055492159**, and
+   restart Anki. See the [official AnkiConnect instructions](https://git.sr.ht/~foosoft/anki-connect).
+2. Keep Anki open on the profile you want to track. In Yoru, click **Connect Anki**.
+3. If you configured an AnkiConnect API key, enter it in the optional field.
+
+The card refreshes every minute while Today is displayed, or when you press
+**Refresh**. If Anki is unavailable, the last successful snapshot remains marked
+as previous data with its last successful refresh time. Profile changes during a
+refresh are rejected to avoid mixing collections. **Disconnect** clears the snapshot and API key; reconnect to
+change the key. Closing the vault also clears them. Connect again after reopening.
+
+This reads only the active profile name and review totals from AnkiConnect on `127.0.0.1:8765`. Yoru does not
+modify Anki, copy card content, store Anki data in the vault, or turn review
+counts into study time or game rewards. Custom ports and remote Anki instances
+are not supported. The API key stays in memory for the connected window only.
+
 ### Tasks
 
 A local inbox with due dates, a status that cycles TODO → DOING → DONE,
