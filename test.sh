@@ -15,6 +15,7 @@ javac --release 22 -encoding UTF-8 -cp build/classes -d build/classes @build/tes
 # First, so a wrapper that stopped isolating fails before any test can touch the machine.
 java -ea -cp build/classes dev.yoru.ui.IsolationTest
 java -ea -cp build/classes dev.yoru.anki.AnkiConnectTest
+java -ea -cp build/classes dev.yoru.AnkiTimeTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiCardTest
 java -ea -cp build/classes dev.yoru.CoreTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.UiTest

@@ -37,13 +37,19 @@ final class TodayPage {
     private TrainerScene trainerScene;
     /** The heat map's activity filter; null shows every activity. */
     private UUID heatActivity;
-    private final AnkiCard ankiCard = new AnkiCard();
+    private final AnkiCard ankiCard;
+    /** Whether Today is the page on screen, so Anki time added in the background rebuilds it and nothing else. */
+    private boolean shown;
 
     /**
      * Constructed with the window, before the window's own fields are set, so
      * the tracker and zone are read from the shell when needed, never here.
      */
-    TodayPage(Shell shell) { this.shell = shell; }
+    TodayPage(Shell shell) {
+        this.shell = shell;
+        ankiCard = new AnkiCard(new dev.yoru.anki.AnkiConnect()::read, this::tracker, this::zone,
+            () -> { if (shown) shell.refresh(); });
+    }
 
     private Tracker tracker() { return shell.tracker(); }
     private ZoneId zone() { return shell.zone(); }
@@ -59,16 +65,24 @@ final class TodayPage {
 
     /** Another page is going on screen: nothing here needs the ticker until Today is built again. */
     void leave() {
+        shown=false;
         buddyCard=null;trainerScene=null;encounterLabel=null;dailyGoal=null;
         timerLabel=null;statusLabel=null;
     }
 
     void close() { ankiCard.disconnect(); leave(); }
 
+    /**
+     * Another vault is open. Anki time is added to the vault that was open when
+     * Anki was connected, so connecting again is what agrees to add it here.
+     */
+    void vaultChanged() { ankiCard.disconnect("Another vault is open. Connect Anki again to add your Anki time to it."); }
+
     /** A reset may remove the activity the heat map was filtered to. */
     void forgetActivityFilter() { heatActivity=null; }
 
     JPanel view() {
+        shown=true;
         var tracker=tracker();
         var zone=zone();
         var p=stack();
