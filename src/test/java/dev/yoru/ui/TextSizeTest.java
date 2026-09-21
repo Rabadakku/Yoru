@@ -92,6 +92,37 @@ public final class TextSizeTest {
         // The column the weekday initials sit in has grown with them as well:
         // a point that was the first day of a week at 100% is now beside it.
         check(reading(large, 40, tall / 2) == null, "the initials' column has grown with them too");
+        drawnCalendar();
+    }
+
+    /**
+     * The month calendar is drawn too, and was cut in the same three ways: the
+     * weekday names lost their tops to the edge of the component, the day
+     * numbers sat over the chips under them, and a chip held two-thirds of a
+     * line of its title.
+     */
+    private static void drawnCalendar() {
+        var today = java.time.LocalDate.now();
+        var month = java.time.YearMonth.from(today);
+        var empty = dev.yoru.domain.Model.State.empty();
+
+        TextSize.use(100);
+        var designed = new TaskCalendar(empty, month, today, null);
+        int small = designed.getPreferredSize().height;
+        designed.setSize(880, small);
+        designed.relayout();
+        check(designed.dateAt(new java.awt.Point(20, 30)) != null,
+            "at 100% the calendar's first row of days is where it was");
+
+        TextSize.use(200);
+        var large = new TaskCalendar(empty, month, today, null);
+        int tall = large.getPreferredSize().height;
+        check(tall > small, "at 200% the calendar asks for the room its text needs: " + tall + " against " + small);
+        large.setSize(880, tall);
+        large.relayout();
+        check(large.dateAt(new java.awt.Point(20, 30)) == null,
+            "the band the weekday names are written in has grown with them");
+        check(large.dateAt(new java.awt.Point(20, tall / 2)) != null, "and the days are still under it");
     }
 
     /** What the map says about the day under a point, or null where there is no day. */
