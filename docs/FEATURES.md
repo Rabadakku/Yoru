@@ -124,7 +124,7 @@ Legend: ✅ working · 🟡 partly working · ⬜ not started
 | AI reads class files and adds tasks | ⬜ | Removed from 1.0 (#47): the code is kept, but no build can reach it |
 | Use your existing ChatGPT plan | ❌ | **Not possible** — see below |
 | Paste-in workflow (free alternative) | ⬜ | [#15](https://github.com/Rabadakku/yoru/issues/15) |
-| Anki import | ⬜ | Planned, not connected |
+| Anki study time | ✅ | Since 1.0.15: finished Anki sittings become tracked sessions through AnkiConnect, never counted twice |
 | LeetCode import | ⬜ | Planned, not connected |
 | Apple Health / workouts | ⬜ | Planned, not connected |
 
