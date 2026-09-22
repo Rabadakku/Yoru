@@ -194,7 +194,14 @@ public final class YoruApp extends JPanel implements Shell {
         // metrics: the estimate agreed with the layout on one computer's fonts
         // and not on another's, so a ninth tab fitted here and ran off the end
         // of the bar on the build machine (#46).
-        navMinimumWidth=brand.getPreferredSize().width+strip.getMinimumSize().width+lock.getPreferredSize().width
+        // The Game tab grows a dot while the game runs, so the strip is measured
+        // wearing it: the floor has to hold the widest each label ever gets.
+        var gameTab=navigation.get("Game");
+        String gameLabel=gameTab.getText();
+        gameTab.setText("Game ●");
+        int stripFloor=strip.getMinimumSize().width;
+        gameTab.setText(gameLabel);
+        navMinimumWidth=brand.getPreferredSize().width+stripFloor+lock.getPreferredSize().width
             +2*SPACE_XL+SPACE_LG;
         root.add(bar, BorderLayout.NORTH);
         content.setBackground(BG);
