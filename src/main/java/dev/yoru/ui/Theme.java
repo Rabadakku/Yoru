@@ -930,6 +930,37 @@ final class Theme {
         }
     }
 
+    /**
+     * A field that says what it is for while it is empty.
+     *
+     * The look-and-feel has no placeholder of its own — the client property
+     * other toolkits use does nothing here — so an empty search or filter box
+     * read as a broken control. The hint is drawn, not typed, so it is never
+     * mistaken for the field's value.
+     */
+    static JTextField hintField(String hint) {
+        var field = new JTextField() {
+            @Override protected void paintComponent(Graphics graphics) {
+                super.paintComponent(graphics);
+                if (!getText().isEmpty() || isFocusOwner()) return;
+                var g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                g.setColor(MUTED);
+                g.setFont(getFont());
+                var insets = getInsets();
+                var metrics = g.getFontMetrics();
+                g.drawString(hint, insets.left, insets.top + metrics.getAscent());
+                g.dispose();
+            }
+        };
+        field.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusGained(java.awt.event.FocusEvent e) { field.repaint(); }
+            @Override public void focusLost(java.awt.event.FocusEvent e) { field.repaint(); }
+        });
+        field.getAccessibleContext().setAccessibleName(hint);
+        return styleInput(field);
+    }
+
     static <T extends JTextComponent> T styleInput(T field) {
         field.setBackground(PANEL);
         field.setForeground(TEXT);

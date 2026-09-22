@@ -5,17 +5,26 @@ are encrypted with the rest of the vault. Rename, move, duplicate and trash
 commands are in the explorer context menu. Restore deleted notes from Trash;
 permanently emptying it creates a vault backup first.
 
-Write Markdown in the source editor and use **Read / Edit** to switch views.
+The page on screen is named by the title field at the top: type in it to rename
+the page, which rewrites every link that pointed at it. Under the title is the
+folder it lives in. Each open page keeps a tab; a tab closes on its own × or
+with Cmd/Ctrl-W, and back and forward (Cmd/Ctrl-[ and Cmd/Ctrl-]) walk the pages
+visited.
+
+Write Markdown in the source editor and use **Read** and **Edit** to switch views.
 Edits autosave after a pause. A failed save keeps the draft open and prevents
 leaving or closing until it saves successfully. Undo and redo survive switching
 between open pages and reading mode, but do not survive restarting the app.
 
-Use **Open…** for a quick title search and **Search…** for text across live pages.
+Cmd/Ctrl-O opens a page by name, Cmd/Ctrl-Shift-F searches the text of every
+live page, Cmd/Ctrl-N makes a page and Cmd/Ctrl-E switches between reading and
+editing; the ⋯ menu holds the same commands, with import and export.
 **Find / Replace** works within the current page. Type `[[` for page completion;
 `[[Page#` offers headings and `[[Page#^` offers block IDs. Following an unresolved
 simple page name offers to create it. Rename/move operations preserve the target
-of existing page links. **Details** shows the outline, backlinks and linked
-tasks, with controls to link, create and complete tasks. The Tasks context menu
+of existing page links. The connections panel on the right shows the page's outline, the pages that link
+to it and its linked tasks, with controls to link, create and complete tasks. It
+is hidden and shown from the panel button in the header. The Tasks context menu
 also links or opens pages.
 
 **Import…** accepts a UTF-8 `.md` file or directory and puts it in a fresh
@@ -25,8 +34,12 @@ failed save leaves the vault unchanged. **Export…** writes live pages into a n
 Yoru Pages directory, preserving folder structure without overwriting existing
 files. Exported Markdown is plain text, not encrypted; trash is excluded.
 
+Reading view draws an embedded page (`![[Page]]`, or `![[Page#Heading]]` for one
+section) inside the page that names it, three deep; a page that embeds itself,
+or a ring of pages that embed each other, is drawn once and then shown as a link.
+
 This checkpoint provides a source editor and reading view. It does not yet
-provide live preview, attachment storage/embeds, page-history snapshots,
+provide live preview, attachment storage, page-history snapshots,
 properties editing, tree-operation undo, daily notes/templates, persistent tab
 and layout preferences, split panes or canvas. These remain tracked in #46.
 Markdown syntax the reader does not render remains intact in the source.

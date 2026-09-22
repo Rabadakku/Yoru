@@ -79,7 +79,7 @@ final class PageExplorer extends JPanel {
             return item == null || item.kind() == Kind.TRASH ? null : item.name();
         }
     };
-    private final JTextField filter = styleInput(new JTextField());
+    private final JTextField filter = hintField("Filter pages");
     private Notes notes = Notes.empty();
     private boolean syncing;
 
@@ -99,7 +99,6 @@ final class PageExplorer extends JPanel {
         tools.add(icon(Glyphs.Kind.COLLAPSE, "Collapse all", "pages.collapse", this::collapseAll));
         filter.setName("pages.filter");
         filter.getAccessibleContext().setAccessibleName("Filter pages by title");
-        filter.putClientProperty("JTextField.placeholderText", "Filter");
         filter.setToolTipText("Show only pages whose title holds these words");
         filter.getDocument().addDocumentListener(new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e) { rebuild(); }

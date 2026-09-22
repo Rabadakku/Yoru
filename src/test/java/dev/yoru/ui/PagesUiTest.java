@@ -1,6 +1,7 @@
 package dev.yoru.ui;
 
 import dev.yoru.application.*;
+import dev.yoru.domain.Model.Page;
 import dev.yoru.domain.Model.*;
 import java.awt.*;
 import java.io.IOException;
@@ -22,10 +23,96 @@ public final class PagesUiTest {
         }
         return null;
     }
+    /** The editor of the page on screen: the one card of the document stack that is showing. */
     static JTextPane editor(YoruApp app) {
-        var tabs = (JTabbedPane)find(app, "pages.tabs");
-        return (JTextPane)find((Container)tabs.getSelectedComponent(), "page.editor");
+        var documents = (Container)find(app, "pages.documents");
+        for (var card : documents.getComponents())
+            if (card.isVisible() && card instanceof Container c) {
+                var pane = find(c, "page.editor");
+                if (pane != null) return (JTextPane)pane;
+            }
+        throw new AssertionError("no page is open");
     }
+
+    /**
+     * The workspace around the editor: the title renames, every open page has a
+     * tab, back and forward walk the pages visited, the sidebar says what the
+     * page is connected to, and an embed draws the page it names.
+     */
+    static void workspace(YoruApp app, Tracker tracker, Page one, Page two) throws Exception {
+        app.openNote(one.id());
+        app.openNote(two.id());
+        Preview.layout(app);
+
+        // A tab for each open page, with its own close.
+        assert find(app, "pages.tab." + one.id()) != null : "the first page keeps a tab";
+        assert find(app, "pages.tab." + two.id()) != null : "the page just opened has a tab";
+        assert find(app, "pages.tab.close." + two.id()) != null : "each tab closes on its own";
+
+        // The header names the page on screen, and renames it.
+        var title = (JTextField) find(app, "pages.title");
+        assert title.getText().equals(tracker.pages().page(two.id()).title()) : "the header shows the open page: " + title.getText();
+        title.setText("Second thoughts");
+        title.postActionEvent();
+        assert tracker.pages().page(two.id()).title().equals("Second thoughts") : "typing a title renames the page";
+        assert ((JTextField) find(app, "pages.title")).getText().equals("Second thoughts");
+
+        // Back and forward walk the pages that were opened.
+        Preview.button(app, "pages.back").doClick();
+        assert editorText(app).equals(tracker.pages().page(one.id()).body()) : "back returns to the page before";
+        Preview.button(app, "pages.forward").doClick();
+        assert editorText(app).equals(tracker.pages().page(two.id()).body()) : "forward returns again";
+
+        // The sidebar: the outline of this page, what links to it, and its tasks.
+        var task = new Task(java.util.UUID.randomUUID(), null, null, "Write the summary", "", null,
+            TaskStatus.TODO, "Test", java.time.Instant.now(), 0);
+        tracker.addTask(task);
+        tracker.pages().linkTask(task.id(), one.id());
+        app.openNote(one.id());
+        Preview.layout(app);
+        var labels = new java.util.ArrayList<String>();
+        texts(app, labels);
+        assert labels.contains("OUTLINE") && labels.contains("LINKED FROM") && labels.contains("TASKS")
+            : "the sidebar shows the page's connections: " + labels;
+        assert labels.contains("First") : "the page that links here is listed: " + labels;
+        assert labels.contains("Write the summary") : "and so is the linked task: " + labels;
+
+        // Reading view draws an embedded page inside the page that names it.
+        var host = tracker.pages().createPage(null, "Host", "Before\n\n![[First]]\n\nAfter\n");
+        app.openNote(host.id());
+        Preview.button(app, "pages.mode").doClick();
+        Preview.layout(app);
+        var shown = new java.util.ArrayList<String>();
+        texts(app, shown);
+        assert shown.contains("First") : "the embedded page is named: " + shown;
+        assert shown.stream().anyMatch(t -> t.contains("Before")) : "the page around the embed is still drawn";
+        Preview.button(app, "pages.mode").doClick();
+
+        // A page that embeds itself is drawn once, not for ever.
+        var loop = tracker.pages().createPage(null, "Loop", "![[Loop]]\n");
+        app.openNote(loop.id());
+        Preview.button(app, "pages.mode").doClick();
+        Preview.layout(app);
+        Preview.button(app, "pages.mode").doClick();
+
+        // Closing a tab leaves the others open.
+        Preview.button(app, "pages.tab.close." + host.id()).doClick();
+        assert find(app, "pages.tab." + host.id()) == null : "a closed page has no tab";
+        assert find(app, "pages.tab." + one.id()) != null : "the others stay open";
+    }
+
+    static String editorText(YoruApp app) { return editor(app).getText(); }
+
+    /** Every label, button caption and piece of drawn text on screen. */
+    static void texts(Container root, java.util.List<String> into) {
+        for (var child : root.getComponents()) {
+            if (child instanceof JLabel l && l.getText() != null) into.add(l.getText());
+            else if (child instanceof AbstractButton b && b.getText() != null) into.add(b.getText());
+            else if (child instanceof javax.swing.text.JTextComponent t && t.getText() != null) into.add(t.getText());
+            if (child instanceof Container nested) texts(nested, into);
+        }
+    }
+
     public static void main(String[] args) {
         try {
             SwingUtilities.invokeAndWait(() -> {
@@ -53,17 +140,18 @@ public final class PagesUiTest {
                     repo.fail = false; app.openNote(two.id());
                     assert tracker.pages().page(one.id()).body().endsWith("Draft") : "switch flushes text";
                     app.openNote(one.id());
-                    Preview.button(app,"Read / Edit").doClick(); Preview.button(app,"Read / Edit").doClick();
+                    Preview.button(app,"pages.mode").doClick(); Preview.button(app,"pages.mode").doClick();
                     editor(app).getActionMap().get("yoru.undo").actionPerformed(null);
                     assert !editor(app).getText().endsWith("Draft") : "undo survives page and reading switches";
                     app.show("Today"); assert !tracker.pages().page(one.id()).body().endsWith("Draft");
+                    workspace(app, tracker, one, two);
                     app.openNote(one.id());
                     pane = editor(app); pane.setCaretPosition(pane.getDocument().getLength()); pane.replaceSelection("Saved on close");
                     Preview.button(app,"Lock & close").doClick();
                     assert repo.state.notes().page(one.id()).orElseThrow().body().endsWith("Saved on close");
                 } catch (Exception e) { throw new RuntimeException(e); }
             });
-            System.out.println("PASS: Pages navigation, failed-save protection, tab undo, reading switches and close flush");
+            System.out.println("PASS: Pages navigation, failed-save protection, tab undo, reading switches, close flush,\n      title renaming, tabs, back and forward, the connections sidebar and embedded pages");
         } catch (Throwable e) { e.printStackTrace(); System.exit(1); }
         System.exit(0);
     }

@@ -2,8 +2,13 @@
 
 ## In review — Pages workspace (#46)
 
-`codex/pages-finish` continues the three commits on `claude/pages` through
-`66006a0`. The first usable workspace connects encrypted pages/folders and task
+`claude/pages-finish` continues `codex/pages-finish`, which continues the three
+commits on `claude/pages` through `66006a0`. The finishing pass gave the
+workspace its header (back, forward, the page's own title, reading toggle and
+the ⋯ menu), tabs drawn in the theme rather than the look-and-feel's, the
+connections panel (outline, linked from, tasks), embedded pages in reading view,
+and the keyboard shortcuts for opening, searching, creating, closing and
+stepping back and forward. The first usable workspace connects encrypted pages/folders and task
 links to the explorer, tabbed source editor, reading view, search, backlinks,
 outline, trash/restore and Markdown file/folder import/export. Autosave failures
 retain the draft and block navigation, vault changes and closing.

@@ -117,9 +117,10 @@ public final class Preview {
             advanceScenes(app, 26);
             write(out, page.toLowerCase(Locale.ROOT) + suffix, app, width, height);
             if (page.equals("Pages")) {
-                button(app, "Read / Edit").doClick();
+                button(app, "pages.mode").doClick();
+                layout(app);
                 write(out, "pages-reading" + suffix, app, width, height);
-                button(app, "Read / Edit").doClick();
+                button(app, "pages.mode").doClick();
             }
         }
         // The arranging state of the Collection page: pick-up marker and
