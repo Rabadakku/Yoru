@@ -764,10 +764,22 @@ final class TasksPanel extends JPanel implements Scrollable {
         return tracker.state().tasks().stream().mapToInt(Task::order).max().orElse(-1)+1;
     }
 
+    /**
+     * The due date a form starts from: today for a new task (#67), and its own
+     * for one being edited.
+     *
+     * Almost every task written down is due that day, and the date is one click
+     * to clear when it is not; an empty field made a deadline something you had
+     * to remember to set, so most tasks had none.
+     */
+    static DateField dueField(Task existing) {
+        return new DateField(existing==null?LocalDate.now():existing.due(),"Due",true);
+    }
+
     private void edit(Task existing) {
         var title=new JTextField(existing==null?"":existing.title(),36);
         var notes=new JTextArea(existing==null?"":existing.notes(),5,36);notes.setLineWrap(true);notes.setWrapStyleWord(true);
-        var due=new DateField(existing==null?null:existing.due(),"Due",true);
+        var due=dueField(existing);
         var activity=plainCombo(new JComboBox<Object>());activity.addItem("Unassigned");tracker.state().activities().forEach(activity::addItem);
         if(existing!=null&&existing.activityId()!=null)for(int i=1;i<activity.getItemCount();i++)if(((Activity)activity.getItemAt(i)).id().equals(existing.activityId()))activity.setSelectedIndex(i);
         var status=plainCombo(new JComboBox<>(TaskStatus.values()));

@@ -117,6 +117,16 @@ public final class TaskBoardTest {
             if(cause instanceof Error error)throw error;
             throw wrapped;
         }
+        // A new task is due today; an existing one keeps its own date (#67).
+        check(TasksPanel.dueField(null).value().equals(java.time.LocalDate.now()),
+            "a new task's form opens with today's date");
+        var dated = new Task(java.util.UUID.randomUUID(), null, null, "Dated", "",
+            java.time.LocalDate.now().plusDays(3), TaskStatus.TODO, "Test", java.time.Instant.now(), 0);
+        check(TasksPanel.dueField(dated).value().equals(dated.due()), "editing a task shows the date it has");
+        var undated = new Task(java.util.UUID.randomUUID(), null, null, "Undated", "", null,
+            TaskStatus.TODO, "Test", java.time.Instant.now(), 1);
+        check(TasksPanel.dueField(undated).value() == null, "and a task with no date still has none");
+
         System.out.println("PASS: "+checks+" board checks (views, sorting, status, reorder, tags)");
     }
 
