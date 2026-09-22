@@ -180,7 +180,7 @@ final class PageExplorer extends JPanel {
         add(scroll, BorderLayout.CENTER);
     }
 
-    private static int menuKey() { return (GraphicsEnvironment.isHeadless() ? InputEvent.CTRL_DOWN_MASK : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()); }
+    private static int menuKey() { return TextInput.menuKey(); }
 
     /** A drawn icon as a quiet square button, named for tests and screen readers. */
     static JButton icon(Glyphs.Kind kind, String what, String name, Runnable action) {

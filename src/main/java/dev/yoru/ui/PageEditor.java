@@ -307,7 +307,7 @@ final class PageEditor extends JPanel {
     // ---------------------------------------------------------------- keys
 
     private void keys() {
-        int menu = (GraphicsEnvironment.isHeadless() ? InputEvent.CTRL_DOWN_MASK : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
+        int menu = TextInput.menuKey();
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menu), "yoru.undo", history::undo);
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menu | InputEvent.SHIFT_DOWN_MASK), "yoru.redo", history::redo);
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_Y, menu), "yoru.redo2", history::redo);
@@ -522,7 +522,7 @@ final class PageEditor extends JPanel {
     }
 
     private static boolean followKey(InputEvent e) {
-        return (e.getModifiersEx() & (GraphicsEnvironment.isHeadless() ? InputEvent.CTRL_DOWN_MASK : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx())) != 0;
+        return (e.getModifiersEx() & TextInput.menuKey()) != 0;
     }
 
     private Span linkAt(int offset) {

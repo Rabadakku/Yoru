@@ -242,6 +242,9 @@ final class Theme {
         // on macOS, Windows and Linux.
         try { UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName()); }
         catch (Exception ignored) { }
+        // After the look and feel, which brings its own input maps with it: the
+        // platform's copy, paste and undo go on top of them (#49).
+        TextInput.install();
 
         put(BG, "Panel.background", "OptionPane.background", "Viewport.background",
             "ScrollPane.background", "ScrollBar.track", "TabbedPane.background");

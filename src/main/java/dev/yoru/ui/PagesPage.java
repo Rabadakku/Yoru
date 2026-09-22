@@ -213,7 +213,7 @@ final class PagesPage {
     }
 
     private void keys() {
-        int menu = GraphicsEnvironment.isHeadless() ? InputEvent.CTRL_DOWN_MASK : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        int menu = TextInput.menuKey();
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_O, menu), "pages.open", () -> switcher(false));
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_F, menu | InputEvent.SHIFT_DOWN_MASK), "pages.search", () -> switcher(true));
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_E, menu), "pages.read", this::toggleReading);

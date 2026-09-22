@@ -20,6 +20,7 @@ java -ea -cp build/classes dev.yoru.pages.MarkdownTest
 java -ea -cp build/classes dev.yoru.pages.LinksTest
 java -ea -cp build/classes dev.yoru.PagesTest
 java -ea -cp build/classes dev.yoru.pages.MarkdownDirectoryTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TextInputTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PageEditorTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PagesUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiCardTest
