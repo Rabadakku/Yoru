@@ -16,6 +16,9 @@ javac --release 22 -encoding UTF-8 -cp build/classes -d build/classes @build/tes
 java -ea -cp build/classes dev.yoru.ui.IsolationTest
 java -ea -cp build/classes dev.yoru.anki.AnkiConnectTest
 java -ea -cp build/classes dev.yoru.AnkiTimeTest
+java -ea -cp build/classes dev.yoru.pages.MarkdownTest
+java -ea -cp build/classes dev.yoru.pages.LinksTest
+java -ea -cp build/classes dev.yoru.PagesTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiCardTest
 java -ea -cp build/classes dev.yoru.CoreTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.UiTest

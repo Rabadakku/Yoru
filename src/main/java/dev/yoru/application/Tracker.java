@@ -21,9 +21,19 @@ public final class Tracker {
     public Instant now() {
         return clock.instant();
     }
-    private void commit(State next) throws IOException {
+    /** Package-private so services beside the tracker (Pages) save through the same one path. */
+    void commit(State next) throws IOException {
         repository.save(next);
         state=next;
+    }
+    /** The whole-vault backup a destructive change takes first. */
+    void backup() throws IOException {
+        repository.backup();
+    }
+    private final Pages pages=new Pages(this);
+    /** Pages and folders: the one way to change them (#46). */
+    public Pages pages() {
+        return pages;
     }
     /**
      * Replaces the whole vault in one write, for importing a portable export.
