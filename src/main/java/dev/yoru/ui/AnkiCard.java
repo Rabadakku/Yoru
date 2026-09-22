@@ -46,6 +46,8 @@ final class AnkiCard extends JPanel {
     /** Why the last attempt failed, or null when Anki answered. */
     private String trouble;
     private boolean busy, caughtUp;
+    private String connectionKey;
+    private boolean connectionAddsTime;
     private long generation;
     private SwingWorker<AnkiConnect.Snapshot, Void> worker;
 
@@ -70,14 +72,27 @@ final class AnkiCard extends JPanel {
 
     @Override public void addNotify() {
         super.addNotify();
-        if (settings().enabled()) {
-            timer.setDelay(Math.max(1, settings().refreshMinutes()) * 60_000);
-            timer.start();
-            refresh();
-        }
+        syncConnection();
     }
 
-    @Override public void removeNotify() { timer.stop(); super.removeNotify(); }
+    /** The connection belongs to the open vault, not to whichever tab is visible. */
+    void syncConnection() {
+        var current = settings();
+        if (!current.enabled()) {
+            if (timer.isRunning() || busy || connectionKey != null) disconnect();
+            return;
+        }
+        boolean changed = !java.util.Objects.equals(connectionKey, current.key())
+            || connectionAddsTime != current.addsTime();
+        if (changed) disconnect();
+        connectionKey = current.key(); connectionAddsTime = current.addsTime();
+        int interval = current.refreshMinutes() * 60_000;
+        timer.setDelay(interval); timer.setInitialDelay(interval);
+        if (!timer.isRunning()) { timer.start(); refresh(); }
+    }
+
+    /** Removing Today must not stop retries; close/vault switch calls disconnect. */
+    @Override public void removeNotify() { super.removeNotify(); }
 
     /** Stops asking Anki: the integration was switched off, or the vault closed. */
     void disconnect() {
@@ -87,6 +102,7 @@ final class AnkiCard extends JPanel {
         caughtUp = false;
         timer.stop();
         trouble = null;
+        connectionKey = null;
         render();
     }
 
@@ -99,6 +115,7 @@ final class AnkiCard extends JPanel {
         busy = true;
         long ticket = generation;
         String key = settings.key();
+        var requestTracker = tracker.get();
         int days = caughtUp ? 1 : CATCH_UP_DAYS;
         worker = new SwingWorker<AnkiConnect.Snapshot, Void>() {
             protected AnkiConnect.Snapshot doInBackground() throws Exception { return source.read(key, days); }
@@ -106,6 +123,9 @@ final class AnkiCard extends JPanel {
                 if (ticket != generation) return;
                 busy = false;
                 worker = null;
+                var current = settings();
+                if (tracker.get() != requestTracker || !current.enabled() || !current.key().equals(key)
+                    || current.addsTime() != settings.addsTime()) { render(); return; }
                 boolean changed = false;
                 try {
                     var snapshot = get();
@@ -144,9 +164,8 @@ final class AnkiCard extends JPanel {
         while (kept.size() > AnkiSnapshot.DAYS) kept.remove(kept.firstKey());
         try {
             tracker.get().ankiSeen(new AnkiSnapshot(snapshot.profile(), snapshot.today(), kept, snapshot.fetchedAt()));
-        } catch (Exception ignored) {
-            // The numbers are on screen either way; a vault that will not take
-            // them is the vault's problem, and the next save says so.
+        } catch (Exception e) {
+            trouble = "Latest Anki counts could not be saved; keeping previous data";
         }
     }
 
@@ -166,7 +185,8 @@ final class AnkiCard extends JPanel {
         if (last == null) text = trouble == null ? "Anki · connecting…" : "Anki · " + trouble;
         else text = "Anki · " + last.today() + (stale ? " reviews at last refresh" : " reviews")
             + (tracked > 0 ? " · " + Analytics.report(tracked) + " tracked" : "")
-            + " · updated " + WHEN.withZone(zone.get()).format(last.fetchedAt())
+            + " · updated " + (stale ? DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(zone.get()).format(last.fetchedAt())
+                : WHEN.withZone(zone.get()).format(last.fetchedAt()))
             + (trouble == null ? "" : " · " + trouble);
 
         var line = button(text, openDetails);
@@ -177,12 +197,12 @@ final class AnkiCard extends JPanel {
         line.setBackground(PANEL);
         line.setBorder(controlBorder(LINE));
         line.setIcon(dot(trouble, stale));
-        line.setToolTipText(last == null ? "Open the Data page for Anki's history"
-            : "Profile " + last.profile() + " · last read "
+        line.setToolTipText(last == null ? text + ". Open the Data page for Anki's history"
+            : text + ". Profile " + last.profile() + " · last read "
               + DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(zone.get()).format(last.fetchedAt())
               + ". Open the Data page for its history.");
         line.getAccessibleContext().setAccessibleName(text);
-        add(line, BorderLayout.WEST);
+        add(line, BorderLayout.CENTER);
         setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, line.getPreferredSize().height));
         revalidate();
         repaint();

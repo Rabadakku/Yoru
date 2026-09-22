@@ -52,6 +52,7 @@ final class TodayPage {
 
     /** One step of the window's ticker: the clock reads the time. */
     void tick(boolean animate, Session running, boolean onScreen) {
+        ankiCard.syncConnection();
         if(timerLabel!=null&&onScreen)updateTimer();
         if(dailyGoal!=null&&onScreen)dailyGoal.update();
     }
