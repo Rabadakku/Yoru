@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds a folder that can be handed to someone else (#16).
 #
-# Deliberately not the personal build: no artwork, no game files, no vault.
+# Deliberately not the personal build: no vault and nothing imported.
 # DistributionTest asserts that about the jar this produces, because "we did not
 # mean to include it" is not a guarantee.
 set -eu
@@ -62,17 +62,6 @@ two together, because either one alone is useless.
 Back it up by copying the vault (and its key file, if you have one). There is
 also Data -> Export vault JSON, which writes everything as plain readable text.
 That export is NOT encrypted, so put it somewhere you are happy for it to be.
-
-Artwork
--------
-This build ships no game artwork, and cannot: those sprites are not ours to
-give away. The collection works without them and shows National Dex numbers
-instead.
-
-To add your own, drop a folder or a .zip onto the window, or use
-Settings -> Add artwork. Yoru looks for PNG files named 1.png through 386.png,
-with shiny versions under a "shiny" subfolder. It copies them into its own
-library, so the folder you picked can be moved afterwards.
 
 What this build does not do
 ---------------------------

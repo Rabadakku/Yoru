@@ -1,9 +1,26 @@
 # Yoru roadmap
 
-## In review — Pages workspace (#46)
+## In review — the game removed (#58)
 
-`claude/pages-finish` continues `codex/pages-finish`, which continues the three
-commits on `claude/pages` through `66006a0`. The finishing pass gave the
+Yoru is a productivity tracker and planner; the game is gone in full. The Game
+and Collection tabs, the emulator binding, the Generation III save handling,
+encounters, rewards, artwork import and the sprites and scenes on Today were
+deleted — about 9,700 lines of `src/main/java` and forty test files.
+
+The vault is schema 15: the campaign, the reward ledger and the game's save are
+no longer written, and an older vault is read past them so everything after
+lands at the right offset. **A game save an older vault was holding is written
+beside the vault** as `<name>-game-save.sav` the first time it opens, and Yoru
+says so once, so removing the feature costs nobody their save. The portable
+export is format 4 and ignores those keys in an older file.
+
+Study music stays: it plays the owner's own audio files and belongs with focus
+sessions. `docs/PRODUCT-GOALS.md` now describes the app Yoru is becoming, and
+the plan it follows is issue #65.
+
+## Shipped — Pages workspace (#46)
+
+Merged to main on 22 September 2026 (PR #87). The finishing pass gave the
 workspace its header (back, forward, the page's own title, reading toggle and
 the ⋯ menu), tabs drawn in the theme rather than the look-and-feel's, the
 connections panel (outline, linked from, tasks), embedded pages in reading view,

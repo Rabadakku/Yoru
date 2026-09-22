@@ -453,17 +453,6 @@ final class VaultLauncher {
         return Dialogs.confirmDestructive(parent, message, "Delete \"" + name + "\"", "Delete it");
     }
 
-    /**
-     * Runs a vault change once the game has stopped.
-     *
-     * The game holds its own copy of the vault's save while it runs, so a vault
-     * is never switched, renamed or deleted underneath it. The change waits for
-     * the game's own close, which keeps its final save in the vault first.
-     */
-    static void whenGameStopped(GameController game, Runnable change) {
-        if (game.running()) game.close(change); else change.run();
-    }
-
     private static void close(Repository vault) {
         try { vault.close(); } catch (Exception ignored) { }
     }

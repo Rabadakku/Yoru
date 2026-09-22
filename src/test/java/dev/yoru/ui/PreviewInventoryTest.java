@@ -22,8 +22,8 @@ public final class PreviewInventoryTest {
     private static void check(boolean ok, String why) { checks++; if (!ok) throw new AssertionError(why); }
 
     private static final int WIDTH = 1280, HEIGHT = 1000, MIN_WIDTH = 900, MIN_HEIGHT = 640;
-    private static final List<String> VIEWS = List.of("today", "tasks", "pages", "pages-reading", "habits", "schedule", "collection", "game",
-        "data", "settings", "collection-arranging", "tasks-calendar");
+    private static final List<String> VIEWS = List.of("today", "tasks", "pages", "pages-reading", "habits", "schedule",
+        "data", "settings", "tasks-calendar");
 
     public static void main(String[] args) {
         // Preview's windows leave timers running on the event thread, so this

@@ -38,8 +38,7 @@ final class UpdatesCard extends JPanel {
     interface Feed { ReleaseFeed.Release latest() throws Exception; }
 
     interface Host {
-        boolean gameRunning();
-        /** Closes the game and the vault as quitting does, runs the step, then ends the process. */
+        /** Closes the vault as quitting does, runs the step, then ends the process. */
         void quitThen(Runnable afterVaultClosed);
         Component owner();
     }
@@ -99,17 +98,14 @@ final class UpdatesCard extends JPanel {
                 detail("There is no installer for this computer in that release. Its page on GitHub lists what was built.");
                 actions(notesButton(latest), checkButton("Check again"));
             } else {
-                boolean gameOpen = host.gameRunning();
-                String how = switch (platform) {
-                    case MAC -> "Yoru downloads it, checks it against the release's SHA-256, then closes its game and vault, replaces itself and reopens.";
-                    case WINDOWS -> "Yoru downloads it, checks it against the release's SHA-256, then closes its game and vault so the installer can replace it.";
+                detail(switch (platform) {
+                    case MAC -> "Yoru downloads it, checks it against the release's SHA-256, then closes its vault, replaces itself and reopens.";
+                    case WINDOWS -> "Yoru downloads it, checks it against the release's SHA-256, then closes its vault so the installer can replace it.";
                     default -> "Yoru downloads it and checks it against the release's SHA-256. Installing a .deb needs your administrator password, so you run one command.";
-                };
-                detail(gameOpen ? how + " Close the game first." : how);
+                });
                 var install = accentButton((platform == Updates.Platform.LINUX ? "Download " : "Download and install ") + next,
                     () -> download(latest, asset.get()));
                 install.setName("updates.install");
-                install.setEnabled(!gameOpen);
                 actions(install, notesButton(latest));
             }
         }
@@ -124,7 +120,6 @@ final class UpdatesCard extends JPanel {
     }
 
     private void download(ReleaseFeed.Release release, ReleaseFeed.Asset asset) {
-        if (host.gameRunning()) { show(release); return; }
         begin();
         status("Downloading Yoru " + release.version() + "…", TEXT);
         var progress = label("Starting…", TYPE_CAPTION, MUTED);
@@ -217,13 +212,11 @@ final class UpdatesCard extends JPanel {
     /**
      * Starts the swap script before quitting. It waits for this process to end, so
      * a failure to start it leaves Yoru running and says so. If quitting is then
-     * refused — a game that will not stop — the script finishes the update
-     * whenever Yoru does quit.
+     * refused, the script finishes the update whenever Yoru does quit.
      */
     private void restartMac(Path staged, Path installed, Path work) {
-        if (host.gameRunning()) { Dialogs.info(host.owner(), "Close the game first. Yoru closes to install the update."); return; }
         if (!Dialogs.confirm(host.owner(), "Close Yoru and install the update?\n\n"
-                + "Your game and vault are closed first, then Yoru replaces itself and reopens.", "Install update", "Restart"))
+                + "Your vault is closed first, then Yoru replaces itself and reopens.", "Install update", "Restart"))
             return;
         try {
             MacInstall.launch(MacInstall.swapScript(ProcessHandle.current().pid(), staged, installed, true), work);
@@ -235,8 +228,7 @@ final class UpdatesCard extends JPanel {
     }
 
     private void closeAndRun(Runnable step) {
-        if (host.gameRunning()) { Dialogs.info(host.owner(), "Close the game first. Yoru closes to install the update."); return; }
-        if (!Dialogs.confirm(host.owner(), "Close Yoru and install the update?\n\nYour game and vault are closed first.",
+        if (!Dialogs.confirm(host.owner(), "Close Yoru and install the update?\n\nYour vault is closed first.",
                 "Install update", "Close and install"))
             return;
         host.quitThen(step);

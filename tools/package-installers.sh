@@ -78,23 +78,16 @@ set -- \
   --name Yoru \
   --app-version "$version" \
   --vendor "The Yoru project" \
-  --description "A study timer that turns time into a game" \
+  --description "A local-first tracker and planner" \
   --copyright "The Yoru project" \
   --dest "$out" \
   --module-path "$module_path" \
   --module dev.yoru/dev.yoru.ui.YoruApp \
   --add-modules java.desktop,java.prefs,java.net.http \
-  --java-options "--enable-native-access=dev.yoru,ALL-UNNAMED" \
   --icon "$icon"
 
 # --add-modules mirrors module-info.java; the launcher also bundles java.base
 # and whatever else the module graph pulls in.
-#
-# --enable-native-access: the Game tab runs the game through the mGBA libretro
-# core, which Yoru loads and calls through the FFM API. That is a restricted
-# method, so the launcher grants the app module native access up front instead
-# of the runtime warning about it on every start. ALL-UNNAMED covers anything
-# the app loads outside its own module.
 
 case "$type" in
   dmg)

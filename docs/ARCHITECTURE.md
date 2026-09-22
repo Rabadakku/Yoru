@@ -4,21 +4,18 @@ Local Java 22+ desktop modular monolith. No server, account or shared database �
 distribution scales by each installation owning its own vault, not by hosting
 anything.
 
-**Runtime dependencies are allowed** (decided by the owner, 2026-09-10, superseding
-the "Swing and the JDK only" rule this record used to open with). The reason it
-went is concrete: [PRODUCT-GOALS.md](PRODUCT-GOALS.md) requires the original
-game to run *inside* Yoru, and an emulator core is a native library. The old
-rule would have forced either a worse product or a dishonest reading of it, and
-between the two the rule is what should give.
+**Runtime dependencies are allowed** (decided by the owner, 2026-09-10), but
+Yoru has none: it is Swing and the JDK, and every picture is drawn at runtime.
+The one thing that ever needed a native library — the game — was removed in
+full (#58).
 
-What the change does *not* license:
+What "allowed" does *not* license:
 
-- **The study workspace still needs nothing.** Tracking, tasks, scheduling,
-  habits, analytics and vaults must keep working with no game files, no native
-  core and no network. A missing dependency degrades a feature; it never stops
-  the app from opening.
-- **Personal files stay external.** ROMs, saves, artwork and keys remain out of
-  Git and out of releases, exactly as before.
+- **The app still needs nothing.** Tracking, tasks, scheduling, habits, pages,
+  analytics and vaults must keep working with no network and nothing installed.
+  A missing dependency degrades a feature; it never stops the app from opening.
+- **Personal files stay external.** Vaults, imports and keys remain out of Git
+  and out of releases.
 - **Every dependency is a decision with a reason.** Name it here, say what it
   buys, and prefer the JDK where the JDK is enough. "Allowed" is not "free".
 
@@ -45,10 +42,10 @@ clock.
 | Package | Holds |
 |---|---|
 | `domain` | `Model`: immutable records and their validation. `Model.State` is the whole world. |
-| `application` | `Tracker`, the only mutation boundary. `Analytics` for derived views, `Encounters` for the reward economy, `GameSync` for rewards into the save, and the `Repository` port. |
-| `persistence` | `EncryptedVault` (AES-256-GCM, backups and their retention), `VaultStore` (the vault folder, names and moves), `PortableVault` (JSON import and export), `LocalAccess` (password-free key), `LegacyCollection`. |
-| `game` | The save format (`Gen3Save`, `Gen3Pokemon`, `Gen3Text`), edits and delivery (`StorageEdit`, `GameDelivery`, `StudyGift`, `LegacyGifts`), encounters (`WildEncounters`, `StudyEncounter`, `Progression`), and the emulator (`LibretroCore`, `GameSession`, `EmulationLoop`, `SaveTransfer`, `SessionHandle`, `Rom`). |
-| `assets` | `ArtworkLibrary`, the library's front: what it holds, what is complete, the last failed import. `ArtworkStaging` reads an import into a stage under one budget; `ArtworkGenerations` publishes it and keeps two generations. `EmeraldArtwork` decodes sprites from the player's own game. `MusicLibrary`. |
+| `application` | `Tracker`, the only mutation boundary. `Pages` for the notes tree, `Analytics` for derived views, `AnkiTime` for Anki sittings, and the `Repository` port. |
+| `persistence` | `EncryptedVault` (AES-256-GCM, backups and their retention), `VaultStore` (the vault folder, names and moves), `PortableVault` (JSON import and export), `LocalAccess` (password-free key). |
+| `pages` | `Markdown` (the parser, keeping exact offsets), `Links` (what a link means and how renames keep it), `PageIndex` (backlinks and search), `MarkdownDirectory` (import and export). |
+| `assets` | `MusicLibrary`: study music imported from the owner's own audio files. |
 | `importer` | `NotionImport`. |
 | `update` | `ReleaseFeed`, `Download`, `Updates`, `MacInstall`, `Version`. |
 | `json` | `Json`, the bounded codec. |
@@ -104,27 +101,25 @@ UTC instants everywhere, half-open intervals `[start, end)`.
 ## UI structure
 
 `YoruApp` owns the window shell, the nav bar, the open vault and a single 70 ms
-ticker that drives the clock and the animated scenes. Pages are rebuilt
+ticker that drives the clock. Pages are rebuilt
 wholesale on navigation — cheap at this data size, and it removes a whole class
 of stale-view bugs — and a rebuild of the page on screen keeps its scroll.
 
 Pages are their own classes and reach the window only through `Shell`:
-`TodayPage`, `TasksPanel`, `HabitsPanel`, `CollectionPage`, `GamePage` and
-`SettingsPage`. The Schedule and Data pages are still built in `YoruApp`. What
-several pages share, and what needs the open vault, stays in the window behind
-`Shell`: the time editors, a new activity, applying settings, artwork imports,
-the vault's controls and quitting for an update.
+`TodayPage`, `TasksPanel`, `HabitsPanel`, `PagesPage` and `SettingsPage`. The
+Schedule and Data pages are still built in `YoruApp`. What several pages share,
+and what needs the open vault, stays in the window behind `Shell`: the time
+editors, a new activity, applying settings, the vault's controls and quitting
+for an update.
 
 | Component | Role |
 |---|---|
 | `Theme` | The palette, as mutable statics so `apply()` can swap every theme without touching call sites. Also the shared widgets and the type and spacing scale. |
 | `Dialogs` | Every dialog. Suppresses stock Java icons and keeps wording consistent. |
 | `DateText`, `DateField`, `DateTimeField` | Dates and times typed in a forgiving form or picked from `CalendarPanel`; unreadable text is refused, never saved. |
-| `GameController` | The game from Play to Close: the save queue, acknowledgement and retry, and the session's `EncounterTables`. |
-| `StorageScreen`, `PartyStrip`, `Arrangement` | The Collection's box grid, party row and the move shared between them. |
+| `PageEditor`, `PageReader`, `PageExplorer` | The Markdown editor, the reading view and the file tree, each reaching `PagesPage` through its own host interface. |
 | `ScheduleGrid` | The week: hour rules, recorded sessions, planned blocks, drag to create/move/resize. |
-| `TrainerScene`, `BuddyCard` | The trainer walking beside the timer, and the partner card beside it. |
-| `SpriteAssets` | Bounded, cached sprite decoding. |
+| `TextInput` | The platform's copy, paste and undo on every text field, and the right-click menu. |
 
 ### Swing constraints, learned the hard way
 
@@ -145,15 +140,6 @@ UI changes are reviewed as images, not diffs. `ui/Preview` renders every page
 headlessly at any size and theme; `ui/DialogPreview` renders the dialogs, which
 the page preview cannot reach. Both contrast regressions in this project were
 invisible in the diff and obvious in the PNG.
-
----
-
-## Artwork
-
-The repository contains **no** game assets. `assets/ArtworkLibrary` imports a
-user-supplied folder or zip into `~/.yoru/art`, normalising names; `SpriteAssets`
-resolves in order: the `yoru.art.dir` override, the imported library, then the
-classpath. Missing artwork degrades to dex numbers rather than failing.
 
 ---
 

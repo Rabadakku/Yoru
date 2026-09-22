@@ -29,36 +29,7 @@ public final class VaultUiTest {
         public void close() { closed = true; }
     }
 
-    /** A vault change runs at once with no game, and waits for the game to stop otherwise. */
-    private static void vaultChangesWaitForTheGame() throws Exception {
-        var tracker = new Tracker(new Memory(), Clock.systemUTC());
-        var game = new GameController(tracker);
-        var ran = new AtomicBoolean();
-
-        VaultLauncher.whenGameStopped(game, () -> ran.set(true));
-        check(ran.get(), "with no game running, a vault change happens at once");
-
-        // A game that is running: the change must not touch the vault yet.
-        ran.set(false);
-        Field phase = GameController.class.getDeclaredField("phase");
-        phase.setAccessible(true);
-        phase.set(game, GameController.Phase.RUNNING);
-        check(game.running(), "the game reads as running");
-        VaultLauncher.whenGameStopped(game, () -> ran.set(true));
-        check(!ran.get(), "with the game running, the vault change waits instead of touching the vault");
-
-        // Let the game stop: the queued change runs afterwards, never before.
-        game.close(null);
-        for (int i = 0; i < 400 && !ran.get(); i++) {
-            Thread.sleep(5);
-            SwingUtilities.invokeAndWait(() -> { });
-        }
-        check(ran.get(), "and runs once the game has stopped");
-        check(game.phase() == GameController.Phase.IDLE, "with the game stopped rather than stuck");
-    }
-
     public static void main(String[] args) throws Exception {
-        vaultChangesWaitForTheGame();
         System.out.println("PASS: " + checks + " vault UI checks (a vault change never runs under a running game)");
     }
 }

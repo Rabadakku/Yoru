@@ -30,12 +30,12 @@ public final class FocusMixTest {
     private static State stateOf(int minSessionSeconds,Session... sessions) {
         var base=State.empty();
         var was=base.settings();
-        var settings=new Settings(was.theme(),was.trainer(),was.dailyGoalHours(),
+        var settings=new Settings(was.theme(),was.dailyGoalHours(),
             minSessionSeconds,was.weekStartsOn());
         return new State(
             List.of(new Activity(MATHS,"Maths",0),new Activity(PROSE,"Prose",0)),
             List.of(sessions),base.blocks(),base.recurring(),base.tasks(),base.habits(),
-            base.tags(),settings,base.campaign(),base.rewards(),base.game(),base.notes());
+            base.tags(),settings,base.notes());
     }
 
     private static Session session(UUID activity,String from,String to) {

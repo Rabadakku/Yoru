@@ -163,7 +163,7 @@ public final class ScheduleUiTest {
         check(floorGrid.drawn()==1,"Only the session that counts is drawn, found "+floorGrid.drawn());
         // Lower the floor and the short one appears, so this is the setting and
         // not a hardcoded five minutes.
-        floored.settings(new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,60,DayOfWeek.MONDAY));
+        floored.settings(new Settings(ThemeId.MIDNIGHT,4,60,DayOfWeek.MONDAY));
         var openGrid=new ScheduleGrid(floored.state(),monday,zone,Instant.parse("2026-09-10T15:00:00Z"));
         openGrid.setSize(900,600);layout(openGrid);
         openGrid.paint(new BufferedImage(900,600,BufferedImage.TYPE_INT_RGB).getGraphics());

@@ -65,7 +65,6 @@ public final class Model {
         }
     }
     /** Overworld sprite set. Not called Character — that shadows java.lang.Character. */
-    public enum TrainerId { BRENDAN, MAY }
     /**
      * A task's state. The stored form is the constant's name; {@code label} is
      * only how it is written on screen, so a task's status button reads "To do"
@@ -79,21 +78,21 @@ public final class Model {
     }
     public enum HabitKind { DAILY, TIME_SINCE }
 
-    public record Settings(ThemeId theme, TrainerId trainer, int dailyGoalHours, int minSessionSeconds,
+    public record Settings(ThemeId theme, int dailyGoalHours, int minSessionSeconds,
                            DayOfWeek weekStartsOn) {
         /** Kept for callers that predate the week-start preference. */
-        public Settings(ThemeId theme, TrainerId trainer, int dailyGoalHours, int minSessionSeconds) {
-            this(theme,trainer,dailyGoalHours,minSessionSeconds,DayOfWeek.MONDAY);
+        public Settings(ThemeId theme, int dailyGoalHours, int minSessionSeconds) {
+            this(theme,dailyGoalHours,minSessionSeconds,DayOfWeek.MONDAY);
         }
         public Settings {
-            Objects.requireNonNull(theme); Objects.requireNonNull(trainer);
+            Objects.requireNonNull(theme);
             Objects.requireNonNull(weekStartsOn);
             if(dailyGoalHours<1 || dailyGoalHours>16)
                 throw new IllegalArgumentException("Daily goal must be between 1 and 16 hours.");
             if(minSessionSeconds<0 || minSessionSeconds>3600)
                 throw new IllegalArgumentException("Minimum session must be between 0 and 60 minutes.");
         }
-        public static Settings defaults() { return new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.MONDAY); }
+        public static Settings defaults() { return new Settings(ThemeId.MIDNIGHT,4,300,DayOfWeek.MONDAY); }
         /** The start of the week containing this date, under this preference. */
         public LocalDate weekOf(LocalDate date) {
             return date.with(java.time.temporal.TemporalAdjusters.previousOrSame(weekStartsOn));
@@ -281,98 +280,6 @@ public final class Model {
         }
     }
 
-    /**
-     * A Pokémon that study time has earned for the game.
-     *
-     * The id is the reward's identity, and it survives into the delivered
-     * Pokémon's personality value, so the game save itself records what has been
-     * handed over and a delivery can never be counted twice.
-     *
-     * deliveredAt being null is the whole state machine. There is no separate
-     * flag to disagree with it, and no ordering in which a reward can be both.
-     */
-    public record Reward(UUID id, int nationalDex, int level, Instant earnedAt, Instant deliveredAt) {
-        public Reward {
-            Objects.requireNonNull(id);
-            requireTime(earnedAt);
-            if (deliveredAt != null) requireTime(deliveredAt);
-            if (nationalDex < 1 || nationalDex > SPECIES_COUNT)
-                throw new IllegalArgumentException("Unknown species.");
-            if (level < 1 || level > 100) throw new IllegalArgumentException("Invalid level.");
-        }
-        public boolean delivered() { return deliveredAt != null; }
-        public Reward deliveredAt(Instant when) {
-            return new Reward(id, nationalDex, level, earnedAt, when);
-        }
-    }
-
-    /** Generation I–III National Dex. Widening this leaves existing data valid. */
-    public static final int SPECIES_COUNT = 386;
-
-    /**
-     * How far the study encounters have got.
-     *
-     * The seed fixes every encounter in advance: encounter n always has the same
-     * id, and the id decides what it turns out to be. Reopening the vault, or
-     * closing the dialog without catching, can never re-roll an encounter into
-     * something better. encountersUsed counts the ones opened; rewardedSeconds
-     * is the study time they have used up.
-     */
-    public record Campaign(long seed, long encountersUsed, long rewardedSeconds) {
-        public Campaign {
-            if (encountersUsed < 0 || encountersUsed > 1_000_000)
-                throw new IllegalArgumentException("Invalid encounter count.");
-            if (rewardedSeconds < 0) throw new IllegalArgumentException("Invalid encounter progress.");
-        }
-        public static Campaign start(long seed) { return new Campaign(seed, 0, 0); }
-        /** The id encounter n will always have. */
-        public UUID encounterId(long n) {
-            return UUID.nameUUIDFromBytes(java.nio.ByteBuffer.allocate(16).putLong(seed).putLong(n).array());
-        }
-        /** The id of the encounter that opens next. */
-        public UUID nextEncounter() { return encounterId(encountersUsed); }
-        public Campaign encounterUsed(long seconds) {
-            return new Campaign(seed, encountersUsed + 1, rewardedSeconds + seconds);
-        }
-        public Campaign withRewardedSeconds(long seconds) { return new Campaign(seed, encountersUsed, seconds); }
-    }
-
-    /**
-     * The game's own battery save, kept in the vault (#40).
-     *
-     * Exactly the bytes the game wrote. Holding them here rather than in a file
-     * beside the vault makes one vault one game: it is encrypted, backed up,
-     * exported and reset with everything else, and a second vault is a second
-     * playthrough rather than a second view of the same one.
-     *
-     * A class rather than a record so the bytes are copied on the way in and out
-     * and compared by content; a record would hand out the array itself and
-     * compare it by identity.
-     */
-    public static final class GameSave {
-        /** Emerald writes 128 KiB; anything past a megabyte is not a Game Boy Advance save. */
-        public static final int MAX_BYTES = 1 << 20;
-        private final byte[] bytes;
-        private final Instant updatedAt;
-
-        public GameSave(byte[] bytes, Instant updatedAt) {
-            Objects.requireNonNull(bytes);
-            if (bytes.length == 0 || bytes.length > MAX_BYTES) throw new IllegalArgumentException("That is not a game save.");
-            requireTime(updatedAt);
-            this.bytes = bytes.clone();
-            this.updatedAt = updatedAt;
-        }
-        public byte[] bytes() { return bytes.clone(); }
-        public Instant updatedAt() { return updatedAt; }
-        /** Whether these are exactly the bytes this save holds. */
-        public boolean holds(byte[] other) { return Arrays.equals(bytes, other); }
-        @Override public boolean equals(Object o) {
-            return o instanceof GameSave other && updatedAt.equals(other.updatedAt) && Arrays.equals(bytes, other.bytes);
-        }
-        @Override public int hashCode() { return 31 * Arrays.hashCode(bytes) + updatedAt.hashCode(); }
-        @Override public String toString() { return "GameSave[" + bytes.length + " bytes, " + updatedAt + "]"; }
-    }
-
     public record Habit(UUID id, String name, HabitKind kind, String zone,
                         Set<LocalDate> checkIns, List<Instant> starts) {
         public Habit {
@@ -525,18 +432,16 @@ public final class Model {
      *
      * One canonical constructor with every part, and a wither for each, so
      * rebuilding the state can never quietly drop a part: a new field is a
-     * compile error at every call site that forgot it, rather than study credit
-     * or a game save that silently vanishes.
-     *
-     * game is null until the game has been played or a save brought in.
+     * compile error at every call site that forgot it, rather than a habit's
+     * history or a page that silently vanishes.
      */
     public record State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks,
                         List<RecurringBlock> recurring, List<Task> tasks, List<Habit> habits, List<Tag> tags,
-                        Settings settings, Campaign campaign, List<Reward> rewards, GameSave game, Notes notes) {
+                        Settings settings, Notes notes) {
         /** The time-tracking core alone, with everything else empty. */
         public State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks) {
             this(activities, sessions, blocks, List.of(), List.of(), List.of(), List.of(), Settings.defaults(),
-                Campaign.start(0), List.of(), null, Notes.empty());
+                Notes.empty());
         }
         public State {
             activities = List.copyOf(activities);
@@ -546,17 +451,13 @@ public final class Model {
             tasks = List.copyOf(tasks);
             habits = List.copyOf(habits);
             tags = List.copyOf(tags);
-            rewards = List.copyOf(rewards);
             Objects.requireNonNull(settings);
-            Objects.requireNonNull(campaign);
             Objects.requireNonNull(notes);
-            if (rewards.stream().map(Reward::id).distinct().count() != rewards.size())
-                throw new IllegalArgumentException("Duplicate reward.");
             if(habits.stream().map(Habit::id).distinct().count()!=habits.size()) throw new IllegalArgumentException("Duplicate habit.");
             if(tags.stream().map(Tag::id).distinct().count()!=tags.size()) throw new IllegalArgumentException("Duplicate tag.");
             if (recurring.size()>1_000) throw new IllegalArgumentException("Vault record limit reached.");
             if (activities.size()>100_000 || sessions.size()>100_000 || blocks.size()>100_000 || tasks.size()>100_000
-                || habits.size()>100_000 || tags.size()>1_000 || rewards.size()>100_000)
+                || habits.size()>100_000 || tags.size()>1_000)
                 throw new IllegalArgumentException("Vault record limit reached.");
             Set<UUID> ids = new HashSet<>();
             for (var a : activities) if (!ids.add(a.id())) throw new IllegalArgumentException("Duplicate activity.");
@@ -603,10 +504,6 @@ public final class Model {
          * bucket, created on demand and reused if it already exists. Sessions
          * either move there too (keepTime) or go with the activity.
          *
-         * The campaign and the reward ledger are untouched. Encounter credit is
-         * derived from the sessions at read time, so deleting time cannot mint a
-         * new encounter, and an encounter already opened stays opened because
-         * deleting recorded time is not a decision to un-earn it.
          *
          * Refused when records still point at the bucket itself: there would be
          * nowhere to put them.
@@ -647,23 +544,18 @@ public final class Model {
             var nextTasks = tasks.stream().map(t -> activityId.equals(t.activityId())
                 ? t.withActivity(replacement) : t).toList();
             return new State(kept, nextSessions, nextBlocks, nextRepeats, nextTasks, habits, tags,
-                settings, campaign, rewards, game, notes);
+                settings, notes);
         }
 
         public State withCore(List<Activity> a, List<Session> s, List<ScheduleBlock> b) {
-            return new State(a,s,b,recurring,tasks,habits,tags,settings,campaign,rewards,game,notes);
+            return new State(a,s,b,recurring,tasks,habits,tags,settings,notes);
         }
-        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,campaign,rewards,game,notes); }
-        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,campaign,rewards,game,notes); }
-        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,campaign,rewards,game,notes); }
-        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,campaign,rewards,game,notes); }
-        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,campaign,rewards,game,notes); }
-        public State withCampaign(Campaign next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,rewards,game,notes); }
-        public State withRewards(List<Reward> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,next,game,notes); }
-        public State withGame(GameSave next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,rewards,next,notes); }
-        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,rewards,game,next); }
-        /** Rewards earned for the real game and not yet recorded as delivered. */
-        public List<Reward> pendingRewards() { return rewards.stream().filter(r -> !r.delivered()).toList(); }
+        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,notes); }
+        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,notes); }
+        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,notes); }
+        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,notes); }
+        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,notes); }
+        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next); }
         public static State empty() { return new State(List.of(), List.of(), List.of()); }
     }
 }

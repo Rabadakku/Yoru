@@ -55,7 +55,7 @@ public final class DistributionTest {
                 "The jar starts the application, not a test harness");
         }
 
-        check(offenders.isEmpty(),"A shipped jar must carry no leaked artwork, game files or vaults — found "+offenders);
+        check(offenders.isEmpty(),"A shipped jar must carry no leaked images, imports or vaults — found "+offenders);
         check(!classes.isEmpty(),"The jar carries the application");
 
         // The application is all of itself, not a partial build.
@@ -63,7 +63,7 @@ public final class DistributionTest {
             "dev/yoru/ui/YoruApp.class","dev/yoru/ui/VaultLauncher.class",
             "dev/yoru/persistence/EncryptedVault.class","dev/yoru/persistence/PortableVault.class",
             "dev/yoru/domain/Model.class","dev/yoru/application/Tracker.class",
-            "dev/yoru/ui/Logo.class","dev/yoru/application/Encounters.class"})
+            "dev/yoru/ui/Logo.class","dev/yoru/ui/PagesPage.class","dev/yoru/pages/Markdown.class"})
             check(classes.contains(required),"The jar carries "+required);
 
         // No test classes ride along.
@@ -74,11 +74,6 @@ public final class DistributionTest {
         // so this catches a bundling accident even if it dodges the name checks.
         check(bytes<4_000_000,"The jar is code-sized, not asset-sized — uncompressed "+bytes+" bytes");
 
-        // And it degrades honestly with no artwork at all, which is how it ships.
-        var report=new dev.yoru.assets.ArtworkLibrary.Report(0,0,0,0,0);
-        check(report.empty(),"No artwork reads as empty");
-        check(report.summary().toLowerCase(Locale.ROOT).contains("dex numbers"),
-            "The empty state says what happens instead, not just that something is missing");
 
         System.out.println("PASS: "+checks+" distribution checks (no artwork, no game files, no tests, runnable)");
     }

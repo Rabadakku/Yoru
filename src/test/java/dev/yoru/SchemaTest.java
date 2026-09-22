@@ -43,17 +43,9 @@ public final class SchemaTest {
             new Task(UUID.randomUUID(),activity,null,"Lab report","",null,TaskStatus.TODO,"",now,0)));
         check(t.state().tasks().size()==2,"tasks added");
 
-        // The game side: study-earned rewards and the game's own save.
         t.log(activity,now.minusSeconds(20000),now.minusSeconds(14600));
-        var pending=t.bankReward(UUID.randomUUID(),252,5);
-        var delivered=t.bankReward(UUID.randomUUID(),255,6);
-        t.rewardDelivered(delivered.id(),now.minusSeconds(1000));
-        t.gameSaved(dev.yoru.game.Gen3Fixture.save(2,4));
-        check(t.state().pendingRewards().equals(List.of(pending)),"one of the two is still pending");
-        check(t.state().campaign().encountersUsed()==0,"no encounter opened yet");
-        check(t.state().game()!=null,"the game save is kept in the vault");
 
-        t.settings(new Settings(ThemeId.SAKURA,TrainerId.MAY,6,120,DayOfWeek.MONDAY));
+        t.settings(new Settings(ThemeId.SAKURA,6,120,DayOfWeek.MONDAY));
 
         var saved=t.state();
         check(saved.settings().theme()==ThemeId.SAKURA,"settings applied");
@@ -64,18 +56,13 @@ public final class SchemaTest {
         try(var v=new EncryptedVault(vault,password.toCharArray())) { v.save(saved); }
         try(var v=new EncryptedVault(vault,password.toCharArray())) {
             var loaded=v.load();
-            check(loaded.equals(saved),"full schema 13 state round trips");
-            check(loaded.settings().trainer()==TrainerId.MAY,"trainer choice persists");
+            check(loaded.equals(saved),"a full state round trips at the current schema");
             check(loaded.settings().dailyGoalHours()==6,"daily goal persists");
             check(loaded.settings().minSessionSeconds()==120,"minimum session persists");
             check(loaded.tags().getFirst().name().equals("Reading"),"tag persists");
             check(loaded.tasks().stream().anyMatch(x->x.status()==TaskStatus.DOING),"task status persists");
             check(loaded.tasks().stream().anyMatch(x->tag.id().equals(x.tagId())),"task tag persists");
             check(loaded.tasks().stream().anyMatch(x->x.order()==2),"task order persists");
-            check(loaded.campaign().equals(saved.campaign()),"the campaign counters persist");
-            check(loaded.rewards().equals(saved.rewards()),"both rewards persist");
-            check(loaded.pendingRewards().size()==1,"with the same one still pending");
-            check(loaded.game().equals(saved.game()),"the game save persists");
         }
 
         // Deleting a tag must not delete the work that carried it.
@@ -87,15 +74,13 @@ public final class SchemaTest {
         check(reopened.state().tags().isEmpty(),"tag removed");
 
         // A reset of one section must not quietly clear the others.
-        reopened.settings(new Settings(ThemeId.LINEN,TrainerId.MAY,5,60,DayOfWeek.MONDAY));
+        reopened.settings(new Settings(ThemeId.LINEN,5,60,DayOfWeek.MONDAY));
         reopened.addTag("Japanese",0xD8B074);
         reopened.reset(EnumSet.of(Tracker.ResetPart.TASKS));
         check(reopened.state().tasks().isEmpty(),"tasks reset");
         check(reopened.state().tags().stream().anyMatch(x->x.name().equals("Japanese")),
             "a tasks reset keeps the tags, which are their own section");
         check(reopened.state().settings().theme()==ThemeId.LINEN,"reset keeps settings it was not asked to clear");
-        check(reopened.state().rewards().size()==2,"reset keeps the rewards");
-        check(reopened.state().game()!=null,"reset keeps the game save");
 
         reopened.reset(EnumSet.of(Tracker.ResetPart.SETTINGS));
         check(reopened.state().settings().theme()==ThemeId.MIDNIGHT,"settings reset returns defaults");
@@ -103,6 +88,6 @@ public final class SchemaTest {
         try(var walk=Files.walk(dir)) {
             for(var p:walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p);
         }
-        System.out.println("PASS: "+checks+" schema 13 checks (tags, status, campaign, rewards, game save, settings, reset scoping)");
+        System.out.println("PASS: "+checks+" schema checks (tags, status, pages, settings, reset scoping)");
     }
 }

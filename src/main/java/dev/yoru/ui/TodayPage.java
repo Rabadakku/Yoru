@@ -1,7 +1,6 @@
 package dev.yoru.ui;
 
 import dev.yoru.application.Analytics;
-import dev.yoru.application.Encounters;
 import dev.yoru.application.Tracker;
 import dev.yoru.domain.Model.*;
 import java.awt.*;
@@ -31,10 +30,8 @@ import static dev.yoru.ui.Theme.*;
  */
 final class TodayPage {
     private final Shell shell;
-    private JLabel timerLabel, statusLabel, encounterLabel;
-    private BuddyCard buddyCard;
+    private JLabel timerLabel, statusLabel;
     private DailyGoal dailyGoal;
-    private TrainerScene trainerScene;
     /** The heat map's activity filter; null shows every activity. */
     private UUID heatActivity;
     private final AnkiCard ankiCard;
@@ -54,11 +51,8 @@ final class TodayPage {
     private Tracker tracker() { return shell.tracker(); }
     private ZoneId zone() { return shell.zone(); }
 
-    /** One step of the window's ticker: the partner and the trainer move, and the clock reads the time. */
+    /** One step of the window's ticker: the clock reads the time. */
     void tick(boolean animate, Session running, boolean onScreen) {
-        if (buddyCard != null) buddyCard.tick(animate);
-        if (trainerScene != null) trainerScene.advance(animate,
-            running==null?0:Duration.between(running.start(),Instant.now()).getSeconds());
         if(timerLabel!=null&&onScreen)updateTimer();
         if(dailyGoal!=null&&onScreen)dailyGoal.update();
     }
@@ -66,7 +60,7 @@ final class TodayPage {
     /** Another page is going on screen: nothing here needs the ticker until Today is built again. */
     void leave() {
         shown=false;
-        buddyCard=null;trainerScene=null;encounterLabel=null;dailyGoal=null;
+        dailyGoal=null;
         timerLabel=null;statusLabel=null;
     }
 
@@ -93,14 +87,11 @@ final class TodayPage {
         // the companion card used to be a fixed 315 px in an EAST slot, which
         // broke the page below about 900 px rather than reflowing.
         //
-        // What is next sits beside what is now. The companion alone left the
-        // right of the hero empty down to the focus card's floor, and the
-        // agenda is the one thing a running timer wants next to it.
+        // What is next sits beside what is now: the agenda is the one thing a
+        // running timer wants next to it.
         var agenda=schedulePreview();
         agenda.setName("today.agenda");
         var rail=stack();
-        rail.add(companionColumn());
-        gap(rail,SPACE_LG);
         rail.add(agenda);
         glue(rail);
         p.add(new Hero(focusCard(),rail));
@@ -166,7 +157,7 @@ final class TodayPage {
         choose.setEnabled(active==null);
         focus.add(choose);
         gap(focus,SPACE_LG);
-        timerLabel=label("00:00:00",TYPE_TIMER,TEXT);
+        timerLabel=figure("00:00:00",TYPE_TIMER,TEXT);
         timerLabel.setName("today.timer");
         focus.add(timerLabel);
         gap(focus,SPACE_SM);
@@ -189,48 +180,9 @@ final class TodayPage {
         dailyGoal=new DailyGoal(tracker,zone());
         focus.add(dailyGoal);
         gap(focus,SPACE_LG);
-        // The trainer sits with the clock, since the clock is what drives it.
-        trainerScene=new TrainerScene(tracker.state().settings().trainer()==TrainerId.MAY?"may":"brendan");
-        focus.add(trainerScene);
-        if (!trainerScene.hasTrainerArtwork()) {
-            // The sentence wraps and the control sits under it: at the window's
-            // minimum the line alone is wider than this column, so the two
-            // cannot share a row at any text size.
-            gap(focus,SPACE_SM);
-            focus.add(bodyLabel("Add your own trainer artwork to bring this trail to life."));
-            gap(focus,SPACE_SM);
-            focus.add(ghost(button("Restore scene artwork", () -> shell.show("Settings"))));
-        }
         gap(focus,SPACE_LG);
         return focus;
     }
-
-    /**
-     * The companion, and the one line about the game that is not its business.
-     *
-     * The encounter countdown used to live inside the partner card under a name
-     * that promised time together. The card is about the time you have studied;
-     * what the game owes you is a caption underneath it.
-     */
-    private JPanel companionColumn() {
-        // A card like the one on the left, so the hero pair reads as two columns
-        // of equal standing — and the encounters caption is a line on the floor
-        // of that card, inside its padding and on the card title's left edge,
-        // rather than a caption floating in the gutter under a shorter card.
-        var column=card();
-        buddyCard=new BuddyCard(tracker(),zone(),
-            ()->shell.show("Collection"),()->shell.show("Game"));
-        // Its own height and no more: the slack above the caption belongs to the
-        // floor, so the companion never grows a gap between its blocks.
-        buddyCard.setMaximumSize(new Dimension(Integer.MAX_VALUE,buddyCard.getPreferredSize().height));
-        column.add(buddyCard);
-        glue(column);
-        encounterLabel=subtitle("");
-        column.add(encounterLabel);
-        updateEncounterLine();
-        return column;
-    }
-
 
     /** The 52-week heat map, or the first-run state when there is nothing to draw. */
     private JPanel heatCard(LocalDate today) {
@@ -495,16 +447,7 @@ final class TodayPage {
     private void updateTimer() {
         var a=tracker().active();
         timerLabel.setText(a==null?"00:00:00":Analytics.duration(Math.max(0,Duration.between(a.start(),tracker().now()).getSeconds())));
-        updateEncounterLine();
         statusLabel.setText(a==null?"OPEN-ENDED · ready when you are":"● CLOCKED IN · "+shell.activityName(a.activityId()));
-    }
-    /** How close the next encounter is, as a caption under the companion it will join. */
-    private void updateEncounterLine() {
-        if(encounterLabel==null)return;
-        var state=tracker().state();
-        long waiting=Encounters.available(state);
-        encounterLabel.setText(waiting>0?plural((int)waiting,"encounter")+" waiting in Collection"
-            :Encounters.towardNext(state)/60+" / 30m to the next encounter");
     }
     private void clockOut() {
         var tracker=tracker();

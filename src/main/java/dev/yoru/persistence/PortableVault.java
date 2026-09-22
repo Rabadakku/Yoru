@@ -23,12 +23,12 @@ import java.util.*;
 public final class PortableVault {
     /**
      * Export format version. Not the storage schema; this one is plain text.
-     * Format 2 replaced the tracker's own collection with the campaign and the
-     * game save; format 1 files still import, their catches becoming rewards.
-     * Format 3 added pages, folders and the pages a task links to. A build that
-     * reads only 1 and 2 refuses a format 3 file rather than dropping its pages.
+     * Format 3 added pages, folders and the pages a task links to. Format 4
+     * dropped the game: a file from an older format still imports, and whatever
+     * it held for the game is read past. A build that reads only up to 3 refuses
+     * a format 4 file rather than dropping what it does not understand.
      */
-    public static final int FORMAT = 3;
+    public static final int FORMAT = 4;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -49,9 +49,6 @@ public final class PortableVault {
         out.put("tags", state.tags().stream().map(PortableVault::tag).toList());
         out.put("tasks", state.tasks().stream().map(PortableVault::task).toList());
         out.put("habits", state.habits().stream().map(PortableVault::habit).toList());
-        out.put("campaign", campaign(state.campaign()));
-        out.put("rewards", state.rewards().stream().map(PortableVault::reward).toList());
-        out.put("game", state.game() == null ? null : game(state.game()));
         out.put("folders", state.notes().folders().stream().map(PortableVault::folder).toList());
         out.put("pages", state.notes().pages().stream().map(PortableVault::page).toList());
         return Json.pretty(out);
@@ -60,7 +57,6 @@ public final class PortableVault {
     private static Map<String, Object> settings(Settings s) {
         var m = new LinkedHashMap<String, Object>();
         m.put("theme", s.theme().name());
-        m.put("trainer", s.trainer().name());
         m.put("dailyGoalHours", s.dailyGoalHours());
         m.put("minSessionSeconds", s.minSessionSeconds());
         m.put("weekStartsOn", s.weekStartsOn().name());
@@ -164,32 +160,6 @@ public final class PortableVault {
         return m;
     }
 
-    private static Map<String, Object> campaign(Campaign c) {
-        var m = new LinkedHashMap<String, Object>();
-        m.put("seed", c.seed());
-        m.put("encountersUsed", c.encountersUsed());
-        m.put("rewardedSeconds", c.rewardedSeconds());
-        return m;
-    }
-
-    private static Map<String, Object> reward(Reward r) {
-        var m = new LinkedHashMap<String, Object>();
-        m.put("id", r.id().toString());
-        m.put("nationalDex", r.nationalDex());
-        m.put("level", r.level());
-        m.put("earnedAt", r.earnedAt().toString());
-        m.put("deliveredAt", r.deliveredAt() == null ? null : r.deliveredAt().toString());
-        return m;
-    }
-
-    /** The save as base64, so the export stays one readable text file. */
-    private static Map<String, Object> game(GameSave g) {
-        var m = new LinkedHashMap<String, Object>();
-        m.put("updatedAt", g.updatedAt().toString());
-        m.put("save", Base64.getEncoder().encodeToString(g.bytes()));
-        return m;
-    }
-
     // ---------------------------------------------------------------- import
 
     /**
@@ -205,20 +175,8 @@ public final class PortableVault {
                 + ". This build reads formats 1 to " + FORMAT + ".");
 
         var settings = Json.object(required(root, "settings"));
-        List<Reward> rewards = root.get("rewards") == null ? List.of() : list(root, "rewards", PortableVault::readReward);
-        Campaign campaign;
-        GameSave game = null;
-        if (format == 1) {
-            // Format 1 carried the tracker's own collection; its catches become
-            // rewards waiting for the game, as they do when an old vault opens.
-            var legacy = readLegacyCollection(Json.object(required(root, "collection")));
-            campaign = legacy.campaign();
-            rewards = legacy.rewards(rewards);
-        } else {
-            var c = Json.object(required(root, "campaign"));
-            campaign = new Campaign(integer(c, "seed"), integer(c, "encountersUsed"), integer(c, "rewardedSeconds"));
-            if (root.get("game") != null) game = readGame(Json.object(root.get("game")));
-        }
+        // Formats 1 to 3 carried the game: a collection, a campaign, rewards and
+        // the save itself. The game is gone (#58), so those keys are ignored.
         return new State(
             list(root, "activities", PortableVault::readActivity),
             list(root, "sessions", PortableVault::readSession),
@@ -231,11 +189,9 @@ public final class PortableVault {
                 // Not enumeration(): a workspace exported with the withdrawn
                 // Waifu theme still opens, as the palette it was split from.
                 ThemeId.known(text(settings, "theme")),
-                enumeration(TrainerId.class, text(settings, "trainer")),
                 int32(settings, "dailyGoalHours"),
                 int32(settings, "minSessionSeconds"),
                 enumeration(java.time.DayOfWeek.class, text(settings, "weekStartsOn"))),
-            campaign, rewards, game,
             // Before format 3 there were no pages: an older file has none.
             new Notes(root.get("folders") == null ? List.of() : list(root, "folders", PortableVault::readFolder),
                 root.get("pages") == null ? List.of() : list(root, "pages", PortableVault::readPage)));
@@ -300,34 +256,6 @@ public final class PortableVault {
         for (var value : Json.array(required(m, "starts"))) starts.add(Instant.parse(Json.string(value)));
         return new Habit(id(m, "id"), text(m, "name"), enumeration(HabitKind.class, text(m, "kind")),
             text(m, "zone"), checkIns, starts);
-    }
-
-    private static Reward readReward(Map<?, ?> m) {
-        return new Reward(id(m, "id"), int32(m, "nationalDex"), int32(m, "level"),
-            instant(m, "earnedAt"), m.get("deliveredAt") == null ? null : instant(m, "deliveredAt"));
-    }
-
-    private static GameSave readGame(Map<?, ?> m) {
-        byte[] save;
-        try { save = Base64.getDecoder().decode(text(m, "save")); }
-        catch (IllegalArgumentException e) { throw new IllegalArgumentException("\"save\" is not base64."); }
-        return new GameSave(save, instant(m, "updatedAt"));
-    }
-
-    private static LegacyCollection readLegacyCollection(Map<?, ?> m) {
-        var caught = new ArrayList<LegacyCollection.Caught>();
-        int index = 0;
-        for (var value : Json.array(required(m, "captures"))) {
-            var c = Json.object(value);
-            try {
-                caught.add(new LegacyCollection.Caught(id(c, "id"), int32(c, "species"), instant(c, "caughtAt")));
-                LegacyCollection.national(int32(c, "species"));
-            } catch (RuntimeException e) {
-                throw new IllegalArgumentException("collection.captures[" + index + "]: " + e.getMessage(), e);
-            }
-            index++;
-        }
-        return new LegacyCollection(caught, integer(m, "encountersUsed"), integer(m, "rewardedSeconds"));
     }
 
     // --------------------------------------------------------------- reading

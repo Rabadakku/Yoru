@@ -41,10 +41,6 @@ public final class YoruApp extends JPanel implements Shell {
     private final DateTimeFormatter dateTime=DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     /** Window for the focus-distribution chart, in days; 0 means all time. */
     private int mixDays=7;
-    /** The game, from Play to Close. It outlives a rebuilt window, as the game itself does. */
-    private final GameController game;
-    private final GamePage gamePage=new GamePage(this);
-    private final CollectionPage collectionPage=new CollectionPage(this);
     private final TodayPage todayPage=new TodayPage(this);
     private final PagesPage pagesPage=new PagesPage(this);
     private final SettingsPage settingsPage=new SettingsPage(this);
@@ -78,8 +74,6 @@ public final class YoruApp extends JPanel implements Shell {
         new Page("Pages","pages","pages.workspace"),
         new Page("Habits","habits","habits.log"),
         new Page("Schedule","schedule","schedule.week"),
-        new Page("Collection","collection","collection.pc"),
-        new Page("Game","game","game.campaign"),
         new Page("Data","data","data.overview"),
         new Page("Settings","settings","settings.options"));
 
@@ -106,21 +100,12 @@ public final class YoruApp extends JPanel implements Shell {
 
     public YoruApp(Tracker tracker,Repository vault) { this(tracker,vault,null,null,null); }
     private YoruApp(Tracker tracker,Repository vault,VaultStore store,String openName,char[] secret) {
-        this(tracker,vault,store,openName,secret,new GameController(tracker));
-    }
-    private YoruApp(Tracker tracker,Repository vault,VaultStore store,String openName,char[] secret,
-                    GameController game) {
         super(new BorderLayout());
         this.tracker=tracker;
         this.vault=vault;
         this.store=store;
         this.vaultName=openName;
         this.secret=secret;
-        this.game=game;
-        game.listen(new GameController.Listener() {
-            @Override public void phaseChanged() { if(!closed) refreshGamePages(true); }
-            @Override public void saveChanged() { if(!closed) refreshGamePages(false); }
-        });
         week=tracker.state().settings().weekOf(LocalDate.now());
         setPreferredSize(new Dimension(1280,900));
         // The window's minimum is derived from the bar rather than fixed here —
@@ -194,13 +179,7 @@ public final class YoruApp extends JPanel implements Shell {
         // metrics: the estimate agreed with the layout on one computer's fonts
         // and not on another's, so a ninth tab fitted here and ran off the end
         // of the bar on the build machine (#46).
-        // The Game tab grows a dot while the game runs, so the strip is measured
-        // wearing it: the floor has to hold the widest each label ever gets.
-        var gameTab=navigation.get("Game");
-        String gameLabel=gameTab.getText();
-        gameTab.setText("Game ●");
         int stripFloor=strip.getMinimumSize().width;
-        gameTab.setText(gameLabel);
         navMinimumWidth=brand.getPreferredSize().width+stripFloor+lock.getPreferredSize().width
             +2*SPACE_XL+SPACE_LG;
         root.add(bar, BorderLayout.NORTH);
@@ -218,61 +197,42 @@ public final class YoruApp extends JPanel implements Shell {
             // Synced here rather than from the clock-in and clock-out buttons, so
             // a session recovered when the vault opens — which passes through
             // neither — still starts the music.
-            music.sync(running!=null&&!game.running());
+            music.sync(running!=null);
         }
         );
-        acceptDrops();
         ticker.start();
     }
-    /**
-     * Quits: the game first, so its last save is in the vault before the vault
-     * is locked, then everything else.
-     */
+    /** Quits: everything unsaved is written, then the vault is locked. */
     private void close() {
         if(closed || !pagesPage.flush())return;
-        game.close(()->{
-            boolean stuck=game.phase()==GameController.Phase.STUCK;
-            if(stuck&&!Dialogs.confirm(this,"The game has not finished closing. Its most recent save may not be in your vault.\n\nQuit anyway?","Quit Yoru","Quit"))return;
-            try {
-                if (!pagesPage.flush()) return;
-                vault.close();
-                forgetSecret();
-            }
-            catch(Exception e) {
-                error(e);
-            }
-            quit();
-            // A core that would not stop still holds a thread nothing else will end.
-            if(stuck)System.exit(0);
-        });
+        try {
+            vault.close();
+            forgetSecret();
+        }
+        catch(Exception e) {
+            error(e);
+        }
+        quit();
     }
 
     /**
-     * Quits to install an update: the game and the vault close exactly as they do
-     * for the close button, then the installer's step runs and the process ends,
-     * so nothing this copy started can keep it alive while an update waits for it.
-     * A game that will not stop is not overridden here, unlike an ordinary quit.
+     * Quits to install an update: the vault closes exactly as it does for the
+     * close button, then the installer's step runs and the process ends, so
+     * nothing this copy started can keep it alive while an update waits for it.
      */
     private void closeForUpdate(Runnable afterVaultClosed) {
         if(closed || !pagesPage.flush())return;
-        game.close(()->{
-            if(game.phase()==GameController.Phase.STUCK) {
-                Dialogs.info(this,"The game has not finished closing, so Yoru will not update now. Try again once it has closed.");
-                return;
-            }
-            try {
-                if (!pagesPage.flush()) return;
-                vault.close();
-                forgetSecret();
-            }
-            catch(Exception e) {
-                error(e);
-                return;
-            }
-            quit();
-            afterVaultClosed.run();
-            System.exit(0);
-        });
+        try {
+            vault.close();
+            forgetSecret();
+        }
+        catch(Exception e) {
+            error(e);
+            return;
+        }
+        quit();
+        afterVaultClosed.run();
+        System.exit(0);
     }
 
     /**
@@ -284,10 +244,7 @@ public final class YoruApp extends JPanel implements Shell {
         closed=true;
         pagesPage.stop();
         todayPage.close();
-        gamePage.leave();
         music.close();
-        // The session's encounter tables go with it (#12).
-        game.encounters().forget();
         ticker.stop();
         var window=SwingUtilities.getWindowAncestor(this);
         if(window!=null)window.dispose();
@@ -312,7 +269,6 @@ public final class YoruApp extends JPanel implements Shell {
         }
     }
     @Override public Tracker tracker() { return tracker; }
-    @Override public GameController game() { return game; }
     @Override public Component owner() { return this; }
     @Override public boolean reducedMotion() { return reducedMotion; }
     @Override public void show(String next) { showPage(next); }
@@ -335,9 +291,6 @@ public final class YoruApp extends JPanel implements Shell {
         // and moves all rebuild the page, and each one used to throw the reader
         // back to the top (#8).
         Point keep=next.equals(page)&&pageScroll!=null?pageScroll.getViewport().getViewPosition():null;
-        // The game keeps running on every tab; only its picture stops while
-        // another page is on screen. It stops when it is closed, not before.
-        gamePage.leave();
         page=next;
         todayPage.leave();
         markNavigation();
@@ -361,9 +314,7 @@ public final class YoruApp extends JPanel implements Shell {
         JPanel view=switch(page) {
             case "Pages"->pagesPage.view();
             case "Schedule"->schedule();
-            case "Game"->gamePage.view();
             case "Data"->data();
-            case "Collection"->collectionPage.view();
             case "Habits"->HabitsPanel.view(tracker, () -> showPage("Habits"));
             case "Tasks" -> {
                 var tasks = new TasksPanel(tracker, () -> showPage("Tasks"), () -> closed, taskViewState);
@@ -428,29 +379,17 @@ public final class YoruApp extends JPanel implements Shell {
         return new Dimension(Math.max(MIN_WINDOW_WIDTH,navMinimumWidth),MIN_WINDOW_HEIGHT);
     }
 
-    /** Highlights the open tab, and marks the Game tab while the game runs. */
+    /** Highlights the open tab. */
     private void markNavigation() {
         navigation.forEach((name, button) -> {
-            boolean running=name.equals("Game")&&game.running();
             boolean current=name.equals(page);
-            button.setText(running?"Game ●":name);
             // The pill is painted by the tab, so being current changes no size:
             // opening a page never nudges the tabs beside it.
             if(button instanceof NavTab tab) tab.setCurrent(current);
-            // Which page is open was said in colour alone, and the Game tab's dot
-            // was painted but never spoken. Both ride on the accessible name, in
-            // the one place the colours are applied, so nothing can drift.
-            button.getAccessibleContext().setAccessibleName(name+(running?", running":"")+(current?", current":""));
+            // Which page is open was said in colour alone; it rides on the
+            // accessible name too, in the one place the colours are applied.
+            button.getAccessibleContext().setAccessibleName(name+(current?", current":""));
         });
-    }
-
-    /**
-     * The game moved on: rebuild the pages that show it, and only those, so a
-     * half-typed task is never swept away because the game saved.
-     */
-    private void refreshGamePages(boolean phase) {
-        markNavigation();
-        if(phase&&page.equals("Game")||page.equals("Today")||page.equals("Collection")) showPage(page);
     }
 
     @Override public void paint(Graphics graphics) {
@@ -1063,19 +1002,17 @@ public final class YoruApp extends JPanel implements Shell {
      */
     private void switchVault() {
         if (!pagesPage.flush()) return;
-        VaultLauncher.whenGameStopped(game,()->{
-            var next=VaultLauncher.choose(this,store,vaultName);
-            if(next!=null)moveTo(next);
-        });
+                var next=VaultLauncher.choose(this,store,vaultName);
+        if(next!=null)moveTo(next);
+    
     }
 
     /** Makes a new vault and moves into it, by the same rule. */
     private void newVault() {
         if (!pagesPage.flush()) return;
-        VaultLauncher.whenGameStopped(game,()->{
-            var made=VaultLauncher.create(this,store);
-            if(made!=null)moveTo(made);
-        });
+                var made=VaultLauncher.create(this,store);
+        if(made!=null)moveTo(made);
+    
     }
 
     /** Moves the window onto an opened vault, tracking its name and its secret. */
@@ -1109,29 +1046,28 @@ public final class YoruApp extends JPanel implements Shell {
      */
     private void renameVault() {
         if (!pagesPage.flush()) return;
-        VaultLauncher.whenGameStopped(game,()->{
-            String current=vaultName;
-            String wanted=Dialogs.input(this,"Rename \""+current+"\".","Rename vault",current);
-            if(wanted==null||wanted.strip().equals(current))return;
-            String target;
-            try { target=VaultStore.validate(wanted); }
-            catch(IllegalArgumentException e) { error(e); return; }
-            try {
-                if (!pagesPage.flush()) return;
-                vault.close();
-                store.rename(current,target);
-            }
-            catch(Exception e) {
-                if(!reopen(current))return;
-                Dialogs.error(this,"The vault was not renamed",e.getMessage());
-                rebuildTo(page);
-                return;
-            }
-            if(!reopen(target))return;
-            vaultName=target;
-            VaultLauncher.remember(target);
+                String current=vaultName;
+        String wanted=Dialogs.input(this,"Rename \""+current+"\".","Rename vault",current);
+        if(wanted==null||wanted.strip().equals(current))return;
+        String target;
+        try { target=VaultStore.validate(wanted); }
+        catch(IllegalArgumentException e) { error(e); return; }
+        try {
+            if (!pagesPage.flush()) return;
+            vault.close();
+            store.rename(current,target);
+        }
+        catch(Exception e) {
+            if(!reopen(current))return;
+            Dialogs.error(this,"The vault was not renamed",e.getMessage());
             rebuildTo(page);
-        });
+            return;
+        }
+        if(!reopen(target))return;
+        vaultName=target;
+        VaultLauncher.remember(target);
+        rebuildTo(page);
+    
     }
 
     /**
@@ -1144,29 +1080,28 @@ public final class YoruApp extends JPanel implements Shell {
      * or a failed delete still has to reopen the vault afterwards.
      */
     private void removeVaultPassword() {
-        VaultLauncher.whenGameStopped(game,()->{
-            String name=vaultName;
-            if(store==null||name==null||!(vault instanceof EncryptedVault open))return;
-            if(store.passwordless(name)) {
-                Dialogs.info(this,"\""+name+"\" already opens without a password.");
-                return;
-            }
-            if(!VaultLauncher.confirmRemovePassword(this,name))return;
-            char[] fresh;
-            try { fresh=store.removePassword(name,open,tracker.state()); }
-            catch(Exception e) {
-                // The store put its own key back and never wrote the vault, so
-                // the password that was there is still the password.
-                Dialogs.error(this,"The password was not removed",
-                    e.getMessage()+"\n\n\""+name+"\" still opens with the password it had.");
-                return;
-            }
-            forgetSecret();
-            secret=fresh;
-            Dialogs.info(this,"\""+name+"\" now opens without a password.\n\n"
-                +"Its unlock key is kept beside it, so anyone who can read your files can open it.");
-            rebuildTo(page);
-        });
+                String name=vaultName;
+        if(store==null||name==null||!(vault instanceof EncryptedVault open))return;
+        if(store.passwordless(name)) {
+            Dialogs.info(this,"\""+name+"\" already opens without a password.");
+            return;
+        }
+        if(!VaultLauncher.confirmRemovePassword(this,name))return;
+        char[] fresh;
+        try { fresh=store.removePassword(name,open,tracker.state()); }
+        catch(Exception e) {
+            // The store put its own key back and never wrote the vault, so
+            // the password that was there is still the password.
+            Dialogs.error(this,"The password was not removed",
+                e.getMessage()+"\n\n\""+name+"\" still opens with the password it had.");
+            return;
+        }
+        forgetSecret();
+        secret=fresh;
+        Dialogs.info(this,"\""+name+"\" now opens without a password.\n\n"
+            +"Its unlock key is kept beside it, so anyone who can read your files can open it.");
+        rebuildTo(page);
+    
     }
 
     /**
@@ -1179,25 +1114,24 @@ public final class YoruApp extends JPanel implements Shell {
      */
     private void deleteVault() {
         if (!pagesPage.flush()) return;
-        VaultLauncher.whenGameStopped(game,()->{
-            String name=vaultName;
-            if(!VaultLauncher.confirmDelete(this,name,store.contents(name,tracker.state())))return;
-            try { vault.close(); }
-            catch(Exception e) { error(e); return; }
-            try {
-                store.delete(name);
-            }
-            catch(Exception e) {
-                if(!reopen(name))return;
-                Dialogs.error(this,"Nothing was lost",e.getMessage());
-                rebuildTo(page);
-                return;
-            }
-            forgetSecret();
-            Dialogs.info(this,"\""+name+"\" is deleted, with everything that was in it.\n\n"
-                +"Yoru will close now; any other vaults are on the welcome screen next time.");
-            quit();
-        });
+                String name=vaultName;
+        if(!VaultLauncher.confirmDelete(this,name,store.contents(name,tracker.state())))return;
+        try { vault.close(); }
+        catch(Exception e) { error(e); return; }
+        try {
+            store.delete(name);
+        }
+        catch(Exception e) {
+            if(!reopen(name))return;
+            Dialogs.error(this,"Nothing was lost",e.getMessage());
+            rebuildTo(page);
+            return;
+        }
+        forgetSecret();
+        Dialogs.info(this,"\""+name+"\" is deleted, with everything that was in it.\n\n"
+            +"Yoru will close now; any other vaults are on the welcome screen next time.");
+        quit();
+    
     }
 
     /**
@@ -1243,8 +1177,8 @@ public final class YoruApp extends JPanel implements Shell {
         perform(()->{
             Files.writeString(file,dev.yoru.persistence.PortableVault.export(tracker.state(),Instant.now()));
             Dialogs.info(this,"Vault exported to "+file.getFileName()+".\n\n"
-                +"This file is NOT encrypted. It holds everything in your vault, your game save\n"
-                +"included, as plain readable text. Keep it where you keep the vault.");
+                +"This file is NOT encrypted. It holds everything in your vault as plain\n"
+                +"readable text. Keep it where you keep the vault.");
         });
     }
 
@@ -1254,7 +1188,6 @@ public final class YoruApp extends JPanel implements Shell {
      * open vault untouched.
      */
     private void importVault() {
-        if(game.running()){Dialogs.info(this,"Close the game first. It holds your game save while it runs.");return;}
         Path file=Dialogs.chooseFile(this,"Choose a Yoru vault export","Yoru export (JSON)","json");
         if(file==null)return;
         final State incoming;
@@ -1280,7 +1213,7 @@ public final class YoruApp extends JPanel implements Shell {
     private static String summary(State state) {
         return state.activities().size()+" activities, "+state.sessions().size()+" sessions, "
             +state.tasks().size()+" tasks, "+state.habits().size()+" habits, "
-            +state.rewards().size()+" Pokémon earned"+(state.game()==null?"":", a game save");
+            +state.notes().pages().size()+" pages";
     }
 
     /** Applies a settings change, rebuilding the window when the palette moved. */
@@ -1332,11 +1265,10 @@ public final class YoruApp extends JPanel implements Shell {
         // where the palette was picked partway down; the new window keeps that place (#9).
         Point keep=next.equals(page)&&pageScroll!=null?pageScroll.getViewport().getViewPosition():null;
         ticker.stop();
-        gamePage.leave();
         music.close();
         pagesPage.stop();
         if(window instanceof JFrame frame) {
-            var fresh=new YoruApp(tracker,vault,store,vaultName,secret,game);
+            var fresh=new YoruApp(tracker,vault,store,vaultName,secret);
             frame.setContentPane(fresh);
             // Rebuilt from the new bar: a palette swap can change the brand's
             // width, and the floor has to follow it.
@@ -1350,38 +1282,6 @@ public final class YoruApp extends JPanel implements Shell {
         }
     }
 
-    /** Accepts a folder, a .zip or a single PNG, from the picker or a drop. */
-    @Override public void installArtwork(java.io.File chosen) {
-        ArtworkImport.start(this,chosen.toPath(),()->showPage(page),this::error);
-    }
-
-    @Override public void importArtwork() {
-        var chooser=new JFileChooser();
-        chooser.setDialogTitle("Choose your Emerald game, artwork folder or .zip");
-        chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
-        if(chooser.showDialog(this,"Add artwork")==JFileChooser.APPROVE_OPTION)
-            installArtwork(chooser.getSelectedFile());
-    }
-
-    /** Dropping onto any part of the window imports, so the path is hard to miss. */
-    private void acceptDrops() {
-        setTransferHandler(new TransferHandler() {
-            @Override public boolean canImport(TransferSupport support) {
-                return support.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.javaFileListFlavor);
-            }
-            @Override public boolean importData(TransferSupport support) {
-                if(!canImport(support)) return false;
-                try {
-                    var files=(List<?>)support.getTransferable()
-                        .getTransferData(java.awt.datatransfer.DataFlavor.javaFileListFlavor);
-                    if(files.isEmpty()) return false;
-                    installArtwork((java.io.File)files.getFirst());
-                    return true;
-                } catch(Exception e) { error(e); return false; }
-            }
-        });
-    }
-
     @Override public void chooseReset() {
         var form=stack();var all=new JCheckBox("All data");all.setOpaque(false);all.setForeground(GOLD_TEXT);form.add(all);
         var choices=new LinkedHashMap<Tracker.ResetPart,JCheckBox>();
@@ -1390,36 +1290,26 @@ public final class YoruApp extends JPanel implements Shell {
         if(!Dialogs.confirm(this,form,"Choose reset scope","Continue"))return;
         var parts=EnumSet.noneOf(Tracker.ResetPart.class);choices.forEach((part,check)->{if(check.isSelected())parts.add(part);});
         if(parts.isEmpty()){Dialogs.info(this,"Nothing selected. No data was changed.");return;}
-        if(parts.contains(Tracker.ResetPart.GAME)&&game.running()){Dialogs.info(this,"Close the game before resetting its save.");return;}
         String selected=choices.entrySet().stream().filter(e->parts.contains(e.getKey())).map(e->"• "+e.getValue().getText()).collect(java.util.stream.Collectors.joining("\n"));
         if(!Dialogs.confirmDestructive(this,"Reset these sections?\n\n"+selected+"\n\nA backup will be saved first. This also removes an active timer if sessions are selected.","Confirm reset","Reset"))return;
         perform(()->{tracker.reset(parts);todayPage.forgetActivityFilter();});
     }
     /**
-     * First run with no artwork: say so once, and offer to fix it (#16).
+     * Tells the owner where their game save went, once (#58).
      *
-     * The distributed build ships no sprites — it cannot, they are not ours — so
-     * a new copy opens to a collection of dex numbers with no explanation. This
-     * is that explanation, shown once.
-     *
-     * The "don't ask again" flag lives in Preferences rather than the vault,
-     * for the same reason the recent-vault path does: it is about this machine,
-     * not about this workspace, and it should not travel when the vault moves.
+     * Yoru no longer has the game, and a vault written by an older build may
+     * still be holding its save. Opening such a vault writes the save to a file
+     * beside it rather than dropping it; this is the sentence that says so, and
+     * it is said once, because the file is only written once.
      */
-    static void offerArtwork(YoruApp app) {
-        var preferences=java.util.prefs.Preferences.userRoot().node("dev/yoru/desktop");
-        if(preferences.getBoolean("artwork.prompt.dismissed",false)) return;
-        if(!SpriteAssets.survey().empty()) return;
-        var message=stack();
-        message.add(label("Yoru ships without game artwork.",TYPE_HEADING,TEXT));gap(message,SPACE_MD);
-        message.add(bodyLabel("The collection works either way — it shows National Dex numbers"));
-        message.add(bodyLabel("until you add sprites of your own. Nothing else is affected."));gap(message,SPACE_MD);
-        message.add(bodyLabel("Choose your Emerald game to extract sprites and box wallpapers,"));
-        message.add(bodyLabel("or add a folder or .zip of your own PNG artwork."));
-        int choice=Dialogs.choose(app,message,"Add your own artwork",
-            "Choose game or artwork…","Not now","Don't ask again");
-        if(choice==0) app.importArtwork();
-        else if(choice==2) preferences.putBoolean("artwork.prompt.dismissed",true);
+    private static void sayWhereTheGameSaveWent(YoruApp app, Repository vault) {
+        if (!(vault instanceof dev.yoru.persistence.EncryptedVault encrypted)) return;
+        var rescued = encrypted.rescuedSave();
+        if (rescued == null) return;
+        Dialogs.info(app, "Your game save was kept",
+            "Yoru no longer includes the game, so the save this vault was holding has been written\n"
+            + "beside it as " + rescued.getFileName() + ".\n\n"
+            + "Open it with any Game Boy Advance emulator. Yoru will not touch it again.");
     }
 
     public static void main(String[] args) {
@@ -1454,7 +1344,7 @@ public final class YoruApp extends JPanel implements Shell {
                 );frame.setVisible(true);
                 // Asked once the window is up, not from the constructor: a modal
                 // dialog raised mid-construction appears behind its own parent.
-                offerArtwork(app);
+                sayWhereTheGameSaveWent(app,opened.vault());
             }
             catch(Exception e) {
                 Dialogs.error(null,e.getMessage());

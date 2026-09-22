@@ -46,9 +46,6 @@ public final class PortableVaultTest {
     private static State populated() {
         var study=new Activity(UUID.randomUUID(),"Study",30);
         var japanese=new Activity(UUID.randomUUID(),"Japanese",0);
-        var pending=new Reward(UUID.randomUUID(),252,5,Instant.parse("2026-09-01T08:00:00Z"),null);
-        var delivered=new Reward(UUID.randomUUID(),4,7,Instant.parse("2026-09-02T08:00:00Z"),
-            Instant.parse("2026-09-02T09:00:00Z"));
         var tag=new Tag(UUID.randomUUID(),"Reading",0x90D8DA);
         // Pages: nested folders, a trashed folder holding a trashed page, and a
         // page long enough to prove nothing caps a body at 64 KB.
@@ -92,10 +89,7 @@ public final class PortableVaultTest {
                     new Habit(UUID.randomUUID(),"Time since last soda",HabitKind.TIME_SINCE,"Asia/Tokyo",
                         Set.of(),List.of(Instant.parse("2026-08-01T00:00:00Z"),Instant.parse("2026-08-20T06:30:00Z")))),
             List.of(tag),
-            new Settings(ThemeId.SAKURA,TrainerId.MAY,7,120,DayOfWeek.MONDAY),
-            new Campaign(0x9E3779B97F4A7C15L,12,21600),
-            List.of(pending,delivered),
-            new GameSave(dev.yoru.game.Gen3Fixture.save(2,4),Instant.parse("2026-09-07T08:00:00Z")),
+            new Settings(ThemeId.SAKURA,7,120,DayOfWeek.MONDAY),
             new Notes(List.of(classes,biology,old),List.of(lecture,scrap,inbox)));
     }
 
@@ -118,7 +112,6 @@ public final class PortableVaultTest {
 
         // Spot checks on the fields most likely to be quietly dropped.
         check(restored.sessions().get(2).end()==null,"A running session stays running");
-        check(restored.rewards().getFirst().deliveredAt()==null,"An undelivered reward stays undelivered");
         check(restored.tasks().get(1).due()==null,"A task with no due date keeps none");
         check(restored.tasks().getFirst().order()==3,"Manual order survives");
         var split=restored.tasks().stream().filter(t->t.title().equals("MLA citation quiz")).findFirst().orElseThrow();
@@ -129,21 +122,15 @@ public final class PortableVaultTest {
         check(json.contains("\"plannedFor\": \"2026-09-10\""),"The export writes the planned day readably");
         check(restored.tasks().getFirst().createdAt().equals(Instant.parse("2026-09-01T12:00:00Z")),"createdAt survives");
         check(restored.tasks().getFirst().notes().equals(original.tasks().getFirst().notes()),"Newlines and quotes in notes survive");
-        check(restored.rewards().get(1).deliveredAt().equals(Instant.parse("2026-09-02T09:00:00Z")),"The delivery time survives");
         check(restored.notes().equals(original.notes()),"Folders and pages survive, trashed ones included");
         check(restored.tasks().getFirst().pageIds().size()==2,"A task keeps the pages it links to");
         check(restored.notes().pages().getFirst().body().length()>70_000,"A long page is not cut short");
         // A format 2 file, from before Pages, still imports: no pages, no links.
-        var formatTwo=json.replace("\"yoru\": 3","\"yoru\": 2").replaceAll(",\\s*\"pageIds\": \\[[^\\]]*\\]","");
+        var formatTwo=json.replace("\"yoru\": 4","\"yoru\": 2").replaceAll(",\\s*\"pageIds\": \\[[^\\]]*\\]","");
         formatTwo=formatTwo.substring(0,formatTwo.indexOf(",\n  \"folders\""))+"\n}";
         var older=PortableVault.parse(formatTwo);
         check(older.notes().pages().isEmpty()&&older.tasks().stream().allMatch(t->t.pageIds().isEmpty()),
             "A format 2 file reads with no pages and no links");
-        check(restored.rewards().get(1).level()==7,"The delivered level survives");
-        check(restored.campaign().rewardedSeconds()==21600,"The reward ledger survives");
-        check(restored.campaign().encountersUsed()==12,"Opened encounters survive");
-        check(restored.campaign().seed()==original.campaign().seed(),"The campaign seed survives");
-        check(restored.game().equals(original.game()),"The game save survives the round trip");
         check(restored.habits().get(1).zone().equals("Asia/Tokyo"),"A habit keeps its own timezone");
         check(restored.habits().getFirst().checkIns().size()==2,"Check-in history survives");
         check(restored.habits().get(1).starts().size()==2,"Time-since restarts survive");
@@ -170,20 +157,20 @@ public final class PortableVaultTest {
 
         // Refusals name the field. This is the tool people reach for when a vault
         // already looks wrong; "Invalid JSON" would not help anyone.
-        refuses(json.replace("\"yoru\": 3","\"yoru\": 99"),"format","A future format version is refused by name");
+        refuses(json.replace("\"yoru\": 4","\"yoru\": 99"),"format","A future format version is refused by name");
         refuses(json.replace("\"activities\"","\"activitys\""),"activities","A missing section is named");
         refuses(json.replace("\"targetMinutes\": 30","\"targetMinutes\": \"thirty\""),"targetMinutes","A wrong type is named");
         refuses(json.replace("\"name\": \"Study\"","\"name\": 5"),"name","A wrong type in a record is named");
-        refuses(json.replace("\"trainer\": \"MAY\"","\"trainer\": \"NEON\""),"NEON","An unknown enum value is named");
+        refuses(json.replace("\"weekStartsOn\": \"MONDAY\"","\"weekStartsOn\": \"NONEDAY\""),"NONEDAY","An unknown enum value is named");
         // Except the theme: a palette is a preference, not data, so an unknown
         // one falls back instead of refusing the whole workspace.
         check(PortableVault.parse(json.replace("\"theme\": \"SAKURA\"","\"theme\": \"NEON\"")).settings().theme()==ThemeId.MIDNIGHT,
             "An unknown theme imports as the default rather than refusing the file");
         refuses(json.replace("\"status\": \"DOING\"","\"status\": \"BLOCKED\""),"BLOCKED","An unknown task status is named");
         refuses(json.replace("\"colour\": \"#90D8DA\"","\"colour\": \"periwinkle\""),"colour","A malformed colour is named");
-        refuses(json.replace("\"earnedAt\": \"2026-09-01T08:00:00Z\"","\"earnedAt\": \"the first\""),"earnedAt","A malformed instant is named");
+        refuses(json.replace("\"createdAt\": \"2026-09-01T12:00:00Z\"","\"createdAt\": \"the first\""),"createdAt","A malformed instant is named");
         refuses(json.replace("\"due\": \"2026-09-10\"","\"due\": \"2026-99-99\""),"due","An impossible date is named");
-        refuses(json.replace("\"level\": 7","\"level\": \"high\""),"level","A wrong number type is named");
+        refuses(json.replace("\"order\": 3","\"order\": \"third\""),"order","A wrong number type is named");
         refuses(json.replace("\"dayOfWeek\": \"MONDAY\"","\"dayOfWeek\": \"MONDIAL\""),"MONDIAL","An unknown weekday is named");
         refuses(json.replace("\"startTime\": \"09:00\"","\"startTime\": \"nine\""),"startTime","A malformed clock time is named");
         rejects(()->PortableVault.parse("not json at all"),"Text that is not JSON is refused");
@@ -193,21 +180,20 @@ public final class PortableVaultTest {
         // into a different one that passes: 2^32 + 7 hours is not 7 hours.
         refuses(json.replace("\"dailyGoalHours\": 7","\"dailyGoalHours\": 4294967303"),"dailyGoalHours",
             "A daily goal past the int range is refused, not read as 7");
-        refuses(json.replace("\"level\": 7","\"level\": 4294967303"),"level","A level past the int range is refused");
-        // And in a format 1 file, where 2^32 would otherwise be the first species.
-        String capture="{\"id\": \""+UUID.randomUUID()+"\", \"species\": SPECIES, \"caughtAt\": \"2026-09-01T08:00:00Z\"}";
-        String formatOne=json.replace("\"yoru\": 3","\"yoru\": 1,\n  \"collection\": {\"captures\": ["+capture
-            +"], \"encountersUsed\": 3, \"rewardedSeconds\": 5400}");
-        check(PortableVault.parse(formatOne.replace("SPECIES","0")).rewards().stream().anyMatch(r->r.nationalDex()==252),
-            "A format 1 capture still imports as a reward");
-        refuses(formatOne.replace("SPECIES","4294967296"),"species","A format 1 species past the int range is refused");
+        // A file from before the game was removed still imports: what it held
+        // for the game is simply ignored (#58).
+        String withGame=json.replace("\"yoru\": 4","\"yoru\": 3,\n  \"campaign\": {\"seed\": 42, \"encountersUsed\": 3, \"rewardedSeconds\": 5400},\n"
+            +"  \"rewards\": [{\"id\": \""+UUID.randomUUID()+"\", \"nationalDex\": 252, \"level\": 5, \"earnedAt\": \"2026-09-01T08:00:00Z\", \"deliveredAt\": null}]");
+        var withoutGame=PortableVault.parse(withGame);
+        check(withoutGame.tasks().size()==restored.tasks().size(),"An older file's tasks still import");
+        check(withoutGame.notes().pages().size()==restored.notes().pages().size(),"and so do its pages");
 
         // A title cut between the two halves of an emoji — a bounded import can
         // leave one — still exports as text a file can hold, and comes back.
         var cutTask=new Task(UUID.randomUUID(),null,null,"Revise \uD83D","",null,TaskStatus.TODO,"notion",
             Instant.parse("2026-09-01T12:00:00Z"),0,null);
         var cut=new State(List.of(),List.of(),List.of(),List.of(),List.of(cutTask),List.of(),List.of(),
-            Settings.defaults(),Campaign.start(1),List.of(),null,Notes.empty());
+            Settings.defaults(),Notes.empty());
         var exported=java.nio.file.Files.createTempFile("yoru-export-",".json");
         try{
             java.nio.file.Files.writeString(exported,PortableVault.export(cut,when));
@@ -221,8 +207,8 @@ public final class PortableVaultTest {
         // Domain rules still apply through import: this is not a back door.
         rejects(()->PortableVault.parse(json.replace("\"dailyGoalHours\": 7","\"dailyGoalHours\": 99")),
             "Settings validation applies to an imported vault");
-        rejects(()->PortableVault.parse(json.replace("\"nationalDex\": 4","\"nationalDex\": 9999")),
-            "An unknown species is refused on import");
+        rejects(()->PortableVault.parse(json.replace("\"zone\": \"Asia/Tokyo\"","\"zone\": \"Mars/Olympus\"")),
+            "An impossible time zone is refused on import");
         rejects(()->PortableVault.parse(json.replace("\"title\": \"Read chapter 4\"","\"title\": \"\"")),
             "An empty task title is refused on import");
 
@@ -231,7 +217,7 @@ public final class PortableVaultTest {
         var tracker=new Tracker(repo,Clock.systemUTC());
         tracker.addActivity("Existing",0);
         var before=tracker.state();
-        rejects(()->PortableVault.parse(json.replace("\"nationalDex\": 4","\"nationalDex\": 9999")),"Parse fails before any write");
+        rejects(()->PortableVault.parse(json.replace("\"dailyGoalHours\": 7","\"dailyGoalHours\": 99")),"Parse fails before any write");
         check(tracker.state().equals(before),"A refused file leaves the open vault untouched");
         check(repo.state.equals(before),"A refused file writes nothing to storage");
 

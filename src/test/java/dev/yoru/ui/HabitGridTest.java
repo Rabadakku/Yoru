@@ -64,7 +64,7 @@ public final class HabitGridTest {
 
         for(DayOfWeek start:DayOfWeek.values()){
             var settings=tracker.state().settings();
-            tracker.settings(new Settings(settings.theme(),settings.trainer(),settings.dailyGoalHours(),
+            tracker.settings(new Settings(settings.theme(),settings.dailyGoalHours(),
                 settings.minSessionSeconds(),start));
             var page=HabitsPanel.view(tracker,()->{});
 

@@ -73,10 +73,10 @@ public final class CoreTest {
         // The same sessions the totals and the grid count: a stored session
         // under the floor must not show as time matched against a block.
         var floored=new Tracker(mem,Clock.fixed(now.plusSeconds(1200),ZoneOffset.UTC));
-        floored.settings(new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,3600));
+        floored.settings(new Settings(ThemeId.MIDNIGHT,4,3600));
         check(Analytics.adherence(floored.state(),floored.state().blocks().getFirst(),now.plusSeconds(1200))==0,
             "a session under the minimum matches no block, as it counts toward no total");
-        floored.settings(new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300));
+        floored.settings(new Settings(ThemeId.MIDNIGHT,4,300));
         ZoneId ny=ZoneId.of("America/New_York");
         LocalDate spring=LocalDate.of(2026,3,8);
         Instant a=spring.atStartOfDay(ny).toInstant(),b=spring.plusDays(1).atStartOfDay(ny).toInstant();
@@ -84,7 +84,7 @@ public final class CoreTest {
         check(Analytics.daily(state,null,ny,now).get(spring)==23*3600L,"DST 23 hour day");
         // Zero floor so the midnight-splitting logic is tested on its own; the
         // floor itself is exercised separately below.
-        var noFloor=new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,0);
+        var noFloor=new Settings(ThemeId.MIDNIGHT,4,0);
         var cross=new State(t.state().activities(),List.of(new Session(UUID.randomUUID(),id,a.minusSeconds(60),a.plusSeconds(60))),List.of())
             .withSettings(noFloor);
         var totals=Analytics.daily(cross,null,ny,now);
@@ -142,7 +142,6 @@ public final class CoreTest {
         check(withLegacy.purgeShortSessions()==1,"purging removes exactly the short ones");
         check(withLegacy.state().sessions().size()==1,"and leaves the rest");
         check(withLegacy.purgeShortSessions()==0,"purging again removes nothing");
-        check(dev.yoru.application.Encounters.completedSeconds(mixed)==600L,"encounters use the same floor");
 
         // Heat map tiers scale to the user's own daily goal.
         check(Analytics.heat(0,4)==0,"no time is the empty tier");

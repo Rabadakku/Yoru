@@ -1,101 +1,71 @@
 # Yoru product goals
 
-Confirmed by the owner on September 10, 2026. This is the product direction for
-contributors and AI agents. Read this before designing gameplay or changing
-the study reward system. It supersedes the earlier recommendation to launch
-a separate emulator and exchange study time for minutes of play.
+Confirmed by the owner on September 22, 2026. This is the product direction for
+contributors and AI agents. Read it before designing a feature or changing how
+an existing one behaves.
+
+It replaces the earlier direction, which built the game into Yoru. The game was
+removed in full (#58): Yoru is a productivity tracker and planner, and nothing
+else competes for the room on screen.
 
 ## The application the owner wants
 
-Yoru is a local desktop study workspace with the full Pokémon game playable
-inside the application. Studying replaces repetitive encounter and training
-grinding; after studying, the player enters the game and plays with the Pokémon
-they earned and raised. The study tools and the game are both core parts of Yoru.
+> I want this to replace Notion, Obsidian, and other trackers.
 
-The owner's clarification:
+A local desktop workspace for the work someone actually has to do: their time,
+their week, their tasks and habits, and their writing — in one app, on their own
+machine, in one encrypted vault, with no account and no server.
 
-> I basically want the entire game playable inside the application. Battles
-> should be the same as playing the game.
+It is judged against the tools it replaces. A feature that is worse than the
+Notion or Obsidian equivalent is not finished.
 
-## The study-to-play experience
+## What Yoru is
 
-1. Track a study session with Yoru's existing open-ended clock.
-2. Clock out and bank eligible study progress, even if the player plays later.
-3. Open a top-level **Game** tab to enter the actual gameplay space in Yoru.
-4. Use study-earned encounters and training with the campaign's persistent team.
-5. Explore, interact with NPCs, manage Pokémon and items, and play the original
-   battles and story. Return to studying and resume the same journey later.
+1. **Time.** An open-ended clock, per activity, corrected after the fact.
+   Totals, streaks, a year at a glance, and a daily goal. Anki study time counts
+   like any other time.
+2. **The week.** Planned blocks and weekly repeats beside what really happened,
+   with tasks that can be dropped onto the day they will be done.
+3. **Tasks.** Lists of your own, repeating tasks, properties, saved views,
+   sub-tasks and projects — Notion's model, kept fast and keyboard-first.
+4. **Habits.** Daily check-offs alongside the tasks you tick off, with streaks,
+   consistency and history on their own page.
+5. **Pages.** An Obsidian-style Markdown workspace in the vault: a file
+   explorer, links between pages, backlinks, search, import and export. Tasks
+   link to pages; pages are never forced to be tasks.
+6. **Later, on the same rules:** meal planning, a pomodoro timer, goals,
+   reviews, reminders, and an AI that can read what is in the vault.
 
-Study rewards must remove repetitive grinding while preserving the original
-progression and challenge. Buying a limited number of emulator minutes leaves
-the grinding intact and does not meet this requirement. The exact exchange
-rates and the technical reward bridge still need implementation and validation;
-do not silently turn this goal into a play-time allowance.
+## What Yoru is not
 
-## What full gameplay includes
+- Not a game, and not gamified. No points, streak-shaming or rewards economy.
+- Not a cloud product. No account, no server, no telemetry, no sync.
+- Not a mobile app. Yoru is a desktop application.
+- Not a plugin platform. Everything ships in the app, built to the same rules.
 
-- A playable world inside Yoru: movement, maps, NPC interaction, menus, party,
-  storage, inventory, encounters, story events, saving and continuing.
-- Original campaign progression: early-game Pokémon in early areas, the
-  corresponding trainer and boss fights, then later areas and encounters as
-  their original conditions are met.
-- All NPC trainer and boss fights in the supported game, including optional,
-  story, double, late-game and rematch battles under their original conditions.
-  Eight isolated gyms do not complete the campaign.
-- Battles that behave like the supported original game: actual rosters,
-  levels, moves and effects; party switching and faint replacement; items,
-  abilities, statuses, weather, damage, turn order, AI and running rules.
-- One coherent gameplay team and campaign history. Study-earned Pokémon must
-  be usable in that game; a separate cosmetic collection alone is insufficient.
+## How it must feel
 
-## Reference game and fidelity
+- **Like an app Apple would ship.** Calm, quiet, native on a Mac (#63).
+- **Glanceable.** Today says what today is, at a glance; detail lives on the
+  tab that owns it (#86).
+- **Keyboard-first.** Everything reachable without the mouse, with the
+  platform's own shortcuts (#49).
+- **Honest with data.** Everything you record can be created, edited and
+  deleted from the interface (#59), and the vault can be exported as plain
+  readable JSON or Markdown at any time.
 
-The initial reference is **Emerald Hoenn + National Dex Edition**.
-Keep exact file hashes and machine-specific game paths in local-only notes.
-It is a variant, so do not assume every detail equals unmodified Emerald.
-Document verified differences and key compatibility decisions. Do not replace
-the reference with another game or invent trainer teams and learnsets.
+## The rules that do not move
 
-Using an embedded emulator engine to run user-supplied game files is compatible
-with this goal: the game must render and accept input in Yoru's Game tab. A
-button that launches another application is not the requested experience.
-An embedded engine is an implementation approach, not a substitute for the
-study reward integration. A faithful native implementation is also possible,
-but a simplified battle recreation does not establish original-game fidelity.
+- **Local and encrypted.** One vault file, AES-256-GCM, optional password,
+  backed up before anything destructive.
+- **Yoru bundles nothing.** Swing and the JDK only; every picture is drawn at
+  runtime. What a user imports stays theirs.
+- **No personal data in the repository**, in code, fixtures, docs or GitHub.
+  See [AGENTS.md](../AGENTS.md).
+- **Store raw data, derive the rest.** See [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Preserve the study workspace and the player's progress
+## Where the plan lives
 
-- Keep tracking, tasks, tags, scheduling, habits, analytics and local vaults
-  useful independently of gameplay. No game file should be required to study.
-- Preserve existing study history, captures, nicknames and party membership.
-  Specify and test migration before connecting them to a campaign save.
-- Persist rewards and their consumption together safely. Closing, reopening,
-  retrying or failing a write must not duplicate rewards or lose earned progress.
-- Keep game saves safe when switching tabs, pausing, closing or upgrading.
-  Campaign badges come from the game's own save; the practice-battle records
-  and their gyms were removed on 2026-09-11.
-- Keep personal ROMs, artwork, saves, vaults and keys out of Git and public
-  releases. User-supplied files remain local.
-
-## Current work is a foundation, not completion
-
-The Java battle prototype and its eight gyms were removed on 2026-09-11 at
-the owner's request ("forget having battle systems and everything outside the
-game"): battles are the embedded game's own. The animated study route is
-scenery, not an explorable
-campaign. The current encounter lottery and two-hour evolution rule are legacy
-collection rules; they must be reconciled with campaign progression before
-being applied to the real game.
-
-See [CAMPAIGN-EVALUATION.md](CAMPAIGN-EVALUATION.md) for implementation options,
-[ROADMAP.md](ROADMAP.md) for work order, and [issue #29](https://github.com/Rabadakku/yoru/issues/29)
-for the campaign acceptance criteria. Describe partial deliveries accurately.
-
-## Completion criteria
-
-A fresh player can study, clock out, enter Game, use their earned Pokémon and
-play the first appropriate encounters and trainer/boss sequence. Saving and
-reopening preserves both the game and the study ledger without duplication.
-Later areas, all trainer/boss paths and original battle mechanics are verified
-against the supported game. A working title screen, an emulator launch, or a
-passing simplified-engine test suite alone does not satisfy this goal.
+The current plan, in order, is issue
+[#65](https://github.com/Rabadakku/Yoru/issues/65); [ROADMAP.md](ROADMAP.md)
+records what has shipped.

@@ -33,7 +33,7 @@ import java.util.UUID;
  * minimum is the size the frame actually allows.
  */
 public final class Preview {
-    static final String[] PAGES = {"Today","Tasks","Pages","Habits","Schedule","Collection","Game","Data","Settings"};
+    static final String[] PAGES = {"Today","Tasks","Pages","Habits","Schedule","Data","Settings"};
     /** The frame's minimum, so the small render is a size the app really opens at. */
     private static final int MIN_WIDTH = 900, MIN_HEIGHT = 640;
 
@@ -57,15 +57,6 @@ public final class Preview {
     private static void pass(Container c) {
         c.doLayout();
         for (var child : c.getComponents()) if (child instanceof Container nested) pass(nested);
-    }
-
-    /** Steps the animated scenes so previews show motion, not the idle pose. */
-    private static void advanceScenes(Container c, int frames) {
-        for (var child : c.getComponents()) {
-            if (child instanceof TrainerScene trainer) for (int i = 0; i < frames; i++) trainer.advance(true, 60);
-            else if (child instanceof BuddyScene buddy) for (int i = 0; i < frames; i++) buddy.advance(true);
-            else if (child instanceof Container nested) advanceScenes(nested, frames);
-        }
     }
 
     public static void main(String[] args) throws Exception {
@@ -97,7 +88,7 @@ public final class Preview {
                 }
                 // Every page, plus the arranging and calendar views, in every theme
                 // and at both sizes.
-                System.out.println("Wrote " + (PAGES.length + 3) * ThemeId.values().length * 2
+                System.out.println("Wrote " + (PAGES.length + 2) * ThemeId.values().length * 2
                     + " renders to " + out);
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -114,25 +105,12 @@ public final class Preview {
             if (nav != null) nav.doClick();
             if (page.equals("Pages")) app.openNote(app.tracker().state().notes().pages().getFirst().id());
             layout(app);
-            advanceScenes(app, 26);
             write(out, page.toLowerCase(Locale.ROOT) + suffix, app, width, height);
             if (page.equals("Pages")) {
                 button(app, "pages.mode").doClick();
                 layout(app);
                 write(out, "pages-reading" + suffix, app, width, height);
                 button(app, "pages.mode").doClick();
-            }
-        }
-        // The arranging state of the Collection page: pick-up marker and
-        // hint visible, so the mode is reviewed as an image too.
-        var collectionTab = button(app, "Collection");
-        if (collectionTab != null) {
-            collectionTab.doClick();
-            var arrange = button(app, "Arrange");
-            if (arrange != null) {
-                arrange.doClick();
-                layout(app);
-                write(out, "collection-arranging" + suffix, app, width, height);
             }
         }
         // The calendar is a view of the Tasks page rather than a page of its
@@ -256,27 +234,10 @@ public final class Preview {
         tracker.addHabit("Time since last soda", HabitKind.TIME_SINCE, zone,
             Instant.now().minusSeconds(18 * 86400 + 7340));
 
-        // A save-backed collection: a trainer with a three-member party,
-        // plus rewards still on their way, so the Collection page shows
-        // both the storage view and the "on their way" card. An empty
-        // vault would hide every layout problem these pages are meant
-        // to catch.
-        var raw = dev.yoru.game.Gen3Fixture.withTrainer(dev.yoru.game.Gen3Fixture.save(2, 4),
-            "TESTER", 0, 12345, 54321);
-        raw = dev.yoru.game.Gen3Fixture.withParty(raw, java.util.List.of(
-            dev.yoru.game.Gen3Fixture.member(raw, 252, 12, 1),
-            dev.yoru.game.Gen3Fixture.member(raw, 255, 10, 2),
-            dev.yoru.game.Gen3Fixture.member(raw, 258, 8, 3)));
-        // The game's own "received a starter" flag, so the Collection
-        // page shows the storage rather than the empty state.
-        raw = dev.yoru.game.Gen3Fixture.withFlag(raw, dev.yoru.game.Gen3Save.FLAG_SYS_POKEMON_GET);
-        tracker.gameSaved(raw);
-        tracker.bankReward(UUID.randomUUID(), 280, 5);
-        tracker.bankReward(UUID.randomUUID(), 285, 6);
         // Sunday-first here, matching the tracker Yoru is replacing, so the
         // preview actually exercises a non-default week start (#26), and the
         // theme card shows this render's theme as the selected one.
-        tracker.settings(new Settings(themeId, TrainerId.BRENDAN, 4, 300, java.time.DayOfWeek.SUNDAY));
+        tracker.settings(new Settings(themeId, 4, 300, java.time.DayOfWeek.SUNDAY));
         // A running session, so the animated states are what gets rendered
         // rather than everything frozen in its idle pose.
         tracker.start(study);

@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  <b>A local-first study workspace where your study time turns into play.</b><br>
-  Track focus, tasks, habits and Anki reviews. Every half hour you study earns an encounter in
-  <i>Pokémon Emerald</i>, which you play right inside the app with your own copy of the game.
+  <b>A local-first workspace for the work you actually have to do.</b><br>
+  Track focus and time, plan your week, keep tasks and habits, and write linked Markdown pages —
+  in one app, on your own machine, in an encrypted vault.
 </p>
 
 <p align="center">
@@ -18,41 +18,31 @@
 <p align="center">
   <a href="https://github.com/Rabadakku/Yoru/releases/latest"><b>Download</b></a> ·
   <a href="#features">Features</a> ·
-  <a href="#the-game">The game</a> ·
   <a href="#install">Install</a> ·
   <a href="#faq">FAQ</a>
 </p>
-
-<p align="center"><sub>
-Yoru is an independent fan project, not affiliated with, endorsed by or connected to Nintendo, Game Freak or The Pokémon Company.<br>
-It ships no game, ROM, BIOS or artwork. You bring your own legally obtained copy.
-</sub></p>
 
 ---
 
 ## How it works
 
-<p align="center">
-  <img src="docs/media/loop.png" alt="1, Study: clock in, work through your tasks, review your Anki cards. 2, Earn: every 30 minutes you study earns an encounter. 3, Play: spend them in the game, played inside Yoru with your own copy." width="100%">
-</p>
+Clock in when you start working and out when you stop. That is the whole ritual. Everything
+else — the week's plan, the tasks due today, the habits you are keeping, the pages you are
+writing, the Anki reviews you did — hangs off the time you actually spent.
 
-Yoru swaps the repetitive parts of the game, like walking through grass for hours or grinding
-levels, for the studying you were going to do anyway. The story, the battles and the
-progression stay exactly as they are.
-
-The study tools are a complete app on their own. They never ask for a game file, and
-everything below works whether you have one or not.
+Nothing leaves your computer. There is no account, no server and no sync: one encrypted file
+you can back up like any other.
 
 ## Features
 
 ### ⏱️ A focus timer that stays out of your way
 
-<img src="docs/media/today.png" alt="The Today page: a running focus timer, the daily goal bar, today's plan and the partner card" width="100%">
+<img src="docs/media/today.png" alt="The Today page: a running focus timer, the daily goal bar and today's plan" width="100%">
 
 Clock in, clock out, and correct either one afterwards. There is no forced pomodoro. A running
 timer survives closing the app, the daily goal fills as you go, and you can track as many
-activities as you like. While you record, a small scene walks along beside the timer, and the
-lead of your game's party can keep you company.
+activities as you like. Beside the clock is the day itself: what you planned, and what is
+left.
 
 ### 📊 A year at a glance
 
@@ -68,7 +58,7 @@ beat it. Streaks, the last seven days and a breakdown of where your time went si
 </p>
 
 Connect Anki and every finished sitting is added to your tracked time, at the length Anki
-itself reports. It reaches your totals, heat map, streak and encounters like any other session.
+itself reports. It reaches your totals, heat map and streak like any other session.
 Yoru only reads from Anki, and never counts the same minute twice.
 [Set it up →](#connect-anki)
 
@@ -111,53 +101,6 @@ timer runs.
 
 [SECURITY.md](SECURITY.md) explains what the vault does, and does not, protect.
 
-## The game
-
-The **Game** tab is the game itself, running inside Yoru. Press Play and it opens with your
-save. It keeps running while you switch tabs, and Close brings your party, PC and progress
-back into your vault.
-
-- **Encounters come from your own game.** Yoru reads the wild encounter tables from your copy,
-  so each encounter is something that place could really offer at that point in the story, at a
-  level from that area's range. Badges open up new places, just as they do in the game. An
-  encounter is decided in advance and never rerolls.
-- **What you earn goes into your save,** party first and then the PC, in one crash-safe write.
-  What you catch in the game comes back to Yoru the same way.
-- **The battles are the game's own,** with its rosters, moves, items and rules.
-
-**Yoru ships no game, BIOS, artwork or music, and does not download or link to any of them.**
-You supply:
-
-| | |
-|---|---|
-| **Your game** | Your own legally obtained copy of *Pokémon Emerald*. The reference build is *Emerald Hoenn + National Dex Edition*. |
-| **The mGBA core** | Install [mGBA](https://mgba.io/)'s libretro core with [RetroArch](https://www.retroarch.com/)'s core downloader, or point Yoru at one you already have. Yoru is its own libretro frontend and never launches RetroArch. |
-| **A BIOS** | Optional. mGBA emulates one when none is present. |
-
-The Game tab finds these on first use and tells you what is missing. A missing core or game
-never blocks the study tools, and each vault keeps its own save, so two workspaces never share
-a journey.
-
-<details>
-<summary><b>More about the Game tab</b></summary>
-
-**The save is the collection.** There is no starter picker and no separate roster: the party
-and PC you see are read from the game's own save. While the game is closed you can move Pokémon
-between boxes and the party, rename boxes and change wallpapers from Yoru, through the same
-verified, backed-up transaction that delivery uses. The game and the tracker never write at
-the same time; the controls turn off while the game runs.
-
-**Artwork is optional.** Import your own supported Emerald `.gba` or `.zip` and Yoru extracts
-the normal and shiny sprites and the PC wallpapers locally, on your machine.
-Settings → *Extract from current game* repairs artwork for a game you already chose. You can
-also drop in a folder or `.zip` of your own PNGs, or use Collection → *Choose local artwork
-folder*. Without artwork, the collection shows National Dex numbers instead.
-
-**When RetroArch is installed,** Yoru reuses that installation's mGBA core, BIOS folder and
-core options.
-
-</details>
-
 ## Install
 
 | Platform | Download | Then |
@@ -186,7 +129,7 @@ other app. The whole source is right here if you would rather build it yourself.
 
 **Settings → Updates → Check for updates** asks GitHub for the newest release, and only when you
 press it. On a Mac, Yoru downloads the `.dmg`, checks it against the release's SHA-256, closes
-your game and vault, replaces itself and reopens. On Windows it runs the verified `.msi` after
+your vault, replaces itself and reopens. On Windows it runs the verified `.msi` after
 closing. On Linux it verifies the `.deb` and gives you the one `sudo apt install` command to run.
 Versions before 1.0.5 have no updater, so install 1.0.5 or later by hand once. Your workspace
 stays as it is: vaults are migrated forward and never reset.
@@ -217,7 +160,7 @@ from the last week is read again and put back.
 
 The card refreshes every minute while Today is on screen, or when you press **Refresh**. If Anki
 is unavailable, the last successful snapshot stays on screen, marked with its time. Switching
-Anki profiles during a refresh is refused, so collections are never mixed. **Disconnect** clears
+Anki profiles during a refresh is refused, so two profiles' counts are never mixed. **Disconnect** clears
 the snapshot and the key, and so do closing or switching the vault.
 
 Yoru reads the active profile name, review totals and the time of each answer from AnkiConnect
@@ -229,32 +172,6 @@ supported.
 </details>
 
 ## FAQ
-
-<details>
-<summary><b>Is Yoru affiliated with Nintendo, Game Freak or The Pokémon Company?</b></summary>
-
-No. Yoru is an independent study tracker, and is not affiliated with, endorsed by or connected
-to them. "Pokémon" and related names belong to their owners, and are used here only to describe
-what Yoru works with. Yoru uses no official logo, artwork, typeface or trade dress.
-
-</details>
-
-<details>
-<summary><b>Does Yoru come with the game?</b></summary>
-
-No. Yoru ships no ROM, save, BIOS image, artwork or music, and it does not provide, download or
-link to any of them. You need your own legally obtained copy. Whether a particular copy may be
-used, and on what terms, is your responsibility under the law where you live.
-
-</details>
-
-<details>
-<summary><b>Can I use Yoru without the game?</b></summary>
-
-Yes. The timer, tasks, schedule, habits, analytics, Anki, music from your own files and vaults
-are the whole app without the game, and none of them need a game file.
-
-</details>
 
 <details>
 <summary><b>Where is my data, and does it survive updates?</b></summary>
@@ -269,8 +186,9 @@ vault as JSON, which anything can read.
 <details>
 <summary><b>Why Java 22?</b></summary>
 
-The Game tab talks to the emulator core through the JDK's foreign function API, which needs
-Java 22. The installers carry their own runtime, so this only matters if you build from source.
+Yoru is built against the Java 22 language and library level and ships as a Swing app with no
+third-party libraries. The installers carry their own runtime, so this only matters if you
+build from source.
 
 </details>
 
@@ -291,22 +209,13 @@ On Windows, run `build.cmd`, then `java -jar build/yoru.jar`.
 
 The build produces `build/yoru.jar`, with `dev.yoru.ui.YoruApp` as its entry point.
 `tools/package-installers.sh dmg|msi|deb <version>` builds an installer for the platform it
-runs on. The suite covers the domain, persistence and schema migration, the Generation III save
-format, encounter and delivery logic, Anki, and the rendered interface. `PrivacyTest` fails the
-build if personal data or a stray image reaches a tracked file.
+runs on. The suite covers the domain, persistence and schema migration, the Markdown parser and
+link rules, Anki, and the rendered interface. `PrivacyTest` fails the build if personal data or
+a stray image reaches a tracked file.
 
-A few checks need things the repository never holds, such as your own libretro core and game,
-or a real display, so `./test.sh` does not run them. After it has built the tests, run them by
-hand:
+One check needs a real display, so `./test.sh` does not run it. After it has built the tests:
 
 ```bash
-# The core's ABI, refusing a mismatched save, Close and reopening the core.
-# Starts from an invented save; your game file is only read.
-java --enable-native-access=ALL-UNNAMED -cp build/classes dev.yoru.game.NativeLifecycleCheck \
-     path/to/mgba_libretro path/to/game.gba path/to/empty-work-dir
-# Saves Yoru writes, loaded by the game itself. Uses a copy of a save.
-java --enable-native-access=ALL-UNNAMED -cp build/classes dev.yoru.game.InGameCheck \
-     path/to/game.gba path/to/a-copy-of-a-save.srm path/to/empty-work-dir
 # Keyboard focus in real dialogs; skipped headless.
 java -ea -cp build/classes dev.yoru.ui.DialogFocusTest
 ```
@@ -319,8 +228,7 @@ java -Djava.awt.headless=true -Duser.home=path/to/empty-dir \
      -cp build/classes dev.yoru.ui.TextFitTest path/to/render-dir
 ```
 
-The pictures in this README are drawn by `dev.yoru.ui.ReadmeMedia` from an invented vault, with
-no game artwork installed:
+The pictures in this README are drawn by `dev.yoru.ui.ReadmeMedia` from an invented vault:
 
 ```bash
 java -Djava.awt.headless=true -Duser.home=path/to/empty-dir -Duser.timezone=UTC \
@@ -336,7 +244,7 @@ Several people and AI agents work on this repository at once. **Read
 branch, never commit straight to `main`, and run `./test.sh` before you push.
 
 - [docs/ROADMAP.md](docs/ROADMAP.md): the plan, status and what is next
-- [docs/PRODUCT-GOALS.md](docs/PRODUCT-GOALS.md): the agreed study and game experience
+- [docs/PRODUCT-GOALS.md](docs/PRODUCT-GOALS.md): what Yoru is for, and what it is not
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): module boundaries and the rules that keep them
 - [docs/DATA-MODEL.md](docs/DATA-MODEL.md): storage; read it before touching the vault
 - [SECURITY.md](SECURITY.md): the vault, and what it does not protect
@@ -346,12 +254,9 @@ branch, never commit straight to `main`, and run `./test.sh` before you push.
 Yoru is released into the public domain under the **[Unlicense](LICENSE)**: anyone may use it
 for anything, with no conditions.
 
-Yoru is not affiliated with, endorsed by or connected to Nintendo, Game Freak or The Pokémon
-Company. It ships no game, BIOS, artwork or music. It relies on, but does not bundle,
-RetroArch, the mGBA libretro core and the [pokeemerald](https://github.com/pret/pokeemerald)
-decompilation, used as a reference for Generation III save and engine details. Each carries
-its own licence and its own authors' credit. The full wording is in the
-**[legal notice](NOTICE)**.
+Yoru bundles no third-party code, no fonts and no images: it is Swing and the JDK, and every
+picture in the interface is drawn at runtime. Music and any files you import stay yours and
+stay on your machine.
 
 ### Markdown pages
 

@@ -73,7 +73,6 @@ public final class AnkiTimeTest {
         var anki = named(t.state(), AnkiTime.ACTIVITY);
         check(anki != null && added.stream().allMatch(s -> s.activityId().equals(anki.id())), "under an activity called Anki, made on first use");
         check(total(t.state()) == 1800, "thirty minutes of tracked time");
-        check(Encounters.available(t.state()) == 1, "which earns an encounter like any thirty minutes");
         check(AnkiTime.recordedOn(t.state(), LocalDate.of(2026, 9, 9), ZoneOffset.UTC, NOON) == 1800, "and is reported as recorded");
         check(AnkiTime.studiedOn(reviews, LocalDate.of(2026, 9, 9), ZoneOffset.UTC) == 1800, "the same as Anki's own figure");
         int saves = repo.saves;
@@ -144,7 +143,7 @@ public final class AnkiTimeTest {
         var t = new Tracker(new Memory(), new Hand(NOON));
         var brief = answers(at("09:00"), 12, 10_000);   // two minutes
         check(t.addAnkiTime(brief, WEEK_AGO).isEmpty(), "two minutes is under the default five");
-        t.settings(new Settings(ThemeId.MIDNIGHT, TrainerId.BRENDAN, 4, 60));
+        t.settings(new Settings(ThemeId.MIDNIGHT, 4, 60));
         check(t.addAnkiTime(brief, WEEK_AGO).size() == 1, "and counts once the minimum is a minute");
     }
 

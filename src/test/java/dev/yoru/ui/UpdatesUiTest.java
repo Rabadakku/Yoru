@@ -29,8 +29,6 @@ public final class UpdatesUiTest {
     }
 
     private static final class Host implements UpdatesCard.Host {
-        boolean running;
-        public boolean gameRunning() { return running; }
         public void quitThen(Runnable afterVaultClosed) { }
         public Component owner() { return null; }
     }
@@ -92,12 +90,6 @@ public final class UpdatesUiTest {
         check(install != null && install.isEnabled() && "Download and install 1.0.5".equals(install.getText()),
             "and offers to install it, got " + (install == null ? null : install.getText()));
 
-        host.running = true;
-        onEdt(() -> card.show(release("1.0.5")));
-        install = (JButton) find(card, "updates.install");
-        check(install != null && !install.isEnabled(), "installing waits until the game is closed");
-        host.running = false;
-
         onEdt(() -> card.show(release("1.0.4")));
         check("Yoru 1.0.4 is the latest version.".equals(text(card, "updates.status")),
             "the same version is up to date, got " + text(card, "updates.status"));
@@ -138,6 +130,6 @@ public final class UpdatesUiTest {
             "and says this copy was built from source, got " + text(app, "updates.version"));
         onEdt(() -> ((JButton) find(app, "Lock & close")).doClick());
 
-        System.out.println("PASS: " + checks + " updates UI checks (available, game running, up to date, source build, unsupported, failure, Settings)");
+        System.out.println("PASS: " + checks + " updates UI checks (available, up to date, source build, unsupported, failure, Settings)");
     }
 }

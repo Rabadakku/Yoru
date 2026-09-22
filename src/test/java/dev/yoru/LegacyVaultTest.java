@@ -92,9 +92,7 @@ public final class LegacyVaultTest {
             // sensible empties rather than as a failure to load.
             check(loaded.recurring().isEmpty(),"The weekly template arrives empty");
             check(loaded.tags().isEmpty(),"Tags arrive empty");
-            check(loaded.game()==null,"An old vault arrives with no game save");
             check(task.tagId()==null,"The task is untagged");
-            check(loaded.rewards().isEmpty(),"An empty collection brings no rewards");
             check(loaded.settings().equals(Settings.defaults()),"Settings fall back to the defaults");
             // A theme that no longer exists reads as the nearest one that does,
             // rather than failing the whole vault on a name.
@@ -131,7 +129,6 @@ public final class LegacyVaultTest {
                 "A vault saved with the withdrawn Waifu theme opens as Moonlight");
             // Everything written after the portrait choice: proof the reader
             // stepped over exactly those bytes and no others.
-            check(loaded.settings().trainer()==TrainerId.MAY,"Its trainer survives the withdrawn setting");
             check(loaded.settings().dailyGoalHours()==6,"Its daily goal survives");
             check(loaded.settings().minSessionSeconds()==120,"Its session floor survives");
             check(loaded.settings().weekStartsOn()==java.time.DayOfWeek.SUNDAY,"Its week start survives");

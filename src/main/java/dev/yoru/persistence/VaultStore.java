@@ -1032,16 +1032,14 @@ public class VaultStore {
      * What a vault holds, in the words the delete confirmation uses.
      *
      * Counts only: the point is that the person about to delete a vault sees
-     * exactly what goes — study, game progress, backups, reward ledger — and
-     * not a vague "this workspace".
+     * exactly what goes — sessions, tasks, habits, pages, backups — and not a
+     * vague "this workspace".
      */
-    public record Contents(int activities, int sessions, int tasks, int habits, int rewards,
-                           int pending, boolean gameSave, int backups) {
+    public record Contents(int activities, int sessions, int tasks, int habits, int pages, int backups) {
 
         public static Contents of(State state, int backups) {
-            int pending = (int) state.rewards().stream().filter(r -> !r.delivered()).count();
             return new Contents(state.activities().size(), state.sessions().size(), state.tasks().size(),
-                state.habits().size(), state.rewards().size(), pending, state.game() != null, backups);
+                state.habits().size(), state.notes().pages().size(), backups);
         }
 
         /** What deleting this vault removes, one line each, with the numbers. */
@@ -1054,15 +1052,12 @@ public class VaultStore {
                     + habits + " tracker" + (habits == 1 ? "" : "s") + ", "
                     + activities + " activit" + (activities == 1 ? "y" : "ies")
                 : "nothing recorded yet"));
-            out.add("Game progress and saves — " + (gameSave
-                ? "a game save kept in step with the game"
-                : "no game save yet"));
+            out.add("Pages — " + (pages == 0
+                ? "none written yet"
+                : pages + " page" + (pages == 1 ? "" : "s")));
             out.add("Backups — " + (backups == 0
                 ? "none kept yet"
                 : backups + " encrypted backup" + (backups == 1 ? "" : "s")));
-            out.add("Reward ledger — " + (rewards == 0
-                ? "no Pokémon earned yet"
-                : rewards + " Pokémon earned" + (pending > 0 ? ", " + pending + " not yet delivered" : "")));
             return List.copyOf(out);
         }
     }

@@ -58,7 +58,7 @@ public final class ActivitiesTest {
     private static State rebuild(State state,List<Activity> activities,List<Session> sessions,
                                  List<ScheduleBlock> blocks,List<RecurringBlock> recurring,List<Task> tasks) {
         return new State(activities,sessions,blocks,recurring,tasks,state.habits(),state.tags(),
-            state.settings(),state.campaign(),state.rewards(),state.game(),state.notes());
+            state.settings(),state.notes());
     }
 
     /** Three activities and one of everything that can point at them. */
@@ -84,11 +84,7 @@ public final class ActivitiesTest {
             new Task(UUID.nameUUIDFromBytes(new byte[]{53}),null,null,"Order textbook","",null,TaskStatus.DONE,"manual",NOW,2,null));
         var habits=List.of(new Habit(UUID.nameUUIDFromBytes(new byte[]{61}),"Daily reading",HabitKind.DAILY,"UTC",Set.of(LocalDate.of(2026,9,8)),List.of()));
         var tags=List.of(new Tag(TAG,"Class",0x3366CC));
-        var rewards=List.of(
-            new Reward(DELIVERED,255,10,Instant.parse("2026-09-01T10:00:00Z"),Instant.parse("2026-09-02T10:00:00Z")),
-            new Reward(EARNED,252,12,Instant.parse("2026-09-08T10:00:00Z"),null));
-        return new State(activities,sessions,blocks,recurring,tasks,habits,tags,Settings.defaults(),
-            new Campaign(4242,7,3600),rewards,new GameSave(new byte[]{1,2,3,4},NOW),Notes.empty());
+        return new State(activities,sessions,blocks,recurring,tasks,habits,tags,Settings.defaults(),Notes.empty());
     }
 
     private static Tracker tracker(Memory repo)throws IOException {
@@ -110,10 +106,9 @@ public final class ActivitiesTest {
         check(after.blocks().equals(before.blocks()),"planned blocks are untouched");
         check(after.recurring().equals(before.recurring()),"weekly repeats are untouched");
         check(after.tasks().equals(before.tasks()),"tasks are untouched");
-        check(after.rewards().equals(before.rewards()),"no reward is duplicated or lost");
-        check(after.campaign().equals(before.campaign()),"the reward ledger is not rewritten");
+
         check(after.habits().equals(before.habits())&&after.tags().equals(before.tags())
-            &&Objects.equals(after.game(),before.game())&&after.settings().equals(before.settings()),
+            &&after.settings().equals(before.settings()),
             "nothing else in the vault moved");
         check(t.usage(CODING).equals(new Tracker.ActivityUsage(2,5400L,1,1,1)),
             "the reported usage is unchanged by a rename, got "+t.usage(CODING));
@@ -184,12 +179,10 @@ public final class ActivitiesTest {
                 x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor()):x).toList()),
             "every task survives under the bucket");
         check(after.habits().equals(before.habits())&&after.tags().equals(before.tags())
-            &&after.rewards().equals(before.rewards())&&after.campaign().equals(before.campaign())
-            &&Objects.equals(after.game(),before.game())&&after.settings().equals(before.settings()),
+            &&after.settings().equals(before.settings()),
             "no unrelated record was touched");
         check(total(after)==total(before),"keeping the time keeps every total");
-        check(Encounters.available(after)==Encounters.available(before),"keeping the time mints no encounter and loses none");
-        check(after.campaign().rewardedSeconds()==before.campaign().rewardedSeconds(),"the reward ledger is not rewritten");
+
         check(repo.backups==1,"the vault was backed up before the removal");
 
         t.removeActivity(JAPANESE,true);
@@ -223,13 +216,10 @@ public final class ActivitiesTest {
             .map(x->CODING.equals(x.activityId())?new Task(x.id(),keep,x.tagId(),x.title(),x.notes(),x.due(),
                 x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor()):x).toList()),
             "and keeps the repeats and tasks");
-        check(after.rewards().equals(before.rewards()),"no reward is duplicated or lost");
-        check(after.campaign().equals(before.campaign()),"the reward ledger is not rewritten");
-        check(after.campaign().encountersUsed()==before.campaign().encountersUsed(),"no encounter is spent twice");
-        check(Encounters.available(after)<=Encounters.available(before),"deleting time cannot mint an encounter");
+
         check(total(after)==beforeTotal-5400,"the deleted time is gone from the totals");
         check(after.habits().equals(before.habits())&&after.tags().equals(before.tags())
-            &&Objects.equals(after.game(),before.game())&&after.settings().equals(before.settings()),
+            &&after.settings().equals(before.settings()),
             "nothing unrelated was lost");
     }
 

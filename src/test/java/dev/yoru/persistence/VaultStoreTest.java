@@ -3,7 +3,6 @@ package dev.yoru.persistence;
 import dev.yoru.application.Repository;
 import dev.yoru.application.Tracker;
 import dev.yoru.domain.Model.*;
-import dev.yoru.game.Gen3Fixture;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -25,7 +24,7 @@ import java.util.UUID;
  * name, and nothing above this class ever asking anybody where a file is.
  *
  * Everything here is invented — temporary folders, saves built by
- * {@link Gen3Fixture}, and a password that exists only in this file. No test
+ * invented in this file, and a password that exists only in it. No test
  * opens a real vault, because there is no real vault on this machine to open.
  */
 public final class VaultStoreTest {
@@ -37,8 +36,8 @@ public final class VaultStoreTest {
     private static final String INVENTED_KEY = "0123456789abcdef".repeat(4);
     private static final Instant WHEN = Instant.parse("2026-09-11T12:00:00Z");
 
-    /** A named vault's worth of invented data: study, a reward and a game save. */
-    private static State contents(byte[] gameSave, String label, int sessionMinutes) throws IOException {
+    /** A named vault's worth of invented data. */
+    private static State contents(String label, int sessionMinutes) throws IOException {
         var tracker = new Tracker(new Memory(), Clock.fixed(WHEN, ZoneOffset.UTC));
         tracker.addActivity(label, 30);
         var activity = tracker.state().activities().getFirst().id();
@@ -46,8 +45,6 @@ public final class VaultStoreTest {
         tracker.addTasks(List.of(new Task(UUID.randomUUID(), activity, null, "Read " + label, "",
             null, TaskStatus.TODO, "test", WHEN, 0, null)));
         tracker.addHabit("Daily " + label, HabitKind.DAILY, ZoneOffset.UTC, null);
-        tracker.bankReward(UUID.randomUUID(), 255, 5);
-        if (gameSave != null) tracker.replaceGameSave(gameSave);
         return tracker.state();
     }
 
@@ -118,7 +115,7 @@ public final class VaultStoreTest {
     private static void createsAndReopens(Path dir) throws Exception {
         var store = new VaultStore(dir);
         check(store.names().isEmpty(), "a new store holds no vaults");
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
 
         try (var vault = store.create("School", PASSWORD.toCharArray())) {
             vault.save(invented);
@@ -130,12 +127,10 @@ public final class VaultStoreTest {
 
         try (var vault = store.open("School", PASSWORD.toCharArray())) {
             check(vault.load().equals(invented), "reopening returns everything that was written");
-            check(vault.load().game().bytes().length == Gen3Fixture.save(2, 4).length,
-                "the game save came back whole");
         }
 
         // A password-free vault keeps its unlock key beside it and reopens with no password.
-        try (var vault = store.createPasswordless("Personal")) { vault.save(contents(null, "Reading", 20)); }
+        try (var vault = store.createPasswordless("Personal")) { vault.save(contents("Reading", 20)); }
         check(store.passwordless("Personal"), "a password-free vault has its key beside it");
         try (var vault = store.open("Personal")) {
             check(vault.load().activities().getFirst().name().equals("Reading"),
@@ -162,7 +157,7 @@ public final class VaultStoreTest {
     /** Making a second vault under a name in use is refused; the first is untouched. */
     private static void refusesToCreateOverAVault(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var invented = contents(null, "Study", 30);
+        var invented = contents("Study", 30);
         try (var vault = store.create("School", PASSWORD.toCharArray())) { vault.save(invented); }
         refused(() -> store.create("School", PASSWORD.toCharArray()), "creating over an existing vault");
         try (var vault = store.open("School", PASSWORD.toCharArray())) {
@@ -175,7 +170,7 @@ public final class VaultStoreTest {
     /** A rename takes the vault, its unlock key and its backups with it, and loses nothing. */
     private static void renamesEverythingThatBelongs(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 45);
+        var invented = contents("Study", 45);
         try (var vault = store.createPasswordless("School")) {
             vault.save(invented);
             vault.backup();
@@ -204,7 +199,7 @@ public final class VaultStoreTest {
      * every part of it — never half moved, never in two places.
      */
     private static void aFailedRenameKeepsTheOldName(Path dir) throws Exception {
-        var invented = contents(null, "Study", 30);
+        var invented = contents("Study", 30);
         var good = new VaultStore(dir);
         try (var vault = good.createPasswordless("School")) {
             vault.save(invented);
@@ -231,7 +226,7 @@ public final class VaultStoreTest {
      * at the new name, and a vault left without it would be a dead one.
      */
     private static void aFailedRenamePutsTheKeyBackToo(Path dir) throws Exception {
-        var invented = contents(null, "Study", 30);
+        var invented = contents("Study", 30);
         var good = new VaultStore(dir);
         try (var vault = good.createPasswordless("School")) {
             vault.save(invented);
@@ -260,7 +255,7 @@ public final class VaultStoreTest {
         check(good.exists("School") && good.passwordless("School") && good.backups("School").length == 1,
             "a failure at the last step puts the vault, its key and its backup back, got " + namesOf(dir));
         try (var vault = good.open("School")) {
-            check(vault.load().equals(invented), "with every session, task, reward and save intact");
+            check(vault.load().equals(invented), "with every session, task and page intact");
         }
     }
 
@@ -270,7 +265,7 @@ public final class VaultStoreTest {
     private static void deletesEverythingThatBelongs(Path dir) throws Exception {
         var store = new VaultStore(dir);
         try (var vault = store.createPasswordless("School")) {
-            vault.save(contents(Gen3Fixture.save(2, 4), "Study", 30));
+            vault.save(contents("Study", 30));
             vault.backup();
         }
         check(store.backups("School").length == 1, "there is a backup to remove");
@@ -290,7 +285,7 @@ public final class VaultStoreTest {
      * was, byte for byte, with its key and its backups still there.
      */
     private static void aFailedDeleteLosesNothing(Path dir) throws Exception {
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         var good = new VaultStore(dir);
         try (var vault = good.createPasswordless("School")) {
             vault.save(invented);
@@ -312,7 +307,7 @@ public final class VaultStoreTest {
         check(good.backups("School").length == backups, "its backups were put back");
         check(good.passwordless("School"), "and it still opens without a password");
         try (var vault = good.open("School")) {
-            check(vault.load().equals(invented), "with every session, task, reward and save intact");
+            check(vault.load().equals(invented), "with every session, task and page intact");
         }
         check(namesOf(dir).stream().noneMatch(n -> n.startsWith(".deleting")),
             "the staging copy was cleaned up once the vault was back");
@@ -340,7 +335,7 @@ public final class VaultStoreTest {
      */
     private static void anInterruptedDeleteIsSwept(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         try (var vault = store.createPasswordless("School")) {
             vault.save(invented);
             vault.backup();
@@ -365,7 +360,7 @@ public final class VaultStoreTest {
      */
     private static void anInterruptedDeleteIsPutBack(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         try (var vault = store.createPasswordless("School")) {
             vault.save(invented);
             vault.backup();
@@ -395,7 +390,7 @@ public final class VaultStoreTest {
     private static void anInterruptedDeleteThatHadFinishedIsFinished(Path dir) throws Exception {
         var store = new VaultStore(dir);
         try (var vault = store.createPasswordless("School")) {
-            vault.save(contents(null, "Study", 30));
+            vault.save(contents("Study", 30));
             vault.backup();
         }
         stageEverything(dir, "School");
@@ -416,7 +411,7 @@ public final class VaultStoreTest {
      */
     private static void aStaleKeyIsNotPutBackBesideAnotherVault(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         try (var vault = store.createPasswordless("School")) {
             vault.save(invented);
             vault.backup();
@@ -448,7 +443,7 @@ public final class VaultStoreTest {
      */
     private static void anOrphanedKeyIsGivenBackToItsVault(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         try (var vault = store.createPasswordless("School")) { vault.save(invented); }
         Files.move(LocalAccess.keyPath(store.path("School")), dir.resolve("University.vault.local-key"));
         check(!store.passwordless("School"), "the vault is left without its key");
@@ -546,7 +541,7 @@ public final class VaultStoreTest {
     private static void anAdoptionKilledBetweenTheKeyAndTheVaultFinishes(Path dir, Path legacy) throws Exception {
         Files.createDirectories(dir);
         Files.createDirectories(legacy);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         var secret = LocalAccess.create(legacy.resolve("School.vault"));
         try (var vault = new EncryptedVault(legacy.resolve("School.vault"), secret)) { vault.save(invented); }
         Files.move(LocalAccess.keyPath(legacy.resolve("School.vault")), dir.resolve("School.vault.local-key"));
@@ -572,7 +567,7 @@ public final class VaultStoreTest {
     private static void aStrangerKeyIsNotHandedToAVault(Path dir, Path legacy) throws Exception {
         Files.createDirectories(dir);
         Files.createDirectories(legacy);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         try (var vault = new VaultStore(dir).create("Work", PASSWORD.toCharArray())) { vault.save(State.empty()); }
         Files.writeString(dir.resolve("School.vault.local-key"), INVENTED_KEY);
         var secret = LocalAccess.create(legacy.resolve("School.vault"));
@@ -606,7 +601,7 @@ public final class VaultStoreTest {
      */
     private static void aClosedVaultRefusesToWrite(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         var vault = store.create("School", PASSWORD.toCharArray());
         vault.save(invented);
         vault.close();
@@ -636,7 +631,7 @@ public final class VaultStoreTest {
      */
     private static void anOpenVaultIsNotMovedOutFromUnderIt(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         try (var vault = store.createPasswordless("School")) {
             vault.save(invented);
             vault.backup();
@@ -669,7 +664,7 @@ public final class VaultStoreTest {
      */
     private static void aSecondDeleteKeepsWhatTheFirstLeftStaged(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var invented = contents(null, "Study", 30);
+        var invented = contents("Study", 30);
         try (var vault = store.createPasswordless("School")) { vault.save(invented); }
         // The first delete put the vault back and could not put its key back.
         stageEverything(dir, "School");
@@ -782,7 +777,7 @@ public final class VaultStoreTest {
         if (!caseBlind) return;
 
         var store = new VaultStore(dir);
-        var invented = contents(null, "Study", 30);
+        var invented = contents("Study", 30);
         try (var vault = store.createPasswordless("study")) {
             vault.save(invented);
             vault.backup();
@@ -842,14 +837,14 @@ public final class VaultStoreTest {
 
     /** The confirmation's words name everything that goes, with the counts. */
     private static void contentsSayWhatWouldBeDeleted() throws Exception {
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         var lines = String.join("\n", VaultStore.Contents.of(invented, 2).lines()).toLowerCase(Locale.ROOT);
         for (String expected : List.of("study data", "1 recorded session", "1 task", "1 tracker",
-            "game progress", "a game save", "backups", "2 encrypted backups", "reward ledger", "1 pokémon"))
+            "pages", "backups", "2 encrypted backups"))
             check(lines.contains(expected), "the confirmation mentions \"" + expected + "\", got: " + lines);
 
         var empty = String.join(" ", VaultStore.Contents.of(State.empty(), 0).lines());
-        check(empty.contains("nothing recorded") && empty.contains("no game save") && empty.contains("none"),
+        check(empty.contains("nothing recorded") && empty.contains("none written yet") && empty.contains("none"),
             "an empty vault says so, got: " + empty);
     }
 
@@ -863,7 +858,7 @@ public final class VaultStoreTest {
     private static void migratesOlderVaultsWithoutLoss(Path dir, Path legacy) throws Exception {
         Files.createDirectories(legacy);
         var store = new VaultStore(dir);
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
 
         // A password-free vault made the old way: file, key beside it, a backup and a stale lock.
         var secret = LocalAccess.create(legacy.resolve("School.vault"));
@@ -874,7 +869,7 @@ public final class VaultStoreTest {
         Files.writeString(legacy.resolve("School.vault.lock"), "");
         // A password vault, and something in the folder that is not a vault.
         try (var second = new EncryptedVault(legacy.resolve("Personal.vault"), PASSWORD.toCharArray())) {
-            second.save(contents(null, "Reading", 20));
+            second.save(contents("Reading", 20));
         }
         Files.writeString(legacy.resolve("notes.txt"), "not a vault");
 
@@ -904,7 +899,7 @@ public final class VaultStoreTest {
         Files.createDirectories(legacy);
         var store = new VaultStore(dir);
         try (var vault = new EncryptedVault(legacy.resolve("School.vault"), PASSWORD.toCharArray())) {
-            vault.save(contents(null, "Study", 30));
+            vault.save(contents("Study", 30));
         }
         check(store.migrate(legacy).adopted().equals(List.of("School")), "the vault is adopted once");
         var bytes = Files.readAllBytes(store.path("School"));
@@ -922,7 +917,7 @@ public final class VaultStoreTest {
     private static void aFailedAdoptionLosesNothing(Path dir, Path legacy) throws Exception {
         Files.createDirectories(legacy);
         var secret = LocalAccess.create(legacy.resolve("School.vault"));
-        var invented = contents(Gen3Fixture.save(2, 4), "Study", 30);
+        var invented = contents("Study", 30);
         var old = new EncryptedVault(legacy.resolve("School.vault"), secret);
         old.save(invented);
         old.backup();
@@ -942,7 +937,7 @@ public final class VaultStoreTest {
         var later = new VaultStore(dir).migrate(legacy);
         check(later.adopted().equals(List.of("School")), "a later run adopts it, got " + later.adopted());
         try (var vault = new VaultStore(dir).open("School")) {
-            check(vault.load().equals(invented), "with every session, task, reward and save intact");
+            check(vault.load().equals(invented), "with every session, task and page intact");
         }
     }
 
@@ -950,8 +945,8 @@ public final class VaultStoreTest {
     private static void migrationKeepsBothVaultsOnANameClash(Path dir, Path legacy) throws Exception {
         Files.createDirectories(legacy);
         var store = new VaultStore(dir);
-        var mine = contents(null, "Mine", 30);
-        var older = contents(null, "Older", 45);
+        var mine = contents("Mine", 30);
+        var older = contents("Older", 45);
         try (var vault = store.create("School", PASSWORD.toCharArray())) { vault.save(mine); }
         try (var vault = new EncryptedVault(legacy.resolve("School.vault"), PASSWORD.toCharArray())) {
             vault.save(older);

@@ -972,6 +972,45 @@ final class Theme {
         return field;
     }
 
+    /**
+     * A figure drawn as large as its room allows, up to its designed size.
+     *
+     * The clock is the biggest thing on Today, and the window's floor is set by
+     * the navigation bar rather than by it, so at 150% and 200% text the column
+     * could be narrower than "00:00:00". A number that is cut is worse than a
+     * number that is smaller, so this gives up type size rather than digits.
+     */
+    static JLabel figure(String text, int size, Color colour) {
+        var label = new JLabel(text) {
+            @Override public void setBounds(int x, int y, int width, int height) {
+                super.setBounds(x, y, width, height);
+                fitFigure(this, size, width);
+            }
+            @Override public void setText(String next) {
+                super.setText(next);
+                fitFigure(this, size, getWidth());
+            }
+            @Override public Dimension getMinimumSize() { return new Dimension(0, super.getMinimumSize().height); }
+        };
+        label.setFont(mono(size));
+        label.setForeground(colour);
+        return label;
+    }
+
+    /** The largest type this figure's text fits in, never larger than its designed size. */
+    private static void fitFigure(JLabel label, int designed, int width) {
+        String text = label.getText();
+        if (width <= 0 || text == null || text.isEmpty()) return;
+        var insets = label.getInsets();
+        int room = width - insets.left - insets.right;
+        if (room <= 0) return;
+        int points = scaled(designed);
+        var face = mono(designed);
+        while (points > 10 && label.getFontMetrics(face.deriveFont((float) points)).stringWidth(text) > room) points--;
+        var next = face.deriveFont((float) points);
+        if (!next.equals(label.getFont())) label.setFont(next);
+    }
+
     static JLabel label(String s,int size,Color color) {
         var l=new JLabel(s);
         l.putClientProperty("html.disable",true);

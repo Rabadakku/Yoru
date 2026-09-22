@@ -3,7 +3,6 @@ package dev.yoru;
 import dev.yoru.application.Repository;
 import dev.yoru.application.Tracker;
 import dev.yoru.domain.Model.*;
-import dev.yoru.game.Gen3Fixture;
 import dev.yoru.persistence.VaultStore;
 
 import java.io.IOException;
@@ -47,16 +46,14 @@ public final class VaultSwitchTest {
         public void close() { closed = true; }
     }
 
-    /** Invented contents: one activity with one recorded session, and a game save on request. */
-    private static State invented(String label, byte[] gameSave) throws IOException {
+    /** Invented contents: one activity with one recorded session. */
+    private static State invented(String label) throws IOException {
         var tracker = new Tracker(new Memory(), CLOCK);
         tracker.addActivity(label, 30);
         var activity = tracker.state().activities().getFirst().id();
         tracker.log(activity, CLOCK.instant().minusSeconds(1800), CLOCK.instant());
         tracker.addTasks(List.of(new Task(UUID.randomUUID(), activity, null, "Read " + label, "",
             null, TaskStatus.TODO, "test", CLOCK.instant(), 0, null)));
-        tracker.bankReward(UUID.randomUUID(), 255, 5);
-        if (gameSave != null) tracker.replaceGameSave(gameSave);
         return tracker.state();
     }
 
@@ -71,8 +68,8 @@ public final class VaultSwitchTest {
     private static void movesOnlyOnceTheNextVaultIsInHand() throws IOException {
         var one = new Memory();
         var two = new Memory();
-        one.state = invented("Study", Gen3Fixture.save(2, 4));
-        two.state = invented("Reading", null);
+        one.state = invented("Study");
+        two.state = invented("Reading");
         var tracker = new Tracker(one, CLOCK);
 
         tracker.switchTo(two);
@@ -87,7 +84,7 @@ public final class VaultSwitchTest {
     private static void aVaultThatWillNotOpenChangesNothing() throws IOException {
         var one = new Memory();
         var two = new Memory();
-        one.state = invented("Study", null);
+        one.state = invented("Study");
         two.refuse = true;
         var tracker = new Tracker(one, CLOCK);
 
@@ -102,8 +99,8 @@ public final class VaultSwitchTest {
     /** Two real vaults in managed storage: across and back, with nothing lost either way. */
     private static void realVaultsSurviveSwitching(Path dir) throws Exception {
         var store = new VaultStore(dir);
-        var study = invented("Study", Gen3Fixture.save(2, 4));
-        var reading = invented("Reading", null);
+        var study = invented("Study");
+        var reading = invented("Reading");
         try (var vault = store.create("School", PASSWORD.toCharArray())) { vault.save(study); }
         try (var vault = store.create("Personal", PASSWORD.toCharArray())) { vault.save(reading); }
 

@@ -14,9 +14,6 @@ interface Shell {
 
     Tracker tracker();
 
-    /** The game running inside Yoru, and its save. */
-    GameController game();
-
     /** The component dialogs are raised over. */
     Component owner();
 
@@ -57,18 +54,12 @@ interface Shell {
     /** Draws this computer's text at {@code percent} of its designed size, rebuilding the window. */
     void textSize(int percent);
 
-    /** Asks for a game, artwork folder or zip, and imports it. */
-    void importArtwork();
-
-    /** Imports a game, artwork folder, zip or picture already chosen. */
-    void installArtwork(java.io.File chosen);
-
     /** The open vault's own controls: switch, new, rename, password and delete. */
     JPanel vaultCard();
 
     /** Asks which data to reset, and resets it after a backup. */
     void chooseReset();
 
-    /** Closes the game and the vault for an update, then runs the installer's step. */
+    /** Closes the vault for an update, then runs the installer's step. */
     void quitForUpdate(Runnable afterVaultClosed);
 }

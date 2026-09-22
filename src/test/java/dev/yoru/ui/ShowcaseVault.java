@@ -115,7 +115,7 @@ final class ShowcaseVault {
         tracker.addHabit("Time since last energy drink", HabitKind.TIME_SINCE, zone, now.minus(Duration.ofDays(23)).minusSeconds(7340));
 
         // The week on screen ends today, so the schedule shows a week already lived.
-        tracker.settings(new Settings(theme, TrainerId.BRENDAN, 4, 300, today.plusDays(1).getDayOfWeek()));
+        tracker.settings(new Settings(theme, 4, 300, today.plusDays(1).getDayOfWeek()));
         tracker.start(study);
         tracker.editSession(tracker.active().id(), study, now.minus(Duration.ofMinutes(42)), null);
         return tracker;

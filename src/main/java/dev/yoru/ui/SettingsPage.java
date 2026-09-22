@@ -12,14 +12,13 @@ import javax.swing.border.LineBorder;
 import static dev.yoru.ui.Theme.*;
 
 /**
- * The Settings page: appearance, tracking and study music, the game and its
- * artwork, the vault, and updates.
+ * The Settings page: appearance, tracking and study music, the vault, and
+ * updates.
  *
  * Moved out of YoruApp (#12), as the Today page was. It builds the page, and
  * reaches the window through {@link Shell} for what belongs to the window:
- * applying a settings change, since a new palette rebuilds the window; importing
- * artwork, which a drop and the first-run prompt also start; the vault's own
- * controls and its reset; and quitting for an update.
+ * applying a settings change, since a new palette rebuilds the window; the
+ * vault's own controls and its reset; and quitting for an update.
  */
 final class SettingsPage {
     private final Shell shell;
@@ -31,10 +30,9 @@ final class SettingsPage {
     JPanel view() {
         var settings=shell.tracker().state().settings();
         var p=stack();
-        p.add(YoruApp.pageHeaderFor("Settings","APPEARANCE · TRACKING · GAME & ARTWORK · VAULT"));
+        p.add(YoruApp.pageHeaderFor("Settings","APPEARANCE · TRACKING · VAULT · UPDATES"));
         if(updates==null)updates=new UpdatesCard(dev.yoru.update.Version.running(),dev.yoru.update.Updates.current(),
             ()->new dev.yoru.update.ReleaseFeed().latest(),new UpdatesCard.Host() {
-                public boolean gameRunning() { return shell.game().running(); }
                 public void quitThen(Runnable afterVaultClosed) { shell.quitForUpdate(afterVaultClosed); }
                 public java.awt.Component owner() { return shell.owner(); }
             });
@@ -51,18 +49,6 @@ final class SettingsPage {
         themes.setAlignmentX(0);
         for(var id:ThemeId.values()) themes.add(themeCard(id));
         appearance.add(themes);
-        gap(appearance,SPACE_LG);
-        // The caption over its controls, as every other setting on this page
-        // writes one: inline, the two rows started their buttons wherever their
-        // own words happened to end, so nothing in the card shared a left edge.
-        appearance.add(label("TRAINER SPRITE",TYPE_CAPTION,MUTED));
-        var trainerRow=wrappingRow();
-        for(var t:TrainerId.values()) {
-            String name=t.name().charAt(0)+t.name().substring(1).toLowerCase();
-            var pick=button(name,()->shell.applySettings(s->new Settings(s.theme(),t,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn())));
-            trainerRow.add(selected(pick,settings.trainer()==t));
-        }
-        appearance.add(trainerRow);
         gap(appearance,SPACE_LG);
         // This computer's, not the vault's: the caption says so, since the
         // themes above travel with the workspace (#31).
@@ -136,7 +122,7 @@ final class SettingsPage {
         gap(tracking,SPACE_SM);
         tracking.add(bodyLabel("Used by the week calendar and the task calendar."));
         gap(tracking,SPACE_LG);
-        tracking.add(button("Save tracking settings",()->shell.applySettings(s->new Settings(s.theme(),s.trainer(),
+        tracking.add(button("Save tracking settings",()->shell.applySettings(s->new Settings(s.theme(),
             (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem()))));
 
         var audio=card();
@@ -191,35 +177,6 @@ final class SettingsPage {
         }));
         audio.add(audioActions);
 
-        var artwork=card();
-        artwork.add(sectionHeader("GAME & ARTWORK"));
-        gap(artwork,SPACE_SM);
-        artwork.add(bodyLabel("Add your Emerald game to extract all 386 normal and shiny sprites, or import your own PNG artwork."));
-        gap(artwork,SPACE_MD);
-        var survey=SpriteAssets.survey();
-        var currentGame=GameFiles.rom();
-        artwork.add(ArtworkStatus.rows(survey,dev.yoru.assets.ArtworkLibrary.lastFailure(),currentGame!=null,shell::importArtwork,
-            ()->{if(GameFiles.rom()!=null)shell.installArtwork(GameFiles.rom().toFile());}));
-        gap(artwork,SPACE_MD);
-        artwork.add(bodyLabel("Drop your .gba, folder or .zip anywhere on this window, or:"));
-        gap(artwork,SPACE_SM);
-        var artworkActions=row();
-        artworkActions.add(button("Add artwork…",shell::importArtwork));
-        if(currentGame!=null)artworkActions.add(button("Extract from current game",()->shell.installArtwork(currentGame.toFile())));
-        artworkActions.add(button("Open library folder",()->{
-            try {
-                java.nio.file.Files.createDirectories(dev.yoru.assets.ArtworkLibrary.root());
-                if(Desktop.isDesktopSupported()) Desktop.getDesktop().open(dev.yoru.assets.ArtworkLibrary.root().toFile());
-            } catch(Exception e) { shell.error(e); }
-        }));
-        artwork.add(artworkActions);
-        gap(artwork,SPACE_MD);
-        // The file-naming rules are a caption, not two lines of prose; the "?"
-        // carries the detail for anyone who needs it.
-        var naming=label("PNG files named 1–386, shiny and overworld sheets optional.",TYPE_CAPTION,MUTED);
-        naming.setToolTipText("Names may be zero-padded and nested in folders; anything else is skipped.");
-        artwork.add(naming);
-
         var reset=card();
         reset.add(sectionHeader("VAULT · RESET DATA",GOLD));
         gap(reset,SPACE_MD);
@@ -228,12 +185,10 @@ final class SettingsPage {
         reset.add(bodyLabel("An encrypted backup is saved beside your vault before the reset."));
         gap(reset,SPACE_LG);
         reset.add(button("Choose data to reset…",shell::chooseReset));
-        // Four sections, in the order a player looks for them (#9): how Yoru
-        // looks, how it tracks, the game and its artwork, then the vault, whose
-        // controls used to sit on the Data page. Updates are about the app
-        // rather than the workspace, so they come last. The planned-integrations
-        // card, which offered nothing to do, is gone.
-        for(var section:new JComponent[]{appearance,tracking,audio,artwork,shell.vaultCard(),reset,updates}) {
+        // In the order a reader looks for them (#9): how Yoru looks, how it
+        // tracks, then the vault, whose controls used to sit on the Data page.
+        // Updates are about the app rather than the workspace, so they come last.
+        for(var section:new JComponent[]{appearance,tracking,audio,shell.vaultCard(),reset,updates}) {
             p.add(section);
             gap(p,SPACE_XL);
         }
@@ -282,9 +237,7 @@ final class SettingsPage {
         // disabled one, so the chosen theme is the most prominent thing here.
         var pick=chosen
             ?accentButton("Active",()->{})
-            // A theme is only a theme: choosing Moonlight used to switch on the
-            // Nightfall companion as well, which is a choice Settings asks for (#3).
-            :button("Use this",()->shell.applySettings(s->new Settings(id,s.trainer(),s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn())));
+            :button("Use this",()->shell.applySettings(s->new Settings(id,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn())));
         pick.setName("settings.theme."+id.name());
         if(chosen)pick.setToolTipText("This theme is already in use");
         box.add(pick);

@@ -11,17 +11,16 @@ after the file is deleted.
 
 - **No personal details about the owner or anyone else.** No names, email
   addresses, usernames, home-directory paths (`/Users/…`, `/home/…`),
-  machine names, trainer names or trainer IDs from a real save, course names
-  or codes, real task titles, habits, health or medical details, schedules,
-  locations, or screenshots of anyone's real data.
-- **No personal files.** No vaults, game saves (`.srm`, `.sav`), ROMs, BIOS
-  images, exports (Notion, CSV, JSON), keys, API tokens, sprite art, or
-  recordings of the game.
+  machine names, course names or codes, real task titles, habits, pages,
+  health or medical details, schedules, locations, or screenshots of anyone's
+  real data.
+- **No personal files.** No vaults, exports (Notion, CSV, JSON, Markdown),
+  keys or API tokens.
 - **Refer to people by role:** "the owner", "a user", "the tester". Record
   what was decided and why, not who said it.
 - **Tests use invented data only.** Build fixtures from scratch —
-  `Gen3Fixture` does it for saves — and never copy values out of a real save,
-  vault or export, even one you were shown to work from.
+  and never copy values out of a real vault or export, even one you were shown
+  to work from.
 - **Everything you write on GitHub counts too:** commit messages, pull
   request descriptions, issues, comments and reviews.
 
@@ -31,13 +30,11 @@ On a machine that has one, it also checks every term in `.privacy-denylist` —
 a gitignored list, one term per line, that is never committed. If it fails,
 remove the data. Do not weaken the test.
 
-## 2. No game assets
+## 2. Nothing is bundled
 
-The user supplies their own game, BIOS and artwork; Yoru ships none of them.
-ROMs, BIOS, sprites, music, maps and screenshots or recordings of the game
-never enter the repository or a release. Tables of facts extracted by the
-`tools/` scripts (species numbers, base stats, learnsets) are the exception,
-because they are numbers rather than artwork.
+Yoru ships no third-party code, fonts, images or audio: Swing and the JDK
+only, with every picture drawn at runtime. Anything a user imports — music,
+Markdown, an export — belongs to them and never enters the repository.
 
 ## 3. How work happens here
 

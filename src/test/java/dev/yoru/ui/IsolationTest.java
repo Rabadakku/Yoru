@@ -1,6 +1,5 @@
 package dev.yoru.ui;
 
-import dev.yoru.assets.ArtworkLibrary;
 import dev.yoru.assets.MusicLibrary;
 import dev.yoru.persistence.VaultStore;
 import java.nio.file.Path;
@@ -30,7 +29,7 @@ public final class IsolationTest {
         check(real == null || !home.equals(Path.of(real).toAbsolutePath().normalize()),
             "tests must not run in the real home; run them through ./test.sh, which gives each JVM its own");
 
-        for (Path place : List.of(VaultStore.legacyRoot(), ArtworkLibrary.root(), MusicLibrary.root(), GameFiles.workDirectory()))
+        for (Path place : List.of(VaultStore.legacyRoot(), MusicLibrary.root()))
             check(place.toAbsolutePath().normalize().startsWith(home), "production code reads and writes inside the test home: " + place);
 
         check(TestPreferencesFactory.class.getName().equals(System.getProperty("java.util.prefs.PreferencesFactory")),

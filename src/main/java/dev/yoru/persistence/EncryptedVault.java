@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=14, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=15, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -31,6 +31,7 @@ public final class EncryptedVault implements Repository {
     private State initial;
     private boolean legacy;
     private int loadedSchema;
+    private Path rescued;
     /**
      * Set once the key is wiped. A write after that would encrypt the vault
      * under a key of zeros — one nothing can open again — so every writer
@@ -54,9 +55,7 @@ public final class EncryptedVault implements Repository {
             }
             else new SecureRandom().nextBytes(salt);
             key=derive(password,salt);
-            // A new vault gets its own encounter seed, so two vaults do not meet
-            // the same Pokémon in the same order.
-            initial=file==null?State.empty().withCampaign(Campaign.start(new SecureRandom().nextLong())):decode(decrypt(key,file));
+            initial=file==null?State.empty():decode(decrypt(key,file));
             channel=ch;
             lock=lk;
             if(file==null)save(initial);
@@ -254,24 +253,9 @@ public final class EncryptedVault implements Repository {
                 out.writeInt(state.tags().size());
                 for (var tag : state.tags()) { uuid(out,tag.id()); out.writeUTF(tag.name()); out.writeInt(tag.colour()); }
                 var settings = state.settings();
-                out.writeUTF(settings.theme().name()); out.writeUTF(settings.trainer().name());
+                out.writeUTF(settings.theme().name());
                 out.writeInt(settings.dailyGoalHours()); out.writeInt(settings.minSessionSeconds());
                 out.writeUTF(settings.weekStartsOn().name());
-                var campaign = state.campaign();
-                out.writeLong(campaign.seed()); out.writeLong(campaign.encountersUsed()); out.writeLong(campaign.rewardedSeconds());
-                out.writeInt(state.rewards().size());
-                for (var r : state.rewards()) {
-                    uuid(out, r.id()); out.writeInt(r.nationalDex()); out.writeInt(r.level());
-                    instant(out, r.earnedAt());
-                    out.writeBoolean(r.deliveredAt() != null);
-                    if (r.deliveredAt() != null) instant(out, r.deliveredAt());
-                }
-                out.writeBoolean(state.game() != null);
-                if (state.game() != null) {
-                    instant(out, state.game().updatedAt());
-                    byte[] save = state.game().bytes();
-                    out.writeInt(save.length); out.write(save);
-                }
                 // Schema 14: the Pages tree, after everything older schemas held.
                 out.writeInt(state.notes().folders().size());
                 for (var f : state.notes().folders()) {
@@ -397,11 +381,57 @@ public final class EncryptedVault implements Repository {
     /**
      * Reads any schema from 1 to 14.
      *
-     * Every field older vaults lack arrives as a sensible empty. Schemas 2 to 10
-     * kept a collection of their own after the tasks and gym records after the
-     * tags; LegacyCollection turns the first into rewards for the game, and the
-     * second — practice battles that no longer exist — is read past and dropped.
+     * Every field older vaults lack arrives as a sensible empty, and everything
+     * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
+     * after the tasks, the practice-gym records after the tags, and the game's
+     * campaign, rewards and save — is read past so the records after it land at
+     * the right offset.
      */
+    /** Emerald writes 128 KiB; anything past a megabyte was never a save of its. */
+    private static final int MAX_GAME_SAVE = 1_048_576;
+
+    /**
+     * The collection a vault of schema 2 to 10 kept: caught records, a buddy,
+     * the encounter counters, a party and boxes. All of it belongs to the game
+     * Yoru no longer has, so it is read past and dropped (#58).
+     */
+    private static void skipLegacyCollection(DataInputStream in, int schema) throws IOException {
+        for (int n = count(in); n > 0; n--) {
+            in.readLong(); in.readLong(); in.readInt(); in.readLong(); in.readInt();
+            if (schema >= 4) { in.readBoolean(); in.readLong(); }
+            if (schema >= 5 && in.readBoolean()) in.readUTF();
+            if (schema >= 9) in.readInt();
+        }
+        if (in.readBoolean()) { in.readLong(); in.readLong(); }
+        in.readLong(); in.readLong();
+        if (schema >= 5) for (int n = count(in); n > 0; n--) { in.readLong(); in.readLong(); }
+        if (schema >= 9) for (int n = count(in); n > 0; n--) { in.readUTF(); in.readInt(); }
+    }
+
+    /**
+     * Writes a game save an older vault was holding to a file beside the vault,
+     * so removing the game costs nobody their save (#58).
+     *
+     * Written once: a file already there is left alone, and a failure to write
+     * is not a reason to refuse to open the vault, so it is reported through
+     * {@link #rescuedSave()} rather than thrown.
+     */
+    private void rescueGameSave(byte[] save) {
+        try {
+            String name = path.getFileName().toString().replaceFirst("\\.[^.]*$", "");
+            var beside = path.resolveSibling(name + "-game-save.sav");
+            if (!Files.exists(beside)) Files.write(beside, save);
+            rescued = beside;
+        } catch (IOException ignored) {
+            // The vault still opens; the save simply could not be put beside it.
+        } finally {
+            Arrays.fill(save, (byte) 0);
+        }
+    }
+
+    /** Where an older vault's game save was written, or null. */
+    public Path rescuedSave() { return rescued; }
+
     private State decode(byte[] bytes)throws IOException {
         try(var in=new DataInputStream(new ByteArrayInputStream(bytes))) {
             int schema = in.readInt();
@@ -426,7 +456,6 @@ public final class EncryptedVault implements Repository {
                 recurring.add(new RecurringBlock(uuid(in),uuid(in),java.time.DayOfWeek.valueOf(in.readUTF()),
                     java.time.LocalTime.ofSecondOfDay(in.readInt()),java.time.LocalTime.ofSecondOfDay(in.readInt())));
             var tasks = new ArrayList<Task>();
-            LegacyCollection collection = null;
             if (schema >= 2) {
                 for (int n = count(in); n > 0; n--) {
                     var id=uuid(in); var activity=in.readBoolean()?uuid(in):null;
@@ -447,9 +476,7 @@ public final class EncryptedVault implements Repository {
                     if(schema>=14) for(int p=count(in);p>0;p--) pages.add(uuid(in));
                     tasks.add(new Task(id,activity,tag,title,notes,due,status,source,created,order,planned,pages));
                 }
-                if (schema <= 10) collection = LegacyCollection.read(in, schema, () -> {
-                    try { return count(in); } catch (IOException e) { throw new UncheckedIOException(e); }
-                });
+                if (schema <= 10) skipLegacyCollection(in, schema);
             }
             var habits=new ArrayList<Habit>();
             if(schema>=3) for(int n=count(in);n>0;n--) {
@@ -464,7 +491,9 @@ public final class EncryptedVault implements Repository {
             if(schema>=5) {
                 for(int n=count(in);n>0;n--) tags.add(new Tag(uuid(in),in.readUTF(),in.readInt()));
                 if(schema<=10) for(int n=count(in);n>0;n--) { uuid(in); in.readInt(); instant(in); }   // practice-gym records
-                var theme=ThemeId.known(in.readUTF());var trainer=TrainerId.valueOf(in.readUTF());
+                var theme=ThemeId.known(in.readUTF());
+                // Schemas up to 14 chose a trainer for the game's scene.
+                if(schema<=14) in.readUTF();
                 int goal=in.readInt(),floor=in.readInt();
                 // Schema 6 and earlier had no week-start preference; those vaults
                 // keep the Monday the app has always assumed.
@@ -473,22 +502,22 @@ public final class EncryptedVault implements Repository {
                 // feature is gone, so its bytes are read and dropped; without that
                 // every record after them would be read at the wrong offset.
                 if(schema==12&&in.readBoolean()) in.readUTF();
-                settings=new Settings(theme,trainer,goal,floor,weekStart);
+                settings=new Settings(theme,goal,floor,weekStart);
             }
-            var campaign = schema >= 11 ? new Campaign(in.readLong(), in.readLong(), in.readLong())
-                : collection != null ? collection.campaign() : Campaign.start(0);
-            var rewards=new ArrayList<Reward>();
-            if(schema>=10) for(int n=count(in);n>0;n--) {
-                var id=uuid(in); int dex=in.readInt(), level=in.readInt(); var earned=instant(in);
-                var delivered=in.readBoolean()?instant(in):null;
-                rewards.add(new Reward(id,dex,level,earned,delivered));
+            // The game was removed in schema 15 (#58): its campaign, its rewards
+            // and its save are read past so that everything after them lands at
+            // the right offset, and the save itself is written out beside the
+            // vault rather than dropped, since it is the owner's game.
+            if(schema>=11&&schema<=14) { in.readLong(); in.readLong(); in.readLong(); }
+            if(schema>=10&&schema<=14) for(int n=count(in);n>0;n--) {
+                uuid(in); in.readInt(); in.readInt(); instant(in);
+                if(in.readBoolean()) instant(in);
             }
-            GameSave game = null;
-            if (schema >= 11 && in.readBoolean()) {
-                var updated = instant(in);
-                int length = in.readInt();
-                if (length <= 0 || length > GameSave.MAX_BYTES) throw new IOException("Invalid game save.");
-                game = new GameSave(in.readNBytes(length), updated);
+            if(schema>=11&&schema<=14&&in.readBoolean()) {
+                instant(in);
+                int length=in.readInt();
+                if(length<=0||length>MAX_GAME_SAVE) throw new IOException("Invalid game save.");
+                rescueGameSave(in.readNBytes(length));
             }
             var folders=new ArrayList<Folder>();
             var pages=new ArrayList<Page>();
@@ -509,8 +538,7 @@ public final class EncryptedVault implements Repository {
                 }
             }
             if(in.available()!=0)throw new IOException("Unexpected vault content.");
-            return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,
-                collection != null ? collection.rewards(rewards) : rewards, game, new Notes(folders,pages));
+            return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,new Notes(folders,pages));
         }
         catch(RuntimeException e) {
             throw new IOException("Invalid vault data.",e);

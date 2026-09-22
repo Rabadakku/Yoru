@@ -8,7 +8,6 @@ public final class Tracker {
     private final Clock clock;
     private State state;
     /** The save the last editSave wrote: a run of edits is backed up once, before its first. */
-    private GameSave lastEdit;
     public Tracker(Repository repository, Clock clock) throws IOException {
         this.repository=repository;
         this.clock=clock;
@@ -51,9 +50,6 @@ public final class Tracker {
         Objects.requireNonNull(next, "Nothing to restore.");
         repository.backup();
         commit(next);
-        // A restored vault is a different vault: its game save was not the one
-        // last edited, so the next edit is backed up rather than assumed covered.
-        lastEdit=null;
     }
 
     public Session active() {
@@ -68,9 +64,6 @@ public final class Tracker {
      * costs nothing: the tracker is still on the vault it had, and the vault
      * that would not open is released rather than left locked. The vault left
      * behind is closed, which is what gives up its lock.
-     *
-     * The caller stops the game first: it holds the save of the vault it was
-     * playing, and would write that save into whichever vault came next.
      */
     public void switchTo(Repository next) throws IOException {
         Objects.requireNonNull(next,"There is no vault to switch to.");
@@ -85,9 +78,6 @@ public final class Tracker {
         var previous=repository;
         repository=next;
         state=loaded;
-        // The closed vault's decrypted game save is not this vault's business,
-        // and up to a megabyte of it stayed reachable through this field.
-        lastEdit=null;
         release(previous);
     }
 
@@ -141,7 +131,7 @@ public final class Tracker {
      *
      * The label is the only thing that changes: every session, block, weekly
      * repeat and task keeps pointing at the same id, so renaming can never move
-     * or lose recorded time, and the reward ledger is not read at all. The name
+     * or lose recorded time. The name
      * is validated by Activity first,
      * so a blank or overlong one is refused before anything is written, and
      * nothing is written at all when the label is already the one asked for.
@@ -209,9 +199,8 @@ public final class Tracker {
      * Ends the running session.
      *
      * Returns false when the session was under the minimum and was discarded
-     * rather than stored. Below the floor a session counted for nothing anyway —
-     * not toward totals, not toward encounters — so keeping it only produced a
-     * row that disagreed with every number beside it.
+     * rather than stored. Below the floor a session counted toward no total, so
+     * keeping it only produced a row that disagreed with every number beside it.
      *
      * This is the one path that discards on its own, because it is the one the
      * clock takes without being asked. Deliberate entry — log and editSession —
@@ -520,125 +509,6 @@ public final class Tracker {
         var next=new ArrayList<>(state.habits()); next.set(next.indexOf(habit(h.id())),h); commit(state.withHabits(next));
     }
 
-    // ---- the game ------------------------------------------------------------
-
-    /**
-     * Opens the next encounter and keeps what it turned out to be, as a reward
-     * for the game.
-     *
-     * The id must be the one the campaign has fixed for this encounter, which
-     * is what stops the same encounter being caught twice and stops anything but
-     * the next one being caught at all.
-     */
-    public Reward catchEncounter(UUID id, int nationalDex, int level) throws IOException {
-        if (Encounters.available(state) < 1) throw new IllegalArgumentException("No encounter is waiting yet.");
-        if (!state.campaign().nextEncounter().equals(Objects.requireNonNull(id)))
-            throw new IllegalArgumentException("That encounter has already been opened.");
-        var reward = new Reward(id, nationalDex, level, clock.instant(), null);
-        var rewards = new ArrayList<>(state.rewards());
-        rewards.add(reward);
-        commit(state.withCampaign(state.campaign().encounterUsed(Encounters.SECONDS_PER_ENCOUNTER)).withRewards(rewards));
-        return reward;
-    }
-
-    /**
-     * Records that study has earned a Pokémon for the game, outside the
-     * encounter sequence. Banking the same id twice is refused: that would be
-     * one reward counted as two.
-     */
-    public Reward bankReward(UUID id, int nationalDex, int level) throws IOException {
-        Objects.requireNonNull(id);
-        if (state.rewards().stream().anyMatch(r -> r.id().equals(id)))
-            throw new IllegalArgumentException("That reward has already been earned.");
-        var reward = new Reward(id, nationalDex, level, clock.instant(), null);
-        var next = new ArrayList<>(state.rewards());
-        next.add(reward);
-        commit(state.withRewards(next));
-        return reward;
-    }
-
-    /**
-     * Marks a reward as having reached the game. Idempotent, because delivery
-     * is retried: marking it again must not fail or move the recorded time.
-     */
-    public void rewardDelivered(UUID id, Instant when) throws IOException {
-        var rewards = new ArrayList<>(state.rewards());
-        for (int i = 0; i < rewards.size(); i++) {
-            var r = rewards.get(i);
-            if (!r.id().equals(id)) continue;
-            if (r.delivered()) return;
-            rewards.set(i, r.deliveredAt(when));
-            commit(state.withRewards(rewards));
-            return;
-        }
-        throw new IllegalArgumentException("No such reward.");
-    }
-
-    /**
-     * The running game has written its save; keep it in the vault.
-     *
-     * Nothing is written when the bytes are what the vault already holds, so an
-     * idle game costs nothing.
-     */
-    public void gameSaved(byte[] bytes) throws IOException {
-        if (state.game() != null && state.game().holds(bytes)) return;
-        commit(state.withGame(new GameSave(bytes, clock.instant())));
-    }
-
-    /**
-     * Delivery, in one write: the new save and the spent rewards together, or
-     * neither.
-     *
-     * Refused when the vault's save is no longer the one delivery was planned
-     * against — the only way to be sure a change made from one save is never
-     * written over another.
-     */
-    public void recordDelivery(byte[] before, byte[] after, Collection<UUID> spent) throws IOException {
-        if (state.game() == null || !state.game().holds(before))
-            throw new IllegalStateException("The game save changed while Yoru was working on it, so nothing was changed.");
-        var when = clock.instant();
-        var rewards = state.rewards().stream()
-            .map(r -> spent.contains(r.id()) && !r.delivered() ? r.deliveredAt(when) : r).toList();
-        var next = state.withRewards(rewards);
-        if (!Arrays.equals(before, after)) next = next.withGame(new GameSave(after, when));
-        commit(next);
-    }
-
-    /**
-     * Commits an edit to the game's save, made while the game is closed (#44).
-     *
-     * The same discipline as recordDelivery: refused when the vault's save is
-     * no longer the one the edit was planned against, so a change made from one
-     * save is never written over another. The vault is backed up before the
-     * first edit of a run, because this writes the game's save without the
-     * game's help.
-     */
-    public void editSave(byte[] before, byte[] after) throws IOException {
-        if (state.game() == null || !state.game().holds(before))
-            throw new IllegalStateException("The game save changed while Yoru was working on it, so nothing was changed.");
-        if (Arrays.equals(before, after)) return;
-        // One backup per run of edits, not one per edit: arranging a box is
-        // dozens of moves, and a whole copy of the vault for each fills the
-        // disk with states one move apart. The copy is taken before the first
-        // edit to a save that came from anywhere else — the game, a delivery,
-        // an import — which is the state worth getting back to.
-        if (state.game() != lastEdit) repository.backup();
-        commit(state.withGame(new GameSave(after, clock.instant())));
-        lastEdit = state.game();
-    }
-
-    /**
-     * Replaces the vault's game save with one brought in from elsewhere — an
-     * emulator's save file, or the save an earlier version kept on disk.
-     *
-     * The vault as it was is backed up first when it already held a save, so
-     * choosing the wrong file cannot cost the game that was there.
-     */
-    public void replaceGameSave(byte[] bytes) throws IOException {
-        if (state.game() != null) repository.backup();
-        commit(state.withGame(new GameSave(bytes, clock.instant())));
-    }
-
     /** A weekly-template entry. Overlaps on the same weekday are refused by State. */
     public RecurringBlock repeat(UUID activityId,DayOfWeek day,LocalTime start,LocalTime end) throws IOException {
         requireActivity(activityId);
@@ -675,7 +545,6 @@ public final class Tracker {
         TAGS("Tags"),
         DAILY_HABITS("Daily check-offs"),
         TIME_SINCE("Time-since trackers"),
-        GAME("Game save (the game starts over)"),
         SETTINGS("Settings"),
         PAGES("Pages and folders (tasks are kept, unlinked)"),
         ACTIVITIES("Activities (also clears sessions and schedule; tasks are kept, unlinked)");
@@ -684,14 +553,7 @@ public final class Tracker {
         ResetPart(String label) { this.label = label; }
     }
 
-    /**
-     * Clears the chosen parts, keeping everything else exactly as it was.
-     *
-     * Rewards are never reset. A delivered one stands for a Pokémon the game
-     * holds; a pending one is study time already spent. Clearing sessions also
-     * clears the encounter credit they had earned, so no encounter is owed for
-     * time that no longer exists — but encounters already opened stay opened.
-     */
+    /** Clears the chosen parts, keeping everything else exactly as it was. */
     public void reset(Set<ResetPart> parts) throws IOException {
         if(parts.isEmpty())throw new IllegalArgumentException("Choose what to reset.");
         boolean activities=parts.contains(ResetPart.ACTIVITIES);
@@ -717,9 +579,6 @@ public final class Tracker {
             state.habits().stream().filter(h->!(h.kind()==HabitKind.DAILY?parts.contains(ResetPart.DAILY_HABITS):parts.contains(ResetPart.TIME_SINCE))).toList(),
             clearTags?List.of():state.tags(),
             parts.contains(ResetPart.SETTINGS)?Settings.defaults():state.settings(),
-            sessions?state.campaign().withRewardedSeconds(0):state.campaign(),
-            state.rewards(),
-            parts.contains(ResetPart.GAME)?null:state.game(),
             clearPages?Notes.empty():state.notes());
         repository.backup();commit(next);
     }

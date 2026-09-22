@@ -169,10 +169,10 @@ public final class VisualSystemTest {
 
         open(app, "Settings");
         var sections = labels(app).stream().filter(List.of("APPEARANCE", "TRACKING",
-            "TRACKING · STUDY MUSIC", "GAME & ARTWORK", "VAULT", "VAULT · RESET DATA", "UPDATES", "INTEGRATIONS")::contains).toList();
+            "TRACKING · STUDY MUSIC", "VAULT", "VAULT · RESET DATA", "UPDATES", "INTEGRATIONS")::contains).toList();
         check(sections.equals(List.of("APPEARANCE", "TRACKING", "TRACKING · STUDY MUSIC",
-            "GAME & ARTWORK", "VAULT", "VAULT · RESET DATA", "UPDATES")),
-            "Settings reads appearance, tracking, game and artwork, then the vault, with updates last: " + sections);
+            "VAULT", "VAULT · RESET DATA", "UPDATES")),
+            "Settings reads appearance, then tracking, then the vault, with updates last: " + sections);
         var themes = (JPanel) named(app, "settings.themes");
         check(((GridLayout) themes.getLayout()).getColumns() == 3, "theme choices sit three across");
 

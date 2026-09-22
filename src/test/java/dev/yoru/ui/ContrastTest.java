@@ -48,10 +48,8 @@ public final class ContrastTest {
         "src/main/java/dev/yoru/ui/YoruApp.java",
         "src/main/java/dev/yoru/ui/TasksPanel.java",
         "src/main/java/dev/yoru/ui/HabitsPanel.java",
-        "src/main/java/dev/yoru/ui/CollectionPage.java",
         "src/main/java/dev/yoru/ui/TodayPage.java",
         "src/main/java/dev/yoru/ui/SettingsPage.java",
-        "src/main/java/dev/yoru/ui/GamePage.java",
         "src/main/java/dev/yoru/ui/ActivityManager.java",
         "src/main/java/dev/yoru/ui/TagEditor.java",
         "src/main/java/dev/yoru/ui/WeeklyTemplate.java",
@@ -60,9 +58,9 @@ public final class ContrastTest {
         "src/main/java/dev/yoru/ui/DateTimeField.java",
         "src/main/java/dev/yoru/ui/DateField.java",
         "src/main/java/dev/yoru/ui/CalendarPanel.java",
-        "src/main/java/dev/yoru/ui/ArtworkStatus.java",
-        "src/main/java/dev/yoru/ui/PartyStrip.java",
-        "src/main/java/dev/yoru/ui/BuddyCard.java");
+        "src/main/java/dev/yoru/ui/PagesPage.java",
+        "src/main/java/dev/yoru/ui/PageExplorer.java",
+        "src/main/java/dev/yoru/ui/PageReader.java");
 
     private static double luminance(int rgb) {
         double[] channel=new double[3];

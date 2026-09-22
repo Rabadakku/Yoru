@@ -34,17 +34,12 @@ public final class ReliabilityTest {
     public static void main(String[] args)throws Exception{
         var clock=new Time();var repo=new Memory();var t=new Tracker(repo,clock);
         t.addActivity("Study",0);UUID activity=t.state().activities().getFirst().id();
-        var reward=t.bankReward(UUID.randomUUID(),252,5);
-        check(t.state().pendingRewards().equals(List.of(reward)),"A banked reward waits for the game");
         final var tracker=t;var start=clock.instant();t.start(activity);clock.advance(7200);
         check(new Tracker(repo,clock).active().start().equals(start),"Running timer survives reopening");
-        check(Encounters.completedSeconds(t.state())==0,"Running time is not banked");
         t.stop(clock.instant());
-        check(Encounters.completedSeconds(t.state())==7200,"Saved time is banked");
 
         UUID session=t.state().sessions().getFirst().id();
         t.editSession(session,activity,start,start.plusSeconds(3600));
-        check(Encounters.completedSeconds(t.state())==3600,"Time correction recalculates totals");
         var before=t.state();repo.fail=true;rejects(()->tracker.editSession(session,activity,start,start.plusSeconds(4000)));
         check(t.state().equals(before),"Failed edit leaves live state unchanged");repo.fail=false;
         rejects(()->tracker.editSession(session,activity,start,clock.instant().plusSeconds(1)));
@@ -66,14 +61,8 @@ public final class ReliabilityTest {
         rejects(()->tracker.editHabitStart(habit,clock.instant().plusSeconds(1)));
         t.editHabitStart(habit,start);check(t.state().habits().getFirst().starts().size()==2,"Edit preserves prior periods");
 
-        // The campaign's seed fixes every encounter: reopening can never re-roll.
-        check(t.state().campaign().equals(new Tracker(repo,clock).state().campaign()),"Campaign stable on reopen");
-        check(t.state().campaign().nextEncounter().equals(new Tracker(repo,clock).state().campaign().nextEncounter()),"Encounter roll stable on reopen");
-        var encounter=t.state().campaign().nextEncounter();
-        t.catchEncounter(encounter,255,6);
-        check(Encounters.available(t.state())==1,"One catch consumes one encounter");
 
-        // Verify schema-5 encrypted reopen and reset backup using synthetic data only.
+        // An encrypted reopen and a reset backup, on invented data only.
         Path dir=Files.createTempDirectory("yoru-reliability-"),file=dir.resolve("test.vault");
         try{
             var saved=t.state();String password="test-password-for-reliability";
@@ -90,27 +79,19 @@ public final class ReliabilityTest {
         }finally{try(var files=Files.walk(dir)){for(var p:files.sorted(Comparator.reverseOrder()).toList())Files.delete(p);}}
         before=t.state();repo.backupFail=true;rejects(()->tracker.reset(EnumSet.of(Tracker.ResetPart.SESSIONS)));
         check(t.state().equals(before),"Failed backup blocks reset");repo.backupFail=false;
-        t.gameSaved(dev.yoru.game.Gen3Fixture.save(2,4));
         t.reset(EnumSet.of(Tracker.ResetPart.SESSIONS));
-        check(t.state().rewards().size()==2&&t.state().pendingRewards().size()==2,"Session reset preserves rewards");
-        check(t.state().game()!=null,"Session reset preserves the game save");
 
-        // Short, excluded sessions must not create hidden reward debt on a session
-        // reset. The tracker refuses to create one now, so this injects it the way
-        // it can still arrive: an older vault, or a JSON import. The rule being
-        // tested is a read-time one and has to hold whatever the state contains.
+        // A session under the floor arrives from an older vault or a JSON import,
+        // since the tracker refuses to make one. It counts toward no total.
         clock.advance(4000);var end=clock.instant();
-        long toward=Encounters.towardNext(t.state());
         var shortOne=new Session(UUID.randomUUID(),activity,end.minusSeconds(120),end);
         repo.state=t.state().withCore(t.state().activities(),
             java.util.stream.Stream.concat(t.state().sessions().stream(),java.util.stream.Stream.of(shortOne)).toList(),
             t.state().blocks());
         t=new Tracker(repo,clock);
         check(t.state().sessions().contains(shortOne),"An imported short session is present");
-        check(Encounters.towardNext(t.state())==toward,"The imported short session adds nothing toward the next encounter");
         t.reset(EnumSet.of(Tracker.ResetPart.SESSIONS));
         clock.advance(1800);t.log(activity,end,clock.instant());
-        check(Encounters.available(t.state())==1,"Reset ignores excluded short-session debt");
 
         // An import replaces the whole vault, so it is backed up first like every
         // other whole-vault write; a backup that cannot be written blocks it.

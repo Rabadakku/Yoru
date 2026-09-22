@@ -14,7 +14,7 @@ log.
 
 Start with **[PRODUCT-GOALS.md](PRODUCT-GOALS.md)**. It records the owner's clarified
 September 10 direction and supersedes earlier product recommendations that
-conflict with full gameplay inside Yoru or with studying replacing the grind.
+conflict with the product goals in PRODUCT-GOALS.md.
 
 Some questions have been answered once already; re-deriving them costs a session
 and risks a different answer. Before researching, check:
@@ -84,7 +84,7 @@ divide so you do not both edit these:
 
 Safe to work on in parallel, because they are largely self-contained:
 `ui/TasksPanel`, `ui/HabitsPanel`, `ui/ScheduleGrid`, `ui/BuddyScene`,
-`ui/TrainerScene`, `collection/*`, `ai/*`, and anything under `src/test`.
+`ai/*`, `plugins/*`, and anything under `src/test`.
 
 **If your change needs a new stored field, say so on the issue first.** Two
 agents adding fields to `Model` and `EncryptedVault` at once produces a schema
@@ -106,7 +106,7 @@ only place they will find it. Real examples from this repo:
 
 - Aqua ignores `UIManager` colours, which is why the theme silently did nothing
 - `JSpinner` under `PERSIST` keeps unparseable text, so reading `getText()` still crashed
-- the four-argument `CollectionState` constructor silently drops the party
+- a constructor that silently drops a field
 
 ---
 
@@ -129,7 +129,7 @@ as specified, a constraint nobody knew about — **write it into the docs**, not
 just the chat. Two examples already recorded so nobody re-litigates them:
 
 - A ChatGPT subscription grants no OpenAI API access (`README.md`, `ROADMAP.md`)
-- Game assets can never be committed here (`README.md`, `ROADMAP.md`)
+- Nothing is bundled: no third-party code, fonts, images or audio (`AGENTS.md`)
 
 Chat scrollback is not documentation. The next agent will not have it.
 

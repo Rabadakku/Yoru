@@ -190,12 +190,12 @@ public final class RecurringTest {
         var midweek=LocalDate.parse("2026-09-09");
         check(Settings.defaults().weekOf(midweek).equals(LocalDate.parse("2026-09-07")),
             "A Monday week containing Wednesday starts on the 7th");
-        var sundayFirst=new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.SUNDAY);
+        var sundayFirst=new Settings(ThemeId.MIDNIGHT,4,300,DayOfWeek.SUNDAY);
         check(sundayFirst.weekOf(midweek).equals(LocalDate.parse("2026-09-06")),
             "A Sunday week containing Wednesday starts on the 6th");
         check(sundayFirst.weekOf(LocalDate.parse("2026-09-06")).equals(LocalDate.parse("2026-09-06")),
             "The first day of the week is its own week start");
-        var saturdayFirst=new Settings(ThemeId.MIDNIGHT,TrainerId.BRENDAN,4,300,DayOfWeek.SATURDAY);
+        var saturdayFirst=new Settings(ThemeId.MIDNIGHT,4,300,DayOfWeek.SATURDAY);
         check(saturdayFirst.weekOf(midweek).equals(LocalDate.parse("2026-09-05")),
             "Any weekday can start the week");
 

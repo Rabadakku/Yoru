@@ -16,8 +16,8 @@ import javax.swing.*;
 
 /**
  * Draws the README's pictures from the app's own pages over an invented vault
- * (ShowcaseVault): the banner, the three-step loop, and a framed shot of each
- * feature. Nothing here reads a real vault, a game or installed artwork.
+ * (ShowcaseVault): the banner and a framed shot of each feature. Nothing here
+ * reads a real vault.
  *
  *   java -Djava.awt.headless=true -Duser.home=path/to/empty-dir -Duser.timezone=UTC \
  *        -cp build/classes dev.yoru.ui.ReadmeMedia docs/media
@@ -68,7 +68,6 @@ public final class ReadmeMedia {
 
         var today = themed.get(ThemeId.MIDNIGHT);
         jpeg(hero(landscape, today), out.resolve("hero.jpg"), 0.9f);
-        png(loop(), out.resolve("loop.png"));
         png(framed(crop(today, new Rectangle(0, 0, 1440, 860)), 1800), out.resolve("today.png"));
         // Whole-width crops, so each page keeps its own margin inside the frame.
         png(framed(crop(pages.get("Today"), new Rectangle(0, 812, 1440, 478)), 1800), out.resolve("heatmap.png"));
@@ -178,6 +177,45 @@ public final class ReadmeMedia {
         g.setStroke(new BasicStroke(2f));
         g.draw(new RoundRectangle2D.Double(x + 1, y + 1, w - 2, h - 2, radius, radius));
     }
+
+    static BufferedImage themes(Map<ThemeId, BufferedImage> themed) {
+        int w = 2000, tw = 560, gap = 70;
+        int th = (int) Math.round(tw * 780 / 1392.0);
+        int h = 100 + 2 * (th + 90) + 40;
+        var out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        var g = out.createGraphics();
+        quality(g);
+        night(g, w, h);
+        var order = ThemeId.values();
+        for (int i = 0; i < order.length; i++) {
+            int row = i < 3 ? 0 : 1, inRow = row == 0 ? 3 : 2, col = row == 0 ? i : i - 3;
+            int rowWidth = inRow * tw + (inRow - 1) * gap;
+            int x = (w - rowWidth) / 2 + col * (tw + gap), y = 70 + row * (th + 90);
+            var src = themed.get(order[i]);
+            var view = src.getSubimage((int) (24 * SCALE), (int) (60 * SCALE), (int) (1392 * SCALE), (int) (780 * SCALE));
+            window(g, view, x, y, tw, th, 22);
+            String name = order[i].name().charAt(0) + order[i].name().substring(1).toLowerCase(Locale.ROOT);
+            g.setFont(font("AvenirNext-DemiBold", 32));
+            g.setColor(INK);
+            g.drawString(name, (float) (x + (tw - g.getFontMetrics().stringWidth(name)) / 2.0), y + th + 55);
+        }
+        g.dispose();
+        return out;
+    }
+
+    // ---- files ---------------------------------------------------------------------
+    static void png(BufferedImage img, Path path) throws Exception { ImageIO.write(img, "png", path.toFile()); }
+    static void jpeg(BufferedImage img, Path path, float quality) throws Exception {
+        var writer = ImageIO.getImageWritersByFormatName("jpg").next();
+        var params = writer.getDefaultWriteParam();
+        params.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        params.setCompressionQuality(quality);
+        Files.deleteIfExists(path);
+        try (ImageOutputStream stream = ImageIO.createImageOutputStream(path.toFile())) {
+            writer.setOutput(stream);
+            writer.write(null, new IIOImage(img, null, null), params);
+        } finally { writer.dispose(); }
+    }
     /** A feature shot: the window on the night sky, width pixels wide. */
     static BufferedImage framed(BufferedImage src, int width) {
         int pad = width / 20;
@@ -225,86 +263,4 @@ public final class ReadmeMedia {
         return out;
     }
 
-    static BufferedImage loop() {
-        int w = 2000, h = 460;
-        var out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
-        var g = out.createGraphics();
-        quality(g);
-        night(g, w, h);
-        String[][] steps = {
-            {"1", "Study", "Clock in, work through your tasks,", "review your Anki cards."},
-            {"2", "Earn", "Every 30 minutes you study", "earns an encounter."},
-            {"3", "Play", "Spend them in the game, played", "inside Yoru with your own copy."}};
-        int cw = 520, ch = 300, gap = 110, x0 = (w - 3 * cw - 2 * gap) / 2, y = 80;
-        for (int i = 0; i < steps.length; i++) {
-            int x = x0 + i * (cw + gap);
-            g.setColor(CARD);
-            g.fill(new RoundRectangle2D.Double(x, y, cw, ch, 36, 36));
-            g.setColor(EDGE);
-            g.setStroke(new BasicStroke(2f));
-            g.draw(new RoundRectangle2D.Double(x + 1, y + 1, cw - 2, ch - 2, 36, 36));
-            g.setColor(alpha(ACCENT, 0.16));
-            g.fill(new Ellipse2D.Double(x + 44, y + 44, 72, 72));
-            g.setColor(ACCENT);
-            g.setFont(font("AvenirNext-DemiBold", 38));
-            var fm = g.getFontMetrics();
-            g.drawString(steps[i][0], (float) (x + 80 - fm.stringWidth(steps[i][0]) / 2.0), y + 94);
-            g.setColor(INK);
-            g.setFont(font("AvenirNext-DemiBold", 52));
-            g.drawString(steps[i][1], x + 140, y + 100);
-            g.setColor(MUTED);
-            g.setFont(font("AvenirNext-Medium", 29));
-            g.drawString(steps[i][2], x + 46, y + 190);
-            g.drawString(steps[i][3], x + 46, y + 232);
-            if (i < steps.length - 1) {
-                int ax = x + cw + 24, ay = y + ch / 2;
-                g.setColor(GOLD);
-                g.setStroke(new BasicStroke(6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                g.draw(new Line2D.Double(ax, ay, ax + gap - 48, ay));
-                g.draw(new Line2D.Double(ax + gap - 48, ay, ax + gap - 68, ay - 18));
-                g.draw(new Line2D.Double(ax + gap - 48, ay, ax + gap - 68, ay + 18));
-            }
-        }
-        g.dispose();
-        return out;
-    }
-
-    static BufferedImage themes(Map<ThemeId, BufferedImage> themed) {
-        int w = 2000, tw = 560, gap = 70;
-        int th = (int) Math.round(tw * 780 / 1392.0);
-        int h = 100 + 2 * (th + 90) + 40;
-        var out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
-        var g = out.createGraphics();
-        quality(g);
-        night(g, w, h);
-        var order = ThemeId.values();
-        for (int i = 0; i < order.length; i++) {
-            int row = i < 3 ? 0 : 1, inRow = row == 0 ? 3 : 2, col = row == 0 ? i : i - 3;
-            int rowWidth = inRow * tw + (inRow - 1) * gap;
-            int x = (w - rowWidth) / 2 + col * (tw + gap), y = 70 + row * (th + 90);
-            var src = themed.get(order[i]);
-            var view = src.getSubimage((int) (24 * SCALE), (int) (60 * SCALE), (int) (1392 * SCALE), (int) (780 * SCALE));
-            window(g, view, x, y, tw, th, 22);
-            String name = order[i].name().charAt(0) + order[i].name().substring(1).toLowerCase(Locale.ROOT);
-            g.setFont(font("AvenirNext-DemiBold", 32));
-            g.setColor(INK);
-            g.drawString(name, (float) (x + (tw - g.getFontMetrics().stringWidth(name)) / 2.0), y + th + 55);
-        }
-        g.dispose();
-        return out;
-    }
-
-    // ---- files ---------------------------------------------------------------------
-    static void png(BufferedImage img, Path path) throws Exception { ImageIO.write(img, "png", path.toFile()); }
-    static void jpeg(BufferedImage img, Path path, float quality) throws Exception {
-        var writer = ImageIO.getImageWritersByFormatName("jpg").next();
-        var params = writer.getDefaultWriteParam();
-        params.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-        params.setCompressionQuality(quality);
-        Files.deleteIfExists(path);
-        try (ImageOutputStream stream = ImageIO.createImageOutputStream(path.toFile())) {
-            writer.setOutput(stream);
-            writer.write(null, new IIOImage(img, null, null), params);
-        } finally { writer.dispose(); }
-    }
 }
