@@ -222,3 +222,12 @@ change; links in Markdown are rewritten in the same save to retain meaning.
 Older vaults load with empty notes and task links. Portable JSON carries notes
 and links too. Migration and failed-write tests cover preserving existing data.
 The existing whole-vault plaintext size limit still applies.
+
+### Anki summary lifecycle (#51)
+
+Schema 16’s `AnkiSnapshot` persists profile name, today’s count, daily counts
+and fetch time. Reopening reads this summary before contacting Anki; failed
+refreshes never erase it. A cache-save failure is displayed and retains the
+previous saved summary. Automatic retries belong to the open vault and stop
+when disabled or closed, independent of the visible tab. No schema change in
+1.0.17.

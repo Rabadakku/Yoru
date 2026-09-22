@@ -1,5 +1,15 @@
 # Yoru roadmap
 
+## Release 1.0.17 — Anki reconnects across tabs (#51)
+
+The cached summary already added on main now has an encrypted restart test.
+With Anki closed, the reopened vault shows its last counts and the date they
+were fetched. The connection follows the open vault rather than Today’s
+component lifetime, so leaving Today no longer stops automatic retries.
+Disabling Anki, changing connection settings, closing and switching vaults
+cancel or reject stale work. Failed cache writes keep the prior summary and
+show a save error rather than silently implying the new counts were saved.
+
 ## Release 1.0.16 — time-since precision (#50)
 
 Finishes the minute-start rule from `033a14a`: new restarts and edits normalize
