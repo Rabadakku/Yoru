@@ -100,18 +100,23 @@ final class NavTab extends JButton {
             int spanRoomy = roomy.width - in.left - in.right, spanTight = tight.width - in.left - in.right;
             // 1 when there is room for everything, 0 at the tightest, between in between.
             double t = spanRoomy <= spanTight ? 1 : Math.max(0, Math.min(1, (avail - spanTight) / (double) (spanRoomy - spanTight)));
-            int x = in.left;
+            // Positions are kept exact and only the edges are rounded. Rounding
+            // each tab's width on its own let nine roundings-up add a handful of
+            // pixels to the row, which is how the last tab — Settings — ran past
+            // the end of a bar that was wide enough for it (#46).
+            double at = in.left, gap = MIN_GAP + t * (GAP - MIN_GAP);
             boolean first = true;
             for (var c : parent.getComponents()) {
                 if (!c.isVisible()) continue;
-                if (!first) x += (int) Math.round(MIN_GAP + t * (GAP - MIN_GAP));
+                if (!first) at += gap;
                 first = false;
                 var min = c.getMinimumSize();
                 var pref = c.getPreferredSize();
-                int w = (int) Math.round(min.width + t * (pref.width - min.width));
+                double width = min.width + t * (pref.width - min.width);
+                int left = (int) Math.round(at), right = (int) Math.round(at + width);
                 int h = Math.min(height, pref.height);
-                c.setBounds(x, in.top + (height - h) / 2, w, h);
-                x += w;
+                c.setBounds(left, in.top + (height - h) / 2, right - left, h);
+                at += width;
             }
         }
     }
