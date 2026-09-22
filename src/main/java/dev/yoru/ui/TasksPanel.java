@@ -655,55 +655,25 @@ final class TasksPanel extends JPanel implements Scrollable {
         int at=index;
         var task=tasks.get(at);
         boolean done=task.status()==TaskStatus.DONE;
-        var menu=menu();
-        menu.add(item("Edit…","task.edit."+id,true,()->edit(task),null));
-        menu.add(item("Track time","task.track."+id,task.activityId()!=null&&!done,()->track(task),
+        var menu=Menus.popup();
+        menu.add(Menus.item("Edit…","task.edit."+id,true,()->edit(task),null));
+        menu.add(Menus.item("Track time","task.track."+id,task.activityId()!=null&&!done,()->track(task),
             task.activityId()==null?"Assign an activity to time this task":"This task is finished"));
         menu.addSeparator();
         String why="Reordering needs the All view in My order with search cleared";
-        menu.add(item("Move up","task.up."+id,reorderable()&&at>0,()->move(tasks,at,-1),reorderable()?null:why));
-        menu.add(item("Move down","task.down."+id,reorderable()&&at<tasks.size()-1,()->move(tasks,at,1),reorderable()?null:why));
+        menu.add(Menus.item("Move up","task.up."+id,reorderable()&&at>0,()->move(tasks,at,-1),reorderable()?null:why));
+        menu.add(Menus.item("Move down","task.down."+id,reorderable()&&at<tasks.size()-1,()->move(tasks,at,1),reorderable()?null:why));
         menu.addSeparator();
-        menu.add(item("Delete…","task.delete."+id,true,()->delete(task),null));
+        menu.add(Menus.item("Delete…","task.delete."+id,true,()->delete(task),null));
         return menu;
     }
 
     /** Import's two sources in one menu, rather than two buttons that looked as important as New. */
     JPopupMenu importMenu() {
-        var menu=menu();
-        menu.add(item("Paste task proposals…","task.import.paste",true,this::importPaste,null));
-        menu.add(item("Notion export…","task.import.notion",true,this::importNotion,null));
+        var menu=Menus.popup();
+        menu.add(Menus.item("Paste task proposals…","task.import.paste",true,this::importPaste,null));
+        menu.add(Menus.item("Notion export…","task.import.notion",true,this::importNotion,null));
         return menu;
-    }
-
-    private static JPopupMenu menu() {
-        var menu=new JPopupMenu() {
-            // The look-and-feel's separator is drawn in its own highlight colour,
-            // which on these palettes was a bright accent line across the menu.
-            @Override public void addSeparator() {
-                var line=new JPopupMenu.Separator();
-                line.setForeground(LINE);
-                line.setBackground(PANEL);
-                add(line);
-            }
-        };
-        menu.setBackground(PANEL);
-        menu.setBorder(new CompoundBorder(new LineBorder(LINE),new EmptyBorder(SPACE_XS,0,SPACE_XS,0)));
-        return menu;
-    }
-
-    private static JMenuItem item(String text,String name,boolean enabled,Runnable action,String whyNot) {
-        var item=new JMenuItem(text);
-        item.setName(name);
-        item.setFont(labelFont());
-        item.setOpaque(true);
-        item.setBackground(PANEL);
-        item.setForeground(TEXT);
-        item.setBorder(new EmptyBorder(SPACE_XS,SPACE_MD,SPACE_XS,SPACE_MD));
-        item.setEnabled(enabled);
-        if(!enabled&&whyNot!=null) item.setToolTipText(whyNot);
-        item.addActionListener(e->action.run());
-        return item;
     }
 
     private void track(Task task) {
