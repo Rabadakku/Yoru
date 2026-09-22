@@ -19,6 +19,9 @@ java -ea -cp build/classes dev.yoru.AnkiTimeTest
 java -ea -cp build/classes dev.yoru.pages.MarkdownTest
 java -ea -cp build/classes dev.yoru.pages.LinksTest
 java -ea -cp build/classes dev.yoru.PagesTest
+java -ea -cp build/classes dev.yoru.pages.MarkdownDirectoryTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PageEditorTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PagesUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiCardTest
 java -ea -cp build/classes dev.yoru.CoreTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.UiTest

@@ -56,6 +56,20 @@ public final class Pages {
         return name;
     }
 
+    /** Import a complete Markdown tree into a new folder, in one atomic vault save. */
+    public void importNotes(Notes imported) throws IOException {
+        UUID root = UUID.randomUUID();
+        var folders = new ArrayList<>(notes().folders());
+        folders.add(new Folder(root, null, freeFolderName(null, "Imported notes"), now(), null));
+        for (var f : imported.folders()) folders.add(new Folder(f.id(), f.parentId() == null ? root : f.parentId(), f.name(), f.createdAt(), null));
+        var pages = new ArrayList<>(notes().pages());
+        for (var p : imported.pages()) pages.add(p.withFolder(p.folderId() == null ? root : p.folderId(), now()));
+        var next = new Notes(folders, pages);
+        var rewrites = Links.keepMeaning(imported, next);
+        if (!rewrites.isEmpty()) next = new Notes(folders, pages.stream().map(p -> rewrites.containsKey(p.id()) ? p.withBody(rewrites.get(p.id()), now()) : p).toList());
+        write(next, true);
+    }
+
     // ---------------------------------------------------------------- folders
 
     public Folder createFolder(UUID parentId, String name) throws IOException {

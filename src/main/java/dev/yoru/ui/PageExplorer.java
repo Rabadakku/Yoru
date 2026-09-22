@@ -50,8 +50,8 @@ final class PageExplorer extends JPanel {
     }
 
     /** Kept across rebuilds of the window, like the tasks board's view. */
-    private static Sort sort = Sort.NAME;
-    private static final Set<UUID> expanded = new HashSet<>();
+    private Sort sort = Sort.NAME;
+    private final Set<UUID> expanded = new HashSet<>();
 
     private final Host host;
     private final DefaultMutableTreeNode root = new DefaultMutableTreeNode();
@@ -164,7 +164,7 @@ final class PageExplorer extends JPanel {
             }
         });
         keys();
-        tree.setDragEnabled(true);
+        if (!GraphicsEnvironment.isHeadless()) tree.setDragEnabled(true);
         tree.setDropMode(DropMode.ON_OR_INSERT);
         tree.setTransferHandler(new Transfer());
 
@@ -181,7 +181,7 @@ final class PageExplorer extends JPanel {
         add(scroll, BorderLayout.CENTER);
     }
 
-    private static int menuKey() { return Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx(); }
+    private static int menuKey() { return (GraphicsEnvironment.isHeadless() ? InputEvent.CTRL_DOWN_MASK : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()); }
 
     /** A drawn icon as a quiet square button, named for tests and screen readers. */
     static JButton icon(Glyphs.Kind kind, String what, String name, Runnable action) {
@@ -205,7 +205,7 @@ final class PageExplorer extends JPanel {
         rebuild();
     }
 
-    private void rebuild() {
+    void rebuild() {
         var selected = new ArrayList<Item>();
         for (var path : Optional.ofNullable(tree.getSelectionPaths()).orElse(new TreePath[0])) {
             var item = item(path.getLastPathComponent());
@@ -296,7 +296,7 @@ final class PageExplorer extends JPanel {
 
     private static void sortFolders(List<Folder> folders) { folders.sort(Comparator.comparing(Folder::name, BY_NAME)); }
 
-    private static void sortPages(List<Page> pages) {
+    private void sortPages(List<Page> pages) {
         pages.sort(switch (sort) {
             case NAME -> Comparator.comparing(Page::title, BY_NAME);
             case EDITED -> Comparator.comparing(Page::updatedAt).reversed().thenComparing(Page::title, BY_NAME);

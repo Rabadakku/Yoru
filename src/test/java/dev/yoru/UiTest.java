@@ -40,13 +40,13 @@ public final class UiTest {
                 }
                 ) {
                     app.setSize(width,900);for(String page:new String[] {
-                        "Today","Tasks","Habits","Schedule","Collection","Game","Data","Settings"
+                        "Today","Tasks","Pages","Habits","Schedule","Collection","Game","Data","Settings"
                     }
                     ) {
                         button(app,page).doClick();layout(app);var image=new java.awt.image.BufferedImage(width,900,java.awt.image.BufferedImage.TYPE_INT_RGB);app.paint(image.getGraphics());
                     }
                 }
-                button(app,"Collection").doClick();button(app,"Game").doClick();if(button(app,"game.play")==null&&t.state().game()!=null)throw new AssertionError("Game page lost its save");button(app,"Today").doClick();button(app,"▶  Clock in").doClick();if(t.active()==null)throw new AssertionError("Clock in UI failed");button(app,"Lock & close").doClick(); System.out.println("PASS: eight pages at two widths, no starter picker, populated state, clock-in control");
+                button(app,"Collection").doClick();button(app,"Game").doClick();if(button(app,"game.play")==null&&t.state().game()!=null)throw new AssertionError("Game page lost its save");button(app,"Today").doClick();button(app,"▶  Clock in").doClick();if(t.active()==null)throw new AssertionError("Clock in UI failed");button(app,"Lock & close").doClick(); System.out.println("PASS: nine pages at two widths, no starter picker, populated state, clock-in control");
             }
             catch(Exception e) {
                 throw new RuntimeException(e);

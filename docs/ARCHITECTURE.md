@@ -165,3 +165,17 @@ transactional database behind the existing `Repository` port. Before any sync,
 design the conflict model, key recovery, deletion and ownership first — a local
 file is not a multi-user backend, and quietly adding a server would break the
 central promise of the app.
+
+## Markdown workspace
+
+`application.Pages` owns page/folder/task-link mutations. `pages.Markdown`,
+`Links` and `PageIndex` provide source offsets, link resolution and incremental
+indexing. The current parser is in-tree and dependency-free; it is not a claim
+of full Obsidian compatibility. `MarkdownDirectory` handles bounded UTF-8
+interchange and stages exports before moving them into a new directory.
+
+`ui.PagesPage` coordinates the explorer, persistent-in-session editor tabs,
+reading view and details. Editors flush before navigation, mutations, closing
+or vault changes. Failed saves retain dirty text. The workspace and its timers
+are cleared on vault switches. All changes still use the existing whole-vault
+save service; large-workspace background indexing/storage remains future work.

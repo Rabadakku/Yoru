@@ -33,7 +33,7 @@ import java.util.UUID;
  * minimum is the size the frame actually allows.
  */
 public final class Preview {
-    static final String[] PAGES = {"Today","Tasks","Habits","Schedule","Collection","Game","Data","Settings"};
+    static final String[] PAGES = {"Today","Tasks","Pages","Habits","Schedule","Collection","Game","Data","Settings"};
     /** The frame's minimum, so the small render is a size the app really opens at. */
     private static final int MIN_WIDTH = 900, MIN_HEIGHT = 640;
 
@@ -97,7 +97,7 @@ public final class Preview {
                 }
                 // Every page, plus the arranging and calendar views, in every theme
                 // and at both sizes.
-                System.out.println("Wrote " + (PAGES.length + 2) * ThemeId.values().length * 2
+                System.out.println("Wrote " + (PAGES.length + 3) * ThemeId.values().length * 2
                     + " renders to " + out);
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -112,9 +112,15 @@ public final class Preview {
         for (String page : PAGES) {
             var nav = button(app, page);
             if (nav != null) nav.doClick();
+            if (page.equals("Pages")) app.openNote(app.tracker().state().notes().pages().getFirst().id());
             layout(app);
             advanceScenes(app, 26);
             write(out, page.toLowerCase(Locale.ROOT) + suffix, app, width, height);
+            if (page.equals("Pages")) {
+                button(app, "Read / Edit").doClick();
+                write(out, "pages-reading" + suffix, app, width, height);
+                button(app, "Read / Edit").doClick();
+            }
         }
         // The arranging state of the Collection page: pick-up marker and
         // hint visible, so the mode is reviewed as an image too.
@@ -215,6 +221,32 @@ public final class Preview {
             new Task(UUID.randomUUID(), null, null, "Return library books", "", null, TaskStatus.TODO, "Manual entry", now, 8),
             new Task(UUID.randomUUID(), study, cs.id(), "Practice quiz", "", today.plusDays(12), TaskStatus.TODO, "Manual entry", now, 9),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Grammar review", "", today.minusDays(4), TaskStatus.DONE, "Manual entry", now, 10)));
+
+        var folder = tracker.pages().createFolder(null, "Notebook");
+        var note = tracker.pages().createPage(folder.id(), "Study notes", """
+            # Study notes
+
+            A quiet place to connect **ideas**, tasks and time.
+            Read [[Reference]] next, then write a short summary.
+
+            ## Today
+            - [x] Review the example
+            - [ ] Try it independently
+
+            > [!TIP] Make it stick
+            > Explain the idea in your own words.
+
+            ## Example
+            ```java
+            int minutes = 25;
+            ```
+
+            | Topic | Next step |
+            | --- | --- |
+            | Practice | Review notes |
+            """);
+        tracker.pages().createPage(folder.id(), "Reference", "# Reference\nReturn to [[Study notes#Today]].\n");
+        tracker.pages().linkTask(tracker.state().tasks().getFirst().id(), note.id());
 
         tracker.addHabit("Evening reset", HabitKind.DAILY, zone, null);
         var habit = tracker.state().habits().getFirst().id();

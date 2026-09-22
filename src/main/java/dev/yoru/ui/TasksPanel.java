@@ -48,6 +48,7 @@ final class TasksPanel extends JPanel implements Scrollable {
     private final Tracker tracker;
     private final Runnable refresh;
     private final BooleanSupplier closed;
+    private java.util.function.Consumer<UUID> openPage = id -> {};
     private final JPanel rows=stack();
     private final JLabel summary=label("",TYPE_CAPTION,MUTED);
     private final Map<View,JButton> viewButtons=new EnumMap<>(View.class);
@@ -416,7 +417,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         more.setBackground(PANEL);
         more.setForeground(MUTED);
         more.setBorder(new EmptyBorder(RING,SPACE_SM,RING,SPACE_SM));
-        more.setToolTipText("Edit, track, move or delete");
+        more.setToolTipText("Edit, track, link pages (" + task.pageIds().size() + "), move or delete");
         more.getAccessibleContext().setAccessibleName("Actions for "+task.title());
         more.addActionListener(e->{var menu=rowMenu(task.id());if(menu!=null)menu.show(more,0,more.getHeight());});
         line.add(more);
@@ -646,6 +647,17 @@ final class TasksPanel extends JPanel implements Scrollable {
         return slot;
     }
 
+    void pageOpener(java.util.function.Consumer<UUID> opener) { this.openPage = opener; }
+
+    private void linkPage(Task task) {
+        var resolver = new dev.yoru.pages.Links.Resolver(tracker.state().notes());
+        var chosen = QuickSwitcher.ask(this, "Link a page", "Choose a page for this task", query ->
+            QuickSwitcher.rank(resolver, query, 50).stream().map(p -> QuickSwitcher.Row.page(p, resolver.path(p))).toList());
+        if (chosen == null) return;
+        try { tracker.pages().linkTask(task.id(), chosen.page()); rebuildRows(); }
+        catch (Exception e) { error(e); }
+    }
+
     /** The ⋯ menu for one task on the board, or null when it is not shown. Package-private for the tests. */
     JPopupMenu rowMenu(UUID id) {
         var tasks=visible();
@@ -659,6 +671,18 @@ final class TasksPanel extends JPanel implements Scrollable {
         menu.add(Menus.item("Edit…","task.edit."+id,true,()->edit(task),null));
         menu.add(Menus.item("Track time","task.track."+id,task.activityId()!=null&&!done,()->track(task),
             task.activityId()==null?"Assign an activity to time this task":"This task is finished"));
+        menu.addSeparator();
+        menu.add(Menus.item("Link a page…", "task.linkPage." + id, true, () -> linkPage(task), null));
+        menu.add(Menus.item("New page for task", "task.newPage." + id, true, () -> {
+            try { openPage.accept(tracker.pages().createPageForTask(id, null).id()); }
+            catch (Exception e) { error(e); }
+        }, null));
+        for (var pageId : task.pageIds()) tracker.state().notes().page(pageId).filter(p -> !p.trashed()).ifPresent(p -> {
+            menu.add(Menus.item("Open page: " + p.title(), "task.openPage." + pageId, true, () -> openPage.accept(pageId), null));
+            menu.add(Menus.item("Unlink page: " + p.title(), "task.unlinkPage." + pageId, true, () -> {
+                try { tracker.pages().unlinkTask(id, pageId); rebuildRows(); } catch (Exception e) { error(e); }
+            }, null));
+        });
         menu.addSeparator();
         String why="Reordering needs the All view in My order with search cleared";
         menu.add(Menus.item("Move up","task.up."+id,reorderable()&&at>0,()->move(tasks,at,-1),reorderable()?null:why));

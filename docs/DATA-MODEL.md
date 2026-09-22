@@ -211,3 +211,14 @@ vault is left alone, even after it has been edited.
   Splitting time across six is a materially different reward curve.
 - Gym battles: fixed roster with a win condition, or a cosmetic milestone marker
   for hours studied?
+
+## Pages storage (schema 14)
+
+Schema 14 adds `Notes` (folders and Markdown pages) and task `pageIds`. Each
+page has a stable UUID, optional folder UUID, title, raw Markdown, creation and
+update timestamps, and an optional trash timestamp. Folders have stable IDs,
+parents, names and trash timestamps. IDs remain stable when names or paths
+change; links in Markdown are rewritten in the same save to retain meaning.
+Older vaults load with empty notes and task links. Portable JSON carries notes
+and links too. Migration and failed-write tests cover preserving existing data.
+The existing whole-vault plaintext size limit still applies.

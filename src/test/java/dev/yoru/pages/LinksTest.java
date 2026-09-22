@@ -96,6 +96,11 @@ public final class LinksTest {
         check(!Links.keepMeaning(shallower, stillWins).containsKey(pointer.id()),
             "A move that leaves a link meaning the same page rewrites nothing");
 
+        var unicode = page("Unicode", null, "İstanbul\nFind target here.");
+        var index = new PageIndex(new Notes(List.of(), List.of(unicode)));
+        var hit = index.search("target").getFirst().lines().getFirst();
+        check(unicode.body().substring(hit.start(), hit.end()).equals("target"), "Unicode search keeps original source offsets");
+
         System.out.println("PASS: " + checks + " link checks (resolution, link text, reading links, keeping meaning)");
     }
 }

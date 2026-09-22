@@ -1,5 +1,20 @@
 # Yoru roadmap
 
+## In review — Pages workspace (#46)
+
+`codex/pages-finish` continues the three commits on `claude/pages` through
+`66006a0`. The first usable workspace connects encrypted pages/folders and task
+links to the explorer, tabbed source editor, reading view, search, backlinks,
+outline, trash/restore and Markdown file/folder import/export. Autosave failures
+retain the draft and block navigation, vault changes and closing.
+
+This is a foundation checkpoint, not completion of every item in #46. Live
+preview, attachments/embeds, persistent tab/layout preferences, tree-operation
+undo, page snapshots, properties, daily notes/templates, split panes, canvas
+and the remaining later-phase tools are still open. Markdown exchange imports
+text only and exports into a new folder. See [Pages](PAGES.md) for current use
+and limits. The AI integration remains separate in #47.
+
 ## Release 1.0.15 — Anki study time
 
 Anki study time is tracked time. `application.AnkiTime` groups Anki's answers

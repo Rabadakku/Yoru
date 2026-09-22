@@ -46,6 +46,7 @@ public final class YoruApp extends JPanel implements Shell {
     private final GamePage gamePage=new GamePage(this);
     private final CollectionPage collectionPage=new CollectionPage(this);
     private final TodayPage todayPage=new TodayPage(this);
+    private final PagesPage pagesPage=new PagesPage(this);
     private final SettingsPage settingsPage=new SettingsPage(this);
     private javax.swing.Timer ticker;
     private JButton recordingStatus;
@@ -74,6 +75,7 @@ public final class YoruApp extends JPanel implements Shell {
     private static final List<Page> PAGES=List.of(
         new Page("Today","today","today.session"),
         new Page("Tasks","tasks","tasks.board"),
+        new Page("Pages","pages","pages.workspace"),
         new Page("Habits","habits","habits.log"),
         new Page("Schedule","schedule","schedule.week"),
         new Page("Collection","collection","collection.pc"),
@@ -215,11 +217,12 @@ public final class YoruApp extends JPanel implements Shell {
      * is locked, then everything else.
      */
     private void close() {
-        if(closed)return;
+        if(closed || !pagesPage.flush())return;
         game.close(()->{
             boolean stuck=game.phase()==GameController.Phase.STUCK;
             if(stuck&&!Dialogs.confirm(this,"The game has not finished closing. Its most recent save may not be in your vault.\n\nQuit anyway?","Quit Yoru","Quit"))return;
             try {
+                if (!pagesPage.flush()) return;
                 vault.close();
                 forgetSecret();
             }
@@ -239,13 +242,14 @@ public final class YoruApp extends JPanel implements Shell {
      * A game that will not stop is not overridden here, unlike an ordinary quit.
      */
     private void closeForUpdate(Runnable afterVaultClosed) {
-        if(closed)return;
+        if(closed || !pagesPage.flush())return;
         game.close(()->{
             if(game.phase()==GameController.Phase.STUCK) {
                 Dialogs.info(this,"The game has not finished closing, so Yoru will not update now. Try again once it has closed.");
                 return;
             }
             try {
+                if (!pagesPage.flush()) return;
                 vault.close();
                 forgetSecret();
             }
@@ -266,6 +270,7 @@ public final class YoruApp extends JPanel implements Shell {
     private void quit() {
         if(closed)return;
         closed=true;
+        pagesPage.stop();
         todayPage.close();
         gamePage.leave();
         music.close();
@@ -285,6 +290,7 @@ public final class YoruApp extends JPanel implements Shell {
         Dialogs.error(this,e.getMessage());
     }
     @Override public void perform(Work work) {
+        if (!pagesPage.flush()) return;
         try {
             work.run();
             showPage(page);
@@ -309,7 +315,10 @@ public final class YoruApp extends JPanel implements Shell {
     /** The page on screen's scroll pane, so a rebuild of the same page can keep its place. */
     private JScrollPane pageScroll;
 
+    void openNote(UUID id) { showPage("Pages"); pagesPage.open(id); }
+
     private void showPage(String next) {
+        if (!pagesPage.flush()) return;
         // A rebuild of the page already on screen keeps its place. Saves, edits
         // and moves all rebuild the page, and each one used to throw the reader
         // back to the top (#8).
@@ -338,16 +347,24 @@ public final class YoruApp extends JPanel implements Shell {
         updateRecordingStatus();
         content.add(heading,BorderLayout.NORTH);
         JPanel view=switch(page) {
+            case "Pages"->pagesPage.view();
             case "Schedule"->schedule();
             case "Game"->gamePage.view();
             case "Data"->data();
             case "Collection"->collectionPage.view();
             case "Habits"->HabitsPanel.view(tracker, () -> showPage("Habits"));
-            case "Tasks"->new TasksPanel(tracker, () -> showPage("Tasks"), () -> closed,taskViewState);
+            case "Tasks" -> {
+                var tasks = new TasksPanel(tracker, () -> showPage("Tasks"), () -> closed, taskViewState);
+                tasks.pageOpener(this::openNote); yield tasks;
+            }
             case "Settings"->settingsPage.view();
             default->todayPage.view();
         }
         ;
+        if (page.equals("Pages")) {
+            content.add(view, BorderLayout.CENTER); pageScroll = null;
+            content.revalidate(); content.repaint(); return;
+        }
         var scroll=new JScrollPane(view);
         scroll.setBorder(null);
         scroll.getViewport().setBackground(BG);
@@ -1052,6 +1069,7 @@ public final class YoruApp extends JPanel implements Shell {
      * next. Nothing moves until the vault being moved to has opened in full.
      */
     private void switchVault() {
+        if (!pagesPage.flush()) return;
         VaultLauncher.whenGameStopped(game,()->{
             var next=VaultLauncher.choose(this,store,vaultName);
             if(next!=null)moveTo(next);
@@ -1060,6 +1078,7 @@ public final class YoruApp extends JPanel implements Shell {
 
     /** Makes a new vault and moves into it, by the same rule. */
     private void newVault() {
+        if (!pagesPage.flush()) return;
         VaultLauncher.whenGameStopped(game,()->{
             var made=VaultLauncher.create(this,store);
             if(made!=null)moveTo(made);
@@ -1068,6 +1087,7 @@ public final class YoruApp extends JPanel implements Shell {
 
     /** Moves the window onto an opened vault, tracking its name and its secret. */
     private void moveTo(VaultLauncher.Opened next) {
+        if (!pagesPage.flush()) { try { next.vault().close(); } catch (Exception e) { error(e); } return; }
         try {
             tracker.switchTo(next.vault());
         }
@@ -1082,6 +1102,7 @@ public final class YoruApp extends JPanel implements Shell {
         forgetSecret();
         secret=next.secret();
         VaultLauncher.remember(vaultName);
+        pagesPage.clear();
         todayPage.vaultChanged();
         rebuildTo(page);
     }
@@ -1094,6 +1115,7 @@ public final class YoruApp extends JPanel implements Shell {
      * store, so reopening under the old name is the whole recovery.
      */
     private void renameVault() {
+        if (!pagesPage.flush()) return;
         VaultLauncher.whenGameStopped(game,()->{
             String current=vaultName;
             String wanted=Dialogs.input(this,"Rename \""+current+"\".","Rename vault",current);
@@ -1102,6 +1124,7 @@ public final class YoruApp extends JPanel implements Shell {
             try { target=VaultStore.validate(wanted); }
             catch(IllegalArgumentException e) { error(e); return; }
             try {
+                if (!pagesPage.flush()) return;
                 vault.close();
                 store.rename(current,target);
             }
@@ -1162,6 +1185,7 @@ public final class YoruApp extends JPanel implements Shell {
      * nothing open, so Yoru closes.
      */
     private void deleteVault() {
+        if (!pagesPage.flush()) return;
         VaultLauncher.whenGameStopped(game,()->{
             String name=vaultName;
             if(!VaultLauncher.confirmDelete(this,name,store.contents(name,tracker.state())))return;
@@ -1309,6 +1333,7 @@ public final class YoruApp extends JPanel implements Shell {
      * over untouched.
      */
     private void rebuildTo(String next) {
+        if (!pagesPage.flush()) return;
         var window=SwingUtilities.getWindowAncestor(this);
         // A theme change rebuilds the whole window and lands back on Settings,
         // where the palette was picked partway down; the new window keeps that place (#9).
@@ -1316,6 +1341,7 @@ public final class YoruApp extends JPanel implements Shell {
         ticker.stop();
         gamePage.leave();
         music.close();
+        pagesPage.stop();
         if(window instanceof JFrame frame) {
             var fresh=new YoruApp(tracker,vault,store,vaultName,secret,game);
             frame.setContentPane(fresh);

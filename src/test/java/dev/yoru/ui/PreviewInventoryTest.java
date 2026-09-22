@@ -22,7 +22,7 @@ public final class PreviewInventoryTest {
     private static void check(boolean ok, String why) { checks++; if (!ok) throw new AssertionError(why); }
 
     private static final int WIDTH = 1280, HEIGHT = 1000, MIN_WIDTH = 900, MIN_HEIGHT = 640;
-    private static final List<String> VIEWS = List.of("today", "tasks", "habits", "schedule", "collection", "game",
+    private static final List<String> VIEWS = List.of("today", "tasks", "pages", "pages-reading", "habits", "schedule", "collection", "game",
         "data", "settings", "collection-arranging", "tasks-calendar");
 
     public static void main(String[] args) {

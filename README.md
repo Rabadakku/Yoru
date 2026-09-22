@@ -352,3 +352,9 @@ RetroArch, the mGBA libretro core and the [pokeemerald](https://github.com/pret/
 decompilation, used as a reference for Generation III save and engine details. Each carries
 its own licence and its own authors' credit. The full wording is in the
 **[legal notice](NOTICE)**.
+
+### Markdown pages
+
+The Pages workspace keeps Markdown notes in the encrypted vault, with folders,
+reading mode, search, page links and linked tasks. See [Pages](docs/PAGES.md)
+for usage, import/export and the current feature limits.

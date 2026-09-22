@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.*;
+import javax.swing.Timer;
 import javax.swing.border.*;
 import javax.swing.event.*;
 import javax.swing.text.*;
@@ -35,7 +36,7 @@ final class PageEditor extends JPanel {
         /** Pages a link could name, best first, for what has been typed after [[. */
         List<Choice> linkChoices(String typed);
         /** Saves the text; called a moment after typing stops, and on flush. */
-        void save(String text);
+        boolean save(String text);
         /** The text was parsed again: for the outline. */
         void parsed(Markdown.Doc doc);
     }
@@ -127,12 +128,16 @@ final class PageEditor extends JPanel {
     boolean dirty() { return dirty; }
 
     /** Saves now whatever is waiting to be saved. */
-    void flush() {
+    boolean flush() {
         autosave.stop();
-        if (!dirty) return;
+        if (!dirty) return true;
+        if (!host.save(text())) return false;
         dirty = false;
-        host.save(text());
+        return true;
     }
+
+    void stop() { autosave.stop(); restyle.stop(); completion.hide(); }
+
 
     /** Selects [start, end) and scrolls it to the upper part of the view. */
     void reveal(int start, int end) {
@@ -302,7 +307,7 @@ final class PageEditor extends JPanel {
     // ---------------------------------------------------------------- keys
 
     private void keys() {
-        int menu = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        int menu = (GraphicsEnvironment.isHeadless() ? InputEvent.CTRL_DOWN_MASK : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menu), "yoru.undo", history::undo);
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menu | InputEvent.SHIFT_DOWN_MASK), "yoru.redo", history::redo);
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_Y, menu), "yoru.redo2", history::redo);
@@ -318,6 +323,7 @@ final class PageEditor extends JPanel {
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_L, menu), "yoru.check", this::toggleCheck);
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, menu), "yoru.check2", this::toggleCheck);
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.ALT_DOWN_MASK), "yoru.follow", () -> followAt(pane.getCaretPosition(), false));
+        bind(KeyStroke.getKeyStroke(KeyEvent.VK_H, menu), "yoru.replace", this::find);
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_F, menu), "yoru.find", this::find);
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_G, menu), "yoru.findNext", () -> find.step(true));
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_G, menu | InputEvent.SHIFT_DOWN_MASK), "yoru.findPrevious", () -> find.step(false));
@@ -516,7 +522,7 @@ final class PageEditor extends JPanel {
     }
 
     private static boolean followKey(InputEvent e) {
-        return (e.getModifiersEx() & Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()) != 0;
+        return (e.getModifiersEx() & (GraphicsEnvironment.isHeadless() ? InputEvent.CTRL_DOWN_MASK : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx())) != 0;
     }
 
     private Span linkAt(int offset) {
@@ -691,6 +697,29 @@ final class PageEditor extends JPanel {
             ((JButton) buttons.getComponent(2)).getAccessibleContext().setAccessibleName("Next match");
             add(field, BorderLayout.CENTER);
             add(buttons, BorderLayout.EAST);
+            var replace = styleInput(new JTextField());
+            replace.setName("page.replace");
+            replace.getAccessibleContext().setAccessibleName("Replace with");
+            var replacement = new JPanel(new BorderLayout(SPACE_SM, 0));
+            replacement.setOpaque(false);
+            replacement.add(replace, BorderLayout.CENTER);
+            var actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, SPACE_XS, 0));
+            actions.setOpaque(false);
+            actions.add(button("Replace", () -> {
+                if (current < 0 || field.getText().isEmpty()) return;
+                int at = hits.get(current);
+                edit(at, field.getText().length(), replace.getText());
+                search(true);
+            }));
+            actions.add(button("Replace all", () -> {
+                if (field.getText().isEmpty()) return;
+                String next = Pattern.compile(Pattern.quote(field.getText()), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE)
+                    .matcher(text()).replaceAll(Matcher.quoteReplacement(replace.getText()));
+                edit(0, pane.getDocument().getLength(), next);
+                search(true);
+            }));
+            replacement.add(actions, BorderLayout.EAST);
+            add(replacement, BorderLayout.SOUTH);
             field.getDocument().addDocumentListener(new DocumentListener() {
                 @Override public void insertUpdate(DocumentEvent e) { search(true); }
                 @Override public void removeUpdate(DocumentEvent e) { search(true); }
@@ -729,11 +758,12 @@ final class PageEditor extends JPanel {
 
         private void search(boolean jump) {
             clearMarks();
-            String query = field.getText().toLowerCase(Locale.ROOT);
+            String query = field.getText();
             var found = new ArrayList<Integer>();
             if (!query.isEmpty()) {
-                String text = content().toLowerCase(Locale.ROOT);
-                for (int at = text.indexOf(query); at >= 0 && found.size() < 5000; at = text.indexOf(query, at + query.length())) {
+                var matcher = Pattern.compile(Pattern.quote(query), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE).matcher(content());
+                while (found.size() < 5000 && matcher.find()) {
+                    int at = matcher.start();
                     found.add(at);
                     try { marks.add(pane.getHighlighter().addHighlight(at, at + query.length(), lit)); }
                     catch (BadLocationException ignored) { }
@@ -745,7 +775,7 @@ final class PageEditor extends JPanel {
                 int caret = pane.getSelectionStart();
                 current = 0;
                 for (int i = 0; i < hits.size(); i++) if (hits.get(i) >= caret) { current = i; break; }
-                if (jump) show();
+                if (jump) showMatch();
             }
             count.setText(query.isEmpty() ? "" : hits.isEmpty() ? "No matches" : (current + 1) + " of " + hits.size());
         }
@@ -754,11 +784,11 @@ final class PageEditor extends JPanel {
             if (!isVisible()) { open(pane.getSelectedText()); return; }
             if (hits.isEmpty()) { Toolkit.getDefaultToolkit().beep(); return; }
             current = Math.floorMod(current + (forward ? 1 : -1), hits.size());
-            show();
+            showMatch();
             count.setText((current + 1) + " of " + hits.size());
         }
 
-        private void show() {
+        private void showMatch() {
             if (current < 0) return;
             int at = hits.get(current);
             reveal(at, at + field.getText().length());

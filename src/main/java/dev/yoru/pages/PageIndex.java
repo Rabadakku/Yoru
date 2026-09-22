@@ -2,6 +2,7 @@ package dev.yoru.pages;
 
 import dev.yoru.domain.Model.*;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * What the Pages screen asks of every page at once: what links to a page,
@@ -22,7 +23,6 @@ public final class PageIndex {
     private Notes notes;
     private Links.Resolver resolver;
     private final Map<UUID, List<Links.Ref>> refs = new HashMap<>();
-    private final Map<UUID, String> lower = new HashMap<>();
 
     public PageIndex(Notes notes) { rebuild(notes); }
 
@@ -31,7 +31,6 @@ public final class PageIndex {
         this.notes = notes;
         resolver = new Links.Resolver(notes);
         refs.clear();
-        lower.clear();
         for (var p : notes.pages()) if (!p.trashed()) read(p);
     }
 
@@ -40,6 +39,7 @@ public final class PageIndex {
      * itself; any change to titles, folders or the trash rebuilds.
      */
     public void update(Notes next) {
+        if (next == notes) return;
         var before = notes;
         boolean sameTree = before.folders().equals(next.folders()) && before.pages().size() == next.pages().size();
         if (sameTree) {
@@ -61,7 +61,6 @@ public final class PageIndex {
 
     private void read(Page p) {
         refs.put(p.id(), Links.refs(p.body()));
-        lower.put(p.id(), p.body().toLowerCase(Locale.ROOT));
     }
 
     public Links.Resolver resolver() { return resolver; }
@@ -98,26 +97,26 @@ public final class PageIndex {
     public List<Hit> search(String query) {
         var terms = terms(query);
         if (terms.isEmpty()) return List.of();
+        var patterns = terms.stream().map(t -> Pattern.compile(Pattern.quote(t), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE)).toList();
         var titled = new ArrayList<Hit>();
         var bodied = new ArrayList<Hit>();
         for (var p : notes.pages()) {
             if (p.trashed()) continue;
-            String body = lower.getOrDefault(p.id(), "");
-            String title = p.title().toLowerCase(Locale.ROOT);
+            String body = p.body();
+            String title = p.title();
             boolean all = true, inTitle = true;
-            for (var t : terms) {
-                boolean b = body.contains(t), ti = title.contains(t);
+            for (var pattern : patterns) {
+                boolean b = pattern.matcher(body).find(), ti = pattern.matcher(title).find();
                 if (!b && !ti) { all = false; break; }
                 inTitle &= ti;
             }
             if (!all) continue;
             var lines = new ArrayList<Mention>();
-            for (var t : terms) {
-                int at = body.indexOf(t);
-                while (at >= 0 && lines.size() < 5) {
-                    var m = mention(p, at, at + t.length());
+            for (var pattern : patterns) {
+                var matcher = pattern.matcher(body);
+                while (lines.size() < 5 && matcher.find()) {
+                    var m = mention(p, matcher.start(), matcher.end());
                     if (lines.stream().noneMatch(l -> l.lineStart() == m.lineStart())) lines.add(m);
-                    at = body.indexOf(t, at + t.length());
                 }
             }
             lines.sort(Comparator.comparingInt(Mention::start));
@@ -129,7 +128,7 @@ public final class PageIndex {
 
     static List<String> terms(String query) {
         var out = new ArrayList<String>();
-        var q = query.toLowerCase(Locale.ROOT).strip();
+        var q = query.strip();
         int i = 0;
         while (i < q.length()) {
             if (Character.isWhitespace(q.charAt(i))) { i++; continue; }
