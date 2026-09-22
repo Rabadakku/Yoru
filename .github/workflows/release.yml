@@ -181,10 +181,9 @@ jobs:
 
           ## Notes
 
-          Yoru ships no game files, artwork or music: it needs your own legally
-          obtained copy of the game (see `LICENSE` and the legal notice). Study
-          data stays on your machine — the vault lives in your own folder, never
-          in the installed app.
+          Yoru is a local productivity workspace. Study data stays on your
+          machine — the encrypted vault lives in your own folder, never in the
+          installed app. Imported files and music remain yours.
           NOTES
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" --title "Yoru $TAG" --notes-file "$notes" --verify-tag

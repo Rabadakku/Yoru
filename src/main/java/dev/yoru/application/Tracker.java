@@ -448,7 +448,7 @@ public final class Tracker {
     public void restartHabit(UUID id) throws IOException {
         var h=habit(id);
         if(h.kind()!=HabitKind.TIME_SINCE) throw new IllegalArgumentException("Choose a time-since tracker.");
-        var starts=new ArrayList<>(h.starts()); starts.add(clock.instant());
+        var starts=new ArrayList<>(h.starts()); starts.add(clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MINUTES));
         replaceHabit(new Habit(h.id(),h.name(),h.kind(),h.zone(),h.checkIns(),starts));
     }
     public void editHabitStart(UUID id, Instant since) throws IOException {
@@ -472,6 +472,7 @@ public final class Tracker {
         int index=h.starts().indexOf(periodStart);
         if(index<0) throw new IllegalArgumentException("That period changed after it was opened. Reopen the history and try again.");
         if(newStart.isAfter(clock.instant())) throw new IllegalArgumentException("Start cannot be in the future.");
+        newStart = newStart.truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
         if(index>0&&!newStart.isAfter(h.starts().get(index-1)))
             throw new IllegalArgumentException("A period has to start after the one before it began.");
         if(index<h.starts().size()-1&&!newStart.isBefore(h.starts().get(index+1)))
