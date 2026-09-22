@@ -59,9 +59,9 @@ public final class ReliabilityTest {
         t.plan(activity,start.plusSeconds(10000),start.plusSeconds(11000));
         rejects(()->tracker.editBlock(block.id(),activity,start.plusSeconds(9500),start.plusSeconds(10500)));
 
-        t.addHabit("Time since",HabitKind.TIME_SINCE,ZoneOffset.UTC,start.minusSeconds(10000));
-        UUID habit=t.state().habits().getFirst().id();t.editHabitStart(habit,start.minusSeconds(20000));
-        check(t.state().habits().getFirst().starts().getFirst().equals(start.minusSeconds(20000)),"Backdated quit start");
+        t.addHabit("Time since",HabitKind.TIME_SINCE,ZoneOffset.UTC,start.minusSeconds(10020));
+        UUID habit=t.state().habits().getFirst().id();t.editHabitStart(habit,start.minusSeconds(19980));
+        check(t.state().habits().getFirst().starts().getFirst().equals(start.minusSeconds(19980)),"Backdated quit start");
         t.restartHabit(habit);rejects(()->tracker.editHabitStart(habit,start.minusSeconds(21000)));
         rejects(()->tracker.editHabitStart(habit,clock.instant().plusSeconds(1)));
         t.editHabitStart(habit,start);check(t.state().habits().getFirst().starts().size()==2,"Edit preserves prior periods");

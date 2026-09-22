@@ -101,23 +101,23 @@ public final class EditingTest {
         check(repo.backups==backups+1,"and the refusal takes none");
 
         // Every period of a time-since tracker, not only the current one.
-        var t0=clock.now.minusSeconds(100_000);
+        var t0=clock.now.minusSeconds(99_960);
         tracker.addHabit("Time since",HabitKind.TIME_SINCE,ZoneOffset.UTC,t0);
         var habit=tracker.state().habits().getFirst().id();
-        clock.now=clock.now.plusSeconds(1000);
+        clock.now=clock.now.plusSeconds(1020);
         tracker.restartHabit(habit);
         var t1=clock.now;
-        clock.now=clock.now.plusSeconds(1000);
+        clock.now=clock.now.plusSeconds(1020);
         tracker.restartHabit(habit);
         var t2=clock.now;
         check(starts(tracker,habit).equals(List.of(t0,t1,t2)),"three periods to work with");
 
-        var moved=t1.minusSeconds(500);
+        var moved=t1.minusSeconds(480);
         tracker.editHabitPeriod(habit,t1,moved);
         check(starts(tracker,habit).equals(List.of(t0,moved,t2)),"an earlier period's start moves, and only it");
         check(rejects(()->tracker.editHabitPeriod(habit,t1,t1.minusSeconds(100)),"a period that changed since it was opened is refused")
             .contains("Reopen"),"saying to reopen the history");
-        check(rejects(()->tracker.editHabitPeriod(habit,moved,t0.minusSeconds(1)),"a start before the previous period is refused")
+        check(rejects(()->tracker.editHabitPeriod(habit,moved,t0.minusSeconds(60)),"a start before the previous period is refused")
             .contains("after the one before"),"saying which neighbour is in the way");
         check(rejects(()->tracker.editHabitPeriod(habit,moved,t2),"a start at or after the next period is refused")
             .contains("before the one after"),"saying which neighbour is in the way");
@@ -134,8 +134,24 @@ public final class EditingTest {
         check(rejects(()->tracker.deleteHabitPeriod(habit,t2),"the last period cannot be deleted").contains("Delete the tracker"),
             "pointing at the control that does that");
 
-        tracker.editHabitStart(habit,t2.minusSeconds(10));
-        check(starts(tracker,habit).equals(List.of(t2.minusSeconds(10))),"editing the current start still works");
+        tracker.editHabitStart(habit,t2.minusSeconds(60));
+        check(starts(tracker,habit).equals(List.of(t2.minusSeconds(60))),"editing the current start still works");
+
+        // Every period starts on a whole minute, however it was made (#50): two
+        // trackers started in the same minute read the same and count the same.
+        clock.now=t2.plusSeconds(3600).plusSeconds(37);
+        tracker.restartHabit(habit);
+        var whole=starts(tracker,habit).getLast();
+        check(whole.equals(clock.now.truncatedTo(java.time.temporal.ChronoUnit.MINUTES)),
+            "a restart at 37 seconds past is stored on the minute, got "+whole);
+        tracker.addHabit("Second tracker",HabitKind.TIME_SINCE,ZoneOffset.UTC,clock.now.minusSeconds(11));
+        var second=tracker.state().habits().getLast();
+        check(second.starts().getFirst().equals(whole),"and so is a tracker started moments apart, got "+second.starts());
+        // Two periods inside one minute cannot both be on it; the later keeps its seconds.
+        clock.now=clock.now.plusSeconds(8);
+        tracker.restartHabit(habit);
+        check(starts(tracker,habit).getLast().equals(clock.now),
+            "a restart in the same minute keeps its seconds rather than colliding");
 
         tracker.addHabit("Daily",HabitKind.DAILY,ZoneOffset.UTC,null);
         var daily=tracker.state().habits().getLast().id();

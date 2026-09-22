@@ -1,5 +1,6 @@
 package dev.yoru.domain;
 import java.time.*;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
@@ -377,7 +378,7 @@ public final class Model {
         public Habit {
             Objects.requireNonNull(id); Objects.requireNonNull(kind);
             name = requireName(name,60,"name");
-            ZoneId.of(zone); checkIns = Set.copyOf(checkIns); starts = List.copyOf(starts);
+            ZoneId.of(zone); checkIns = Set.copyOf(checkIns); starts = onTheMinute(starts);
             if (checkIns.size() > 100_000 || starts.size() > 100_000) throw new IllegalArgumentException("History limit reached.");
             if (kind == HabitKind.DAILY && !starts.isEmpty() || kind == HabitKind.TIME_SINCE && (starts.isEmpty() || !checkIns.isEmpty()))
                 throw new IllegalArgumentException("Invalid tracker history.");
@@ -385,6 +386,26 @@ public final class Model {
             for (int i=1; i<starts.size(); i++) if (!starts.get(i).isAfter(starts.get(i-1)))
                 throw new IllegalArgumentException("Restart must follow the previous start.");
         }
+        /**
+         * Every period starts on a whole minute (#50).
+         *
+         * A tracker restarted at 08:10:37 and another at 08:10:04 both read
+         * "since 08:10" and then counted differently for ever, because the
+         * seconds nobody was shown were still in the number. The rule lives
+         * here so that no way of making or editing a period can miss it,
+         * including the periods already in a vault, which are read through
+         * this. A period whose minute is already taken by the one before it
+         * keeps its seconds, since two periods cannot start at once.
+         */
+        private static List<Instant> onTheMinute(List<Instant> starts) {
+            var out = new ArrayList<Instant>(starts.size());
+            for (var start : starts) {
+                var minute = start.truncatedTo(ChronoUnit.MINUTES);
+                out.add(!out.isEmpty() && !minute.isAfter(out.getLast()) ? start : minute);
+            }
+            return List.copyOf(out);
+        }
+
         public int streak(LocalDate today) {
             LocalDate day = checkIns.contains(today) ? today : today.minusDays(1);
             int count=0; while(checkIns.contains(day)) { count++; day=day.minusDays(1); }
