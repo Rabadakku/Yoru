@@ -186,10 +186,15 @@ public final class YoruApp extends JPanel implements Shell {
         // Named for the tests that drive it; the visible label is above.
         lock.setName("Lock & close");
         bar.add(lock, BorderLayout.EAST);
-        // What the bar needs to show every tab whole: the brand, the strip at its
-        // natural width and the close button, plus the bar's own margins. The
+        // What the bar needs to show every tab whole: the brand, the strip at
+        // its narrowest, and the close button, plus the bar's own margins. The
         // window's floor is this or the page size, whichever is larger.
-        navMinimumWidth=brand.getPreferredSize().width+stripNaturalWidth()+lock.getPreferredSize().width
+        //
+        // Measured from the strip itself rather than added up from the font's
+        // metrics: the estimate agreed with the layout on one computer's fonts
+        // and not on another's, so a ninth tab fitted here and ran off the end
+        // of the bar on the build machine (#46).
+        navMinimumWidth=brand.getPreferredSize().width+strip.getMinimumSize().width+lock.getPreferredSize().width
             +2*SPACE_XL+SPACE_LG;
         root.add(bar, BorderLayout.NORTH);
         content.setBackground(BG);
@@ -402,25 +407,6 @@ public final class YoruApp extends JPanel implements Shell {
         int furthest=Math.max(0,(shown==null?0:shown.getPreferredSize().height)-viewport.getHeight());
         viewport.setViewPosition(new Point(0,Math.max(0,Math.min(keep.y,furthest))));
     }
-    /**
-     * The tab strip at its natural width: every tab's longest label plus its two
-     * {@link Theme#SPACE_MD} insets, measured at the tab font.
-     *
-     * The Game tab grows a dot while the game runs, so that label is measured at
-     * its widest. Measuring rather than guessing is what makes the window's floor
-     * move with the labels if a page is ever renamed.
-     */
-    private int stripNaturalWidth() {
-        var metrics=getFontMetrics(labelFont());
-        int strip=0;
-        for(var entry:PAGES) {
-            String label=entry.nav();
-            strip+=Math.max(metrics.stringWidth(label),metrics.stringWidth(label+" ●"))+2*NavTab.MIN_PAD+NavTab.MIN_GAP;
-        }
-        // The tightest the strip goes: every label whole, with the least air.
-        return strip;
-    }
-
     /**
      * The smallest window this page will open at.
      *
