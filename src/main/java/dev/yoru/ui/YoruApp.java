@@ -131,29 +131,53 @@ public final class YoruApp extends JPanel implements Shell {
         var bar = new JPanel(new BorderLayout());
         Color barGround=shade(BG,DARK?-8:-14);
         bar.setBackground(barGround);
-        bar.setBorder(new EmptyBorder(SPACE_SM, SPACE_XL, SPACE_SM, SPACE_XL));
-        var brand = Logo.lockup(TYPE_TITLE, CYAN);
-        brand.setBorder(new EmptyBorder(0,0,0,SPACE_XL));
+        // A hairline under the bar, so it reads as the window's frame rather
+        // than as the first band of the page.
+        bar.setBorder(new CompoundBorder(new MatteBorder(0,0,HAIRLINE,0,LINE),
+            new EmptyBorder(SPACE_MD, SPACE_XL, SPACE_MD, SPACE_XL)));
+        // The lockup sizes itself, so a border on it added no room: the wordmark
+        // ran straight into the first tab. The gap and a divider are their own
+        // components now, and the strip starts clearly after the brand.
+        var brand = new JPanel();
+        brand.setOpaque(false);
+        brand.setLayout(new BoxLayout(brand,BoxLayout.X_AXIS));
+        var lockup = Logo.lockup(TYPE_TITLE, CYAN);
+        lockup.setAlignmentY(0.5f);
+        brand.add(lockup);
+        brand.add(Box.createHorizontalStrut(SPACE_XL));
+        var divider = new JPanel();
+        divider.setBackground(LINE);
+        divider.setAlignmentY(0.5f);
+        int dividerHeight=Math.round(TYPE_TITLE*0.8f);
+        divider.setPreferredSize(new Dimension(HAIRLINE,dividerHeight));
+        divider.setMaximumSize(new Dimension(HAIRLINE,dividerHeight));
+        brand.add(divider);
+        brand.add(Box.createHorizontalStrut(SPACE_LG));
         bar.add(brand, BorderLayout.WEST);
         // Content-sized, not an even split: a GridLayout gave every tab the same
         // slice and the longest label, "collection", was the one that ellipsized
         // to "colle…" the moment the window opened at its minimum. The strip now
         // takes exactly the width its labels need, and never wraps — a wrapped
         // strip would be twice as tall.
-        var tabs = new JPanel(new FlowLayout(FlowLayout.LEFT,0,0)); tabs.setOpaque(false);
+        var tabs = new JPanel(new GridBagLayout()); tabs.setOpaque(false);
+        var strip = new JPanel(new NavTab.Strip()); strip.setOpaque(false);
         for (var entry : PAGES) {
-            var button = button(entry.nav(), () -> showPage(entry.nav()));
+            var button = new NavTab(entry.nav(), barGround);
+            button.addActionListener(e -> showPage(entry.nav()));
             button.setName(entry.nav());
             button.getAccessibleContext().setAccessibleName(entry.nav());
-            button.setContentAreaFilled(false);
-            // Give navigation labels room to read as separate destinations.
-            // The measured window minimum includes this padding at every text size.
-            button.setBorder(new EmptyBorder(SPACE_SM, SPACE_MD, SPACE_SM, SPACE_MD));
             navigation.put(entry.nav(), button);
-            tabs.add(button);
+            strip.add(button);
         }
+        // Centred vertically against the brand; the strip itself stays left.
+        var at = new GridBagConstraints();
+        at.anchor = GridBagConstraints.WEST;
+        at.fill = GridBagConstraints.HORIZONTAL;
+        at.weightx = 1;
+        tabs.add(strip, at);
         bar.add(tabs, BorderLayout.CENTER);
-        var lock = button("Close vault", this::close);
+        var lock = ghost(button("Close vault", this::close));
+        lock.setBackground(barGround);
         // The text, the tooltip and the accessible name all say the same thing;
         // the tooltip carries the one fact the label has no room for.
         lock.setToolTipText("Close vault (active timer keeps running)");
@@ -164,7 +188,7 @@ public final class YoruApp extends JPanel implements Shell {
         // natural width and the close button, plus the bar's own margins. The
         // window's floor is this or the page size, whichever is larger.
         navMinimumWidth=brand.getPreferredSize().width+stripNaturalWidth()+lock.getPreferredSize().width
-            +2*SPACE_XL;
+            +2*SPACE_XL+SPACE_LG;
         root.add(bar, BorderLayout.NORTH);
         content.setBackground(BG);
         content.setBorder(new EmptyBorder(SPACE_XL,SPACE_XL,SPACE_XL,SPACE_XL));
@@ -374,8 +398,9 @@ public final class YoruApp extends JPanel implements Shell {
         int strip=0;
         for(var entry:PAGES) {
             String label=entry.nav();
-            strip+=Math.max(metrics.stringWidth(label),metrics.stringWidth(label+" ●"))+2*SPACE_MD;
+            strip+=Math.max(metrics.stringWidth(label),metrics.stringWidth(label+" ●"))+2*NavTab.MIN_PAD+NavTab.MIN_GAP;
         }
+        // The tightest the strip goes: every label whole, with the least air.
         return strip;
     }
 
@@ -399,13 +424,9 @@ public final class YoruApp extends JPanel implements Shell {
             boolean running=name.equals("Game")&&game.running();
             boolean current=name.equals(page);
             button.setText(running?"Game ●":name);
-            button.setForeground(current ? ACCENT_TEXT : MUTED);
-            // The underline is drawn inside the tab's own padding and that padding
-            // keeps the resting height exactly: the strip no longer stretches its
-            // tabs to a shared cell, so a tab that changed height when it was
-            // opened would nudge every tab beside it.
-            button.setBorder(new CompoundBorder(new MatteBorder(0,0,RING,0,current?ACCENT_TEXT:shade(BG,DARK?-8:-14)),
-                new EmptyBorder(SPACE_SM,SPACE_MD,SPACE_SM-RING,SPACE_MD)));
+            // The pill is painted by the tab, so being current changes no size:
+            // opening a page never nudges the tabs beside it.
+            if(button instanceof NavTab tab) tab.setCurrent(current);
             // Which page is open was said in colour alone, and the Game tab's dot
             // was painted but never spoken. Both ride on the accessible name, in
             // the one place the colours are applied, so nothing can drift.
