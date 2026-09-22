@@ -60,6 +60,29 @@ public final class HabitsTest {
         try{LocalAccess.create(path);throw new AssertionError();}catch(java.io.IOException expected){checks++;}
         check(Arrays.equals(secret,Files.readAllBytes(LocalAccess.keyPath(path))));
         try(var walk=Files.walk(dir)){for(var p:walk.sorted(Comparator.reverseOrder()).toList())Files.delete(p);}
+        var secondClock = Clock.fixed(Instant.parse("2026-09-22T12:00:37.123Z"), ZoneOffset.UTC);
+        var minuteRepo = new Memory(); var minuteTracker = new Tracker(minuteRepo, secondClock);
+        minuteTracker.addHabit("One", HabitKind.TIME_SINCE, ZoneOffset.UTC, Instant.parse("2026-09-22T10:00:37Z"));
+        minuteTracker.addHabit("Two", HabitKind.TIME_SINCE, ZoneOffset.UTC, Instant.parse("2026-09-22T10:00:04Z"));
+        var first = minuteTracker.state().habits().getFirst().id();
+        var second = minuteTracker.state().habits().getLast().id();
+        check(minuteTracker.state().habits().getFirst().starts().equals(minuteTracker.state().habits().getLast().starts()));
+        minuteTracker.restartHabit(first); minuteTracker.restartHabit(second);
+        check(minuteTracker.state().habits().getFirst().starts().getLast().equals(Instant.parse("2026-09-22T12:00:00Z")));
+        check(minuteTracker.state().habits().getFirst().starts().equals(minuteTracker.state().habits().getLast().starts()));
+        var stable = minuteTracker.state();
+        try { minuteTracker.restartHabit(first); throw new AssertionError("Same-minute restart must be refused"); }
+        catch (IllegalArgumentException expected) { checks++; }
+        check(minuteTracker.state().equals(stable));
+        minuteTracker.editHabitStart(first, Instant.parse("2026-09-22T11:30:37Z"));
+        check(minuteTracker.state().habits().getFirst().starts().getLast().equals(Instant.parse("2026-09-22T11:30:00Z")));
+        minuteTracker.editHabitPeriod(first, Instant.parse("2026-09-22T10:00:00Z"), Instant.parse("2026-09-22T09:15:37Z"));
+        check(minuteTracker.state().habits().getFirst().starts().getFirst().equals(Instant.parse("2026-09-22T09:15:00Z")));
+        try {
+            new Habit(UUID.randomUUID(), "Invalid", HabitKind.TIME_SINCE, "UTC", Set.of(),
+                List.of(Instant.parse("2026-09-22T10:00:37Z"), Instant.parse("2026-09-22T10:00:04Z")));
+            throw new AssertionError("Rounding must not repair an out-of-order history");
+        } catch (IllegalArgumentException expected) { checks++; }
         System.out.println("PASS: "+checks+" daily streak, timezone, history, atomic persistence and password-free checks");
     }
 }

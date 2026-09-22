@@ -65,9 +65,36 @@ public final class LegacyVaultTest {
         "nNKKr9wByJlMumfBaZmzNJJ3U2laf/qnpGl4gOBtKBTCXV3jxctTpn2zNOOizGETxSXaPlL+" +
         "kBPI1OWi";
 
+    /** Synthetic time-since history written by the unmodified v1.0.15 writer. */
+    private static final String MINUTE_VAULT =
+        "WU9SVQAAAAFP3fZ6KE07Kz6JBULRUBPwfT91+Lsqc1GbGFrCVtul71sHgRR9BPinCQ9vcEy9z9UEPKtV" +
+        "kcuS3OGMpCfI0DEpeaG8kxsfvpuHKPBLvk+U9GgS6z8fEp+YDFzBQb9IgREmhdBff8PwhRPtzFPtwVQQ" +
+        "jEx+J7ITr3YbqTkY9TRK51IC1u3L7eHm9dfjL01y7haH8s3GYVUU85MFoS/x24pDkw0V3OsV4mLG8Khg" +
+        "xid5bjHGlupeMsSf0behmZeXUUxiVR6fFqPprSFJY/xYdfTeZRESdGYF4l6iNl0U8EQPXVrRUdws8Mb6" +
+        "0E6UmA==";
+
     public static void main(String[] args)throws Exception{
         Path dir=Files.createTempDirectory("yoru-legacy-");
         try {
+            Path minuteFile = dir.resolve("minute-history.vault");
+            byte[] originalMinutes = Base64.getDecoder().decode(MINUTE_VAULT);
+            Files.write(minuteFile, originalMinutes);
+            State minuteState;
+            try (var vault = new EncryptedVault(minuteFile, PASSWORD.toCharArray())) {
+                minuteState = vault.load();
+                var starts = minuteState.habits().getFirst().starts();
+                check(starts.equals(List.of(Instant.parse("2026-09-20T08:10:07Z"),
+                    Instant.parse("2026-09-20T08:10:41Z"), Instant.parse("2026-09-20T08:11:00Z"))),
+                    "Legacy same-minute pairs retain both exact starts; other starts round down");
+                check(java.time.Duration.between(starts.getFirst(), starts.get(1)).getSeconds()
+                    + java.time.Duration.between(starts.get(1), starts.getLast()).getSeconds() == 53,
+                    "Adjacent periods share boundaries with no gap or overlap");
+                vault.save(minuteState);
+            }
+            try (var vault = new EncryptedVault(minuteFile, PASSWORD.toCharArray())) {
+                check(vault.load().equals(minuteState), "Minute migration is stable across reopen");
+            }
+
             Path file=dir.resolve("legacy.vault");
             Files.write(file,Base64.getDecoder().decode(VAULT));
 

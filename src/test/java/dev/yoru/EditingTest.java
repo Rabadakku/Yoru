@@ -147,11 +147,11 @@ public final class EditingTest {
         tracker.addHabit("Second tracker",HabitKind.TIME_SINCE,ZoneOffset.UTC,clock.now.minusSeconds(11));
         var second=tracker.state().habits().getLast();
         check(second.starts().getFirst().equals(whole),"and so is a tracker started moments apart, got "+second.starts());
-        // Two periods inside one minute cannot both be on it; the later keeps its seconds.
+        // A new restart cannot create a hidden partial-minute period.
         clock.now=clock.now.plusSeconds(8);
-        tracker.restartHabit(habit);
-        check(starts(tracker,habit).getLast().equals(clock.now),
-            "a restart in the same minute keeps its seconds rather than colliding");
+        var beforeRestart = starts(tracker,habit);
+        rejects(()->tracker.restartHabit(habit), "a second restart within the minute is refused");
+        check(starts(tracker,habit).equals(beforeRestart), "the refused restart keeps the history unchanged");
 
         tracker.addHabit("Daily",HabitKind.DAILY,ZoneOffset.UTC,null);
         var daily=tracker.state().habits().getLast().id();

@@ -322,14 +322,23 @@ public final class Model {
          * seconds nobody was shown were still in the number. The rule lives
          * here so that no way of making or editing a period can miss it,
          * including the periods already in a vault, which are read through
-         * this. A period whose minute is already taken by the one before it
-         * keeps its seconds, since two periods cannot start at once.
+         * this. Existing periods sharing a minute keep their exact starts as a
+         * group, since rounding would collapse distinct historical periods.
          */
         private static List<Instant> onTheMinute(List<Instant> starts) {
+            // Rounding must never turn an invalid imported history into a valid one.
+            for (int i = 0; i < starts.size(); i++) {
+                requireTime(starts.get(i));
+                if (i > 0 && !starts.get(i).isAfter(starts.get(i - 1)))
+                    throw new IllegalArgumentException("Restart must follow the previous start.");
+            }
             var out = new ArrayList<Instant>(starts.size());
-            for (var start : starts) {
+            for (int i = 0; i < starts.size(); i++) {
+                var start = starts.get(i);
                 var minute = start.truncatedTo(ChronoUnit.MINUTES);
-                out.add(!out.isEmpty() && !minute.isAfter(out.getLast()) ? start : minute);
+                boolean collision = i > 0 && minute.equals(starts.get(i - 1).truncatedTo(ChronoUnit.MINUTES))
+                    || i + 1 < starts.size() && minute.equals(starts.get(i + 1).truncatedTo(ChronoUnit.MINUTES));
+                out.add(collision ? start : minute);
             }
             return List.copyOf(out);
         }

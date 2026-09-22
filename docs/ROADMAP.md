@@ -1,5 +1,19 @@
 # Yoru roadmap
 
+## Release 1.0.16 — time-since precision (#50)
+
+Finishes the minute-start rule from `033a14a`: new restarts and edits normalize
+before order validation, so a second restart in the same minute is refused
+instead of silently retaining hidden seconds. Legacy starts sharing a minute
+retain the entire pair unchanged; independent starts round down. Invalid
+histories cannot become valid through rounding. A synthetic vault written by
+the unmodified 1.0.15 writer verifies migration and reopening.
+
+This release also packages the work already merged since 1.0.15: Pages, text
+shortcuts, task-date defaults, the game removal, Anki settings and saved counts,
+and Today/Habits layouts. Their broader tickets remain subject to individual
+acceptance review; #46 is still a foundation checkpoint.
+
 ## In review — the Habits page (#53, #52, #55)
 
 Both kinds of habit are on screen at once: daily habits on the left with their
