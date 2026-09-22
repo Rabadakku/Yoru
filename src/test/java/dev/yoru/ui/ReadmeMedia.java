@@ -118,8 +118,10 @@ public final class ReadmeMedia {
                 for (var r : reviews) days.merge(r.answered().atZone(zone).toLocalDate(), 1L, Long::sum);
                 var snapshot = new AnkiConnect.Snapshot("Personal", days.getOrDefault(LocalDate.now(zone), 0L), days,
                     reviews, now.minus(Duration.ofDays(7)), now);
-                card[0] = new AnkiCard((key, reach) -> snapshot, () -> tracker, () -> zone, ready::countDown);
-                Preview.button(card[0], "Connect Anki").doClick();
+                card[0] = new AnkiCard((key, reach) -> snapshot, () -> tracker, () -> zone, ready::countDown, () -> { });
+                tracker.anki(tracker.state().anki().enabled(true));
+                card[0].render();
+                card[0].refresh();
             } catch (Exception e) { throw new RuntimeException(e); }
         });
         if (!ready.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("The Anki card did not record.");

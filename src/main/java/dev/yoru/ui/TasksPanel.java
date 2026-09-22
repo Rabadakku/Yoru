@@ -141,6 +141,12 @@ final class TasksPanel extends JPanel implements Scrollable {
         });
         p.add(tools);gap(p,SPACE_MD);
         p.add(rows);gap(p,SPACE_MD);
+        // Today's daily habits are checked off here, with the tasks, rather than
+        // on the page that shows how they are going (#54).
+        if(tracker.state().habits().stream().anyMatch(h->h.kind()==HabitKind.DAILY)) {
+            p.add(HabitChecklist.card(tracker,refresh,this::error));
+            gap(p,SPACE_MD);
+        }
         add(p,BorderLayout.NORTH);
         rebuildRows();
     }

@@ -26,9 +26,10 @@ public final class PortableVault {
      * Format 3 added pages, folders and the pages a task links to. Format 4
      * dropped the game: a file from an older format still imports, and whatever
      * it held for the game is read past. A build that reads only up to 3 refuses
-     * a format 4 file rather than dropping what it does not understand.
+     * a format 4 file rather than dropping what it does not understand. Format 5
+     * added the Anki integration and the counts it last saw.
      */
-    public static final int FORMAT = 4;
+    public static final int FORMAT = 5;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -51,7 +52,29 @@ public final class PortableVault {
         out.put("habits", state.habits().stream().map(PortableVault::habit).toList());
         out.put("folders", state.notes().folders().stream().map(PortableVault::folder).toList());
         out.put("pages", state.notes().pages().stream().map(PortableVault::page).toList());
+        out.put("anki", anki(state.anki()));
         return Json.pretty(out);
+    }
+
+    /** The integration, its key included: an export holds everything the vault holds, and says so. */
+    private static Map<String, Object> anki(Anki a) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("enabled", a.enabled());
+        m.put("key", a.key());
+        m.put("addsTime", a.addsTime());
+        m.put("refreshMinutes", a.refreshMinutes());
+        if (a.last() == null) m.put("last", null);
+        else {
+            var last = new LinkedHashMap<String, Object>();
+            last.put("profile", a.last().profile());
+            last.put("today", a.last().today());
+            var days = new LinkedHashMap<String, Object>();
+            a.last().days().forEach((day, count) -> days.put(day.toString(), count));
+            last.put("days", days);
+            last.put("fetchedAt", a.last().fetchedAt().toString());
+            m.put("last", last);
+        }
+        return m;
     }
 
     private static Map<String, Object> settings(Settings s) {
@@ -194,7 +217,21 @@ public final class PortableVault {
                 enumeration(java.time.DayOfWeek.class, text(settings, "weekStartsOn"))),
             // Before format 3 there were no pages: an older file has none.
             new Notes(root.get("folders") == null ? List.of() : list(root, "folders", PortableVault::readFolder),
-                root.get("pages") == null ? List.of() : list(root, "pages", PortableVault::readPage)));
+                root.get("pages") == null ? List.of() : list(root, "pages", PortableVault::readPage)),
+            // Before format 5 there was no stored integration: it reads as off.
+            root.get("anki") == null ? Anki.off() : readAnki(Json.object(root.get("anki"))));
+    }
+
+    private static Anki readAnki(Map<?, ?> m) {
+        AnkiSnapshot last = null;
+        if (m.get("last") != null) {
+            var kept = Json.object(m.get("last"));
+            var days = new java.util.TreeMap<java.time.LocalDate, Long>();
+            for (var day : Json.object(required(kept, "days")).entrySet())
+                days.put(java.time.LocalDate.parse(String.valueOf(day.getKey())), integer(Map.of("n", day.getValue()), "n"));
+            last = new AnkiSnapshot(text(kept, "profile"), integer(kept, "today"), days, instant(kept, "fetchedAt"));
+        }
+        return new Anki(bool(m, "enabled"), text(m, "key"), bool(m, "addsTime"), int32(m, "refreshMinutes"), last);
     }
 
     private static Folder readFolder(Map<?, ?> m) {
@@ -294,6 +331,12 @@ public final class PortableVault {
         if (value == null) return null;
         if (value instanceof String s) return s;
         throw new IllegalArgumentException("Expected text or null for \"" + key + "\".");
+    }
+
+    private static boolean bool(Map<?, ?> m, String key) {
+        var value = required(m, key);
+        if (value instanceof Boolean flag) return flag;
+        throw new IllegalArgumentException("Expected true or false for \"" + key + "\".");
     }
 
     private static long integer(Map<?, ?> m, String key) {

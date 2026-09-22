@@ -428,6 +428,52 @@ public final class Model {
     }
 
     /**
+     * The Anki integration, as the vault keeps it (#85).
+     *
+     * Off until it is switched on in Settings. The key is here rather than in
+     * this computer's preferences because the vault is the encrypted thing, and
+     * an API key is a secret: it travels with the workspace and never sits in
+     * plain text. What is kept of Anki itself is counts and times — never a
+     * card, a question or an answer.
+     */
+    public record Anki(boolean enabled, String key, boolean addsTime, int refreshMinutes, AnkiSnapshot last) {
+        public Anki {
+            key = Objects.requireNonNull(key);
+            if (key.length() > 200) throw new IllegalArgumentException("That API key is too long.");
+            if (refreshMinutes < 1 || refreshMinutes > 60)
+                throw new IllegalArgumentException("Refresh between 1 and 60 minutes.");
+        }
+        public static Anki off() { return new Anki(false, "", true, 1, null); }
+        public Anki withSnapshot(AnkiSnapshot next) { return new Anki(enabled, key, addsTime, refreshMinutes, next); }
+        public Anki withKey(String next) { return new Anki(enabled, next, addsTime, refreshMinutes, last); }
+        public Anki enabled(boolean on) { return new Anki(on, key, addsTime, refreshMinutes, last); }
+    }
+
+    /**
+     * The last thing Anki said, so the card can show it while Anki is closed.
+     *
+     * Counts and times only: how many reviews today, how many on each of the
+     * last thirty days, the profile they came from, and when they were read.
+     */
+    public record AnkiSnapshot(String profile, long today, Map<LocalDate, Long> days, Instant fetchedAt) {
+        /** A month is all the card ever draws, and all that is worth keeping. */
+        public static final int DAYS = 30;
+        public AnkiSnapshot {
+            profile = Objects.requireNonNull(profile);
+            if (profile.length() > 200) throw new IllegalArgumentException("That profile name is too long.");
+            if (today < 0) throw new IllegalArgumentException("A review count cannot be negative.");
+            var kept = new TreeMap<LocalDate, Long>();
+            for (var day : days.entrySet()) {
+                if (day.getValue() == null || day.getValue() < 0) throw new IllegalArgumentException("A review count cannot be negative.");
+                kept.put(day.getKey(), day.getValue());
+            }
+            while (kept.size() > DAYS) kept.remove(kept.firstKey());
+            days = Collections.unmodifiableSortedMap(kept);
+            requireTime(fetchedAt);
+        }
+    }
+
+    /**
      * Everything a vault holds.
      *
      * One canonical constructor with every part, and a wither for each, so
@@ -437,11 +483,11 @@ public final class Model {
      */
     public record State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks,
                         List<RecurringBlock> recurring, List<Task> tasks, List<Habit> habits, List<Tag> tags,
-                        Settings settings, Notes notes) {
+                        Settings settings, Notes notes, Anki anki) {
         /** The time-tracking core alone, with everything else empty. */
         public State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks) {
             this(activities, sessions, blocks, List.of(), List.of(), List.of(), List.of(), Settings.defaults(),
-                Notes.empty());
+                Notes.empty(), Anki.off());
         }
         public State {
             activities = List.copyOf(activities);
@@ -452,6 +498,7 @@ public final class Model {
             habits = List.copyOf(habits);
             tags = List.copyOf(tags);
             Objects.requireNonNull(settings);
+            Objects.requireNonNull(anki);
             Objects.requireNonNull(notes);
             if(habits.stream().map(Habit::id).distinct().count()!=habits.size()) throw new IllegalArgumentException("Duplicate habit.");
             if(tags.stream().map(Tag::id).distinct().count()!=tags.size()) throw new IllegalArgumentException("Duplicate tag.");
@@ -544,18 +591,19 @@ public final class Model {
             var nextTasks = tasks.stream().map(t -> activityId.equals(t.activityId())
                 ? t.withActivity(replacement) : t).toList();
             return new State(kept, nextSessions, nextBlocks, nextRepeats, nextTasks, habits, tags,
-                settings, notes);
+                settings, notes, anki);
         }
 
         public State withCore(List<Activity> a, List<Session> s, List<ScheduleBlock> b) {
-            return new State(a,s,b,recurring,tasks,habits,tags,settings,notes);
+            return new State(a,s,b,recurring,tasks,habits,tags,settings,notes,anki);
         }
-        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,notes); }
-        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,notes); }
-        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,notes); }
-        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,notes); }
-        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,notes); }
-        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next); }
+        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,notes,anki); }
+        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,notes,anki); }
+        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,notes,anki); }
+        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,notes,anki); }
+        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,notes,anki); }
+        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,anki); }
+        public State withAnki(Anki next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,next); }
         public static State empty() { return new State(List.of(), List.of(), List.of()); }
     }
 }

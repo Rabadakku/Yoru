@@ -1,6 +1,20 @@
 # Yoru roadmap
 
-## In review — the game removed (#58)
+## In review — Today at a glance, Anki in Settings (#85, #86, #54)
+
+Today is what today is: the clock, the day's schedule, the tasks it wants and
+the habits still to tick off, and one line of Anki. The 52-week heat map and
+the activities table moved to Data, which is where the numbers they report
+live. Daily habits are ticked off on the Tasks page as well, beside the tasks.
+
+Anki is an integration now: switched on in **Settings → Integrations**, with
+its API key stored in the encrypted vault and a Test connection button. Today
+keeps one line — reviews, time tracked, when it was read — and the month of
+history is drawn as a chart on Data. The counts are kept in the vault
+(schema 16, export format 5), so the line still says something while Anki is
+closed, which is most of the day.
+
+## Shipped — the game removed (#58)
 
 Yoru is a productivity tracker and planner; the game is gone in full. The Game
 and Collection tabs, the emulator binding, the Generation III save handling,

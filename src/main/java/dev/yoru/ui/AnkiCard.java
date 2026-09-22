@@ -4,188 +4,212 @@ import dev.yoru.anki.AnkiConnect;
 import dev.yoru.application.AnkiTime;
 import dev.yoru.application.Analytics;
 import dev.yoru.application.Tracker;
-import dev.yoru.domain.Model.Session;
+import dev.yoru.domain.Model.AnkiSnapshot;
 import java.awt.BorderLayout;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
+import java.util.TreeMap;
 import java.util.function.Supplier;
 import javax.swing.*;
 import static dev.yoru.ui.Theme.*;
 
 /**
- * The Anki card: review counts, and Anki study time added to the tracked time.
+ * Anki on Today: one line saying how the day is going, and nothing else (#85).
  *
- * The connection and its key last as long as this window. What reaches the
- * vault is the time of each finished sitting, as a session (AnkiTime) — never
- * card content, answers or the key.
+ * The card used to be a setup form, a title-sized number, seven lines of
+ * history and four paragraphs of fine print, on the page that is supposed to be
+ * a glance. The setting-up moved to Settings, the history to Data, and what is
+ * left is the sentence: how many reviews, how much time, and when that was
+ * last true.
+ *
+ * It keeps showing the last numbers while Anki is closed, because Anki is
+ * closed most of the day (#51). What reaches the vault is the length of each
+ * finished sitting, as a session, and counts and times for this line — never a
+ * card, a question or an answer.
  */
 final class AnkiCard extends JPanel {
     interface Source { AnkiConnect.Snapshot read(String key, int days) throws Exception; }
-    /** How far back the first refresh after connecting looks for sittings to add. */
+
+    /** How far back the first refresh after switching on looks for sittings to add. */
     static final int CATCH_UP_DAYS = 7;
+    private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("HH:mm");
+
     private final Source source;
     private final Supplier<Tracker> tracker;
     private final Supplier<ZoneId> zone;
     private final Runnable recorded;
+    private final Runnable openDetails;
     private final Timer timer;
-    private AnkiConnect.Snapshot snapshot;
-    private String key = "", message = "Connect to show your Anki reviews and add your Anki study time here.";
-    /** What the last refresh added to the tracked time, or why it could not. */
-    private String added = "";
-    private boolean connected, busy;
-    /** Whether sittings from the catch-up reach have been added since connecting. */
-    private boolean caughtUp;
+    /** Why the last attempt failed, or null when Anki answered. */
+    private String trouble;
+    private boolean busy, caughtUp;
     private long generation;
     private SwingWorker<AnkiConnect.Snapshot, Void> worker;
 
     /**
-     * @param recorded run after sittings were added, so the page can show the
-     *                 new totals
+     * @param recorded    run after sittings were added, so the page can show the new totals
+     * @param openDetails run when the line is clicked: the page that holds the history
      */
-    AnkiCard(Source source, Supplier<Tracker> tracker, Supplier<ZoneId> zone, Runnable recorded) {
-        super(new BorderLayout()); this.source = source; this.tracker = tracker; this.zone = zone; this.recorded = recorded;
-        setOpaque(false); setAlignmentX(0); setName("today.anki");
+    AnkiCard(Source source, Supplier<Tracker> tracker, Supplier<ZoneId> zone, Runnable recorded, Runnable openDetails) {
+        super(new BorderLayout());
+        this.source = source; this.tracker = tracker; this.zone = zone;
+        this.recorded = recorded; this.openDetails = openDetails;
+        setOpaque(false);
+        setAlignmentX(0);
+        setName("today.anki");
         timer = new Timer(60_000, e -> refresh());
-        render();
+        // Not rendered here: this is built while the window still is, so the
+        // vault it would read from is not there yet. The page renders it.
+        setVisible(false);
     }
+
+    private dev.yoru.domain.Model.Anki settings() { return tracker.get().state().anki(); }
+
     @Override public void addNotify() {
-        super.addNotify(); if (connected) { timer.start(); refresh(); }
+        super.addNotify();
+        if (settings().enabled()) {
+            timer.setDelay(Math.max(1, settings().refreshMinutes()) * 60_000);
+            timer.start();
+            refresh();
+        }
     }
+
     @Override public void removeNotify() { timer.stop(); super.removeNotify(); }
-    void disconnect() { disconnect("Disconnected. Anki data has been cleared from this view."); }
-    void disconnect(String why) {
+
+    /** Stops asking Anki: the integration was switched off, or the vault closed. */
+    void disconnect() {
         generation++;
         if (worker != null) { worker.cancel(true); worker = null; }
-        connected = false; busy = false; caughtUp = false; timer.stop();
-        snapshot = null; key = ""; added = ""; message = why; render();
+        busy = false;
+        caughtUp = false;
+        timer.stop();
+        trouble = null;
+        render();
     }
+
+    /** Whether a read of Anki is in flight; a second one waits rather than piling up. */
+    boolean refreshing() { return busy; }
+
     void refresh() {
-        if (busy || !connected) return;
-        busy = true; message = "Refreshing Anki…"; render();
+        var settings = settings();
+        if (busy || !settings.enabled()) return;
+        busy = true;
         long ticket = generation;
-        String requestKey = key;
+        String key = settings.key();
         int days = caughtUp ? 1 : CATCH_UP_DAYS;
         worker = new SwingWorker<AnkiConnect.Snapshot, Void>() {
-            protected AnkiConnect.Snapshot doInBackground() throws Exception { return source.read(requestKey, days); }
+            protected AnkiConnect.Snapshot doInBackground() throws Exception { return source.read(key, days); }
             protected void done() {
                 if (ticket != generation) return;
-                busy = false; worker = null;
+                busy = false;
+                worker = null;
                 boolean changed = false;
                 try {
-                    snapshot = get();
-                    message = "Updated " + DateTimeFormatter.ofPattern("MMM d, HH:mm:ss").withZone(ZoneId.systemDefault()).format(snapshot.fetchedAt())
-                        + " · refreshes every minute while visible";
+                    var snapshot = get();
+                    trouble = null;
                     changed = record(snapshot);
+                    keep(snapshot);
                 } catch (Exception e) {
-                    Throwable cause = e instanceof java.util.concurrent.ExecutionException ? e.getCause() : e;
-                    String reason = cause instanceof AnkiConnect.Failure ? cause.getMessage()
-                        : "Open Anki with AnkiConnect enabled; check the API key, then retry.";
-                    message = (snapshot == null ? "Could not connect. " : "Showing previous data. ")
-                        + reason
-                        + (snapshot == null ? "" : " Last updated " + DateTimeFormatter.ofPattern("MMM d, HH:mm:ss")
-                            .withZone(ZoneId.systemDefault()).format(snapshot.fetchedAt()) + ".");
+                    var cause = e instanceof java.util.concurrent.ExecutionException ? e.getCause() : e;
+                    trouble = cause instanceof AnkiConnect.Failure ? cause.getMessage() : "Anki is closed";
                 }
                 render();
                 // After this refresh is finished with, not during it: the page
-                // rebuild takes this card off screen and puts it back, which
-                // starts a refresh of its own.
+                // rebuild takes this card off screen and puts it back.
                 if (changed) SwingUtilities.invokeLater(recorded);
             }
         };
         worker.execute();
     }
-    /**
-     * Adds the snapshot's finished sittings to the tracked time.
-     *
-     * A failure here is the vault's, not Anki's, so it is said on the card and
-     * the counts stay: a dialog every minute would be worse than the line.
-     * The catch-up reach is kept until a write has succeeded.
-     */
+
+    /** Adds finished sittings to the tracked time, when the owner asked for that. */
     private boolean record(AnkiConnect.Snapshot snapshot) {
+        if (!settings().addsTime()) { caughtUp = true; return false; }
         try {
-            List<Session> sessions = tracker.get().addAnkiTime(snapshot.reviews(), snapshot.complete());
+            var sessions = tracker.get().addAnkiTime(snapshot.reviews(), snapshot.complete());
             caughtUp = true;
-            if (sessions.isEmpty()) return false;
-            long seconds = sessions.stream().mapToLong(s -> s.seconds(s.end())).sum();
-            added = "Last added " + DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(snapshot.fetchedAt())
-                + ": " + plural(sessions.size(), "sitting") + " · " + Analytics.report(seconds) + " to your tracked time.";
-            return true;
+            return !sessions.isEmpty();
         } catch (Exception e) {
-            added = "Anki time was not added: " + (e.getMessage() == null ? "the vault could not be written." : e.getMessage())
-                + " It is tried again on the next refresh.";
+            trouble = "Anki time was not added: " + (e.getMessage() == null ? "the vault could not be written." : e.getMessage());
             return false;
         }
     }
-    private String activityName() {
-        var state = tracker.get().state();
-        var id = AnkiTime.activity(state);
-        return id == null ? AnkiTime.ACTIVITY : state.activities().stream().filter(a -> a.id().equals(id))
-            .map(a -> a.name()).findFirst().orElse(AnkiTime.ACTIVITY);
+
+    /** Keeps the counts in the vault, so the line still says something while Anki is closed. */
+    private void keep(AnkiConnect.Snapshot snapshot) {
+        var kept = new TreeMap<LocalDate, Long>(snapshot.days());
+        while (kept.size() > AnkiSnapshot.DAYS) kept.remove(kept.firstKey());
+        try {
+            tracker.get().ankiSeen(new AnkiSnapshot(snapshot.profile(), snapshot.today(), kept, snapshot.fetchedAt()));
+        } catch (Exception ignored) {
+            // The numbers are on screen either way; a vault that will not take
+            // them is the vault's problem, and the next save says so.
+        }
     }
+
+    /** The line: a dot for the state, the day's numbers, and when they were true. */
     void render() {
         removeAll();
-        var content = card(); content.add(sectionHeader("ANKI REVIEWS")); gap(content, SPACE_MD);
-        content.add(wrapping(message, TYPE_CAPTION, MUTED)); gap(content, SPACE_MD);
-        if (snapshot != null) {
-            content.add(wrapping("Anki profile: " + snapshot.profile(), TYPE_CAPTION, MUTED));
-            gap(content, SPACE_SM);
-            LocalDate fetchedDate = snapshot.fetchedAt().atZone(ZoneId.systemDefault()).toLocalDate();
-            content.add(wrapping(snapshot.today() + (fetchedDate.equals(LocalDate.now())
-                ? " reviews today" : " reviews at last refresh"), TYPE_TITLE, TEXT));
-            content.add(wrapping("Today follows Anki’s configured day boundary. Counts include repeat reviews of a card.", TYPE_CAPTION, MUTED));
-            gap(content, SPACE_MD);
-            studyTime(content);
-            gap(content, SPACE_MD);
-            LocalDate today = fetchedDate;
-            content.add(wrapping(snapshot.lastSevenDays(today) + " reviews · last 7 calendar dates", TYPE_BODY, TEXT));
-            for (int i = 6; i >= 0; i--) {
-                LocalDate date = today.minusDays(i);
-                content.add(label(date.format(DateTimeFormatter.ofPattern("EEE, MMM d")) + "   ·   "
-                    + snapshot.days().getOrDefault(date, 0L), TYPE_CAPTION, MUTED));
-            }
-            gap(content, SPACE_MD);
-        }
-        if (!connected) {
-            content.add(wrapping("In Anki: Tools → Add-ons → Get Add-ons, enter 2055492159, then restart Anki. Keep Anki open on the profile you want to track.", TYPE_BODY, MUTED));
-            gap(content, SPACE_MD);
-            content.add(label("API key (only if configured in AnkiConnect)", TYPE_CAPTION, MUTED));
-            var password = new JPasswordField(20);
-            password.getAccessibleContext().setAccessibleName("AnkiConnect API key");
-            password.setAlignmentX(0);
-            password.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, password.getPreferredSize().height));
-            content.add(password); gap(content, SPACE_MD);
-            content.add(button("Connect Anki", () -> {
-                char[] chars = password.getPassword(); key = new String(chars); java.util.Arrays.fill(chars, '\0'); password.setText("");
-                connected = true; caughtUp = false; generation++; if (isDisplayable()) timer.start(); refresh();
-            }));
-        } else {
-            var actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, SPACE_SM, 0)); actions.setOpaque(false);
-            var refresh = button("Refresh", this::refresh); refresh.setEnabled(!busy); actions.add(refresh);
-            actions.add(button("Disconnect", this::disconnect));
-            actions.setAlignmentX(0); actions.setMaximumSize(actions.getPreferredSize()); content.add(actions);
-        }
-        gap(content, SPACE_MD);
-        content.add(wrapping("Read-only in Anki · current profile. Only the length of each Anki sitting is saved to "
-            + "your vault — no cards, answers or API key — and it counts like any other session, encounters included.",
-            TYPE_CAPTION, MUTED));
-        add(content, BorderLayout.CENTER); revalidate(); repaint();
+        var settings = settings();
+        setVisible(settings.enabled());
+        if (!settings.enabled()) { revalidate(); repaint(); return; }
+
+        var last = settings.last();
+        var today = LocalDate.now(zone.get());
+        boolean stale = last == null || !last.fetchedAt().atZone(zone.get()).toLocalDate().equals(today);
+        long tracked = AnkiTime.recordedOn(tracker.get().state(), today, zone.get(), tracker.get().now());
+
+        String text;
+        if (last == null) text = trouble == null ? "Anki · connecting…" : "Anki · " + trouble;
+        else text = "Anki · " + last.today() + (stale ? " reviews at last refresh" : " reviews")
+            + (tracked > 0 ? " · " + Analytics.report(tracked) + " tracked" : "")
+            + " · updated " + WHEN.withZone(zone.get()).format(last.fetchedAt())
+            + (trouble == null ? "" : " · " + trouble);
+
+        var line = button(text, openDetails);
+        line.setName("today.anki.status");
+        line.setHorizontalAlignment(SwingConstants.LEFT);
+        line.setFont(labelFont());
+        line.setForeground(TEXT);
+        line.setBackground(PANEL);
+        line.setBorder(controlBorder(LINE));
+        line.setIcon(dot(trouble, stale));
+        line.setToolTipText(last == null ? "Open the Data page for Anki's history"
+            : "Profile " + last.profile() + " · last read "
+              + DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(zone.get()).format(last.fetchedAt())
+              + ". Open the Data page for its history.");
+        line.getAccessibleContext().setAccessibleName(text);
+        add(line, BorderLayout.WEST);
+        setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, line.getPreferredSize().height));
+        revalidate();
+        repaint();
     }
-    /** Anki's study time today beside how much of it is tracked time. */
-    private void studyTime(JPanel content) {
-        var zone = this.zone.get();
-        var today = LocalDate.now(zone);
-        var tracked = tracker.get();
-        long studied = AnkiTime.studiedOn(snapshot.reviews(), today, zone);
-        long inTracked = AnkiTime.recordedOn(tracked.state(), today, zone, tracked.now());
-        content.add(wrapping(Analytics.report(studied) + " studied in Anki today · "
-            + Analytics.report(inTracked) + " in your tracked time", TYPE_BODY, TEXT));
-        if (!added.isEmpty()) content.add(wrapping(added, TYPE_CAPTION, MUTED));
-        int floor = tracked.state().settings().minSessionSeconds() / 60;
-        content.add(wrapping("A sitting is added under “" + activityName() + "” once nothing has been answered for "
-            + AnkiTime.GAP.toMinutes() + " minutes. Sittings that overlap time you clocked in Yoru"
-            + (floor > 0 ? ", or are shorter than your " + floor + "-minute minimum," : "")
-            + " are left out.", TYPE_CAPTION, MUTED));
+
+    /** Live, closed, or a problem worth looking at. */
+    private static Icon dot(String trouble, boolean stale) {
+        var colour = trouble == null && !stale ? CYAN : trouble != null && !trouble.startsWith("Anki is closed") ? GOLD_TEXT : MUTED;
+        return new Icon() {
+            @Override public int getIconWidth() { return grow(SPACE_SM); }
+            @Override public int getIconHeight() { return grow(SPACE_SM); }
+            @Override public void paintIcon(java.awt.Component c, java.awt.Graphics graphics, int x, int y) {
+                var g = (java.awt.Graphics2D) graphics.create();
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(colour);
+                g.fillOval(x, y, getIconWidth(), getIconHeight());
+                g.dispose();
+            }
+        };
+    }
+
+    /** How long ago the counts were read, for the Data page's heading. */
+    static String ago(Instant when, Instant now) {
+        long minutes = Math.max(0, Duration.between(when, now).toMinutes());
+        if (minutes < 1) return "just now";
+        if (minutes < 60) return minutes + " min ago";
+        long hours = minutes / 60;
+        return hours < 24 ? hours + (hours == 1 ? " hour ago" : " hours ago") : (hours / 24) + " days ago";
     }
 }

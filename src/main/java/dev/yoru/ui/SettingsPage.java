@@ -12,8 +12,8 @@ import javax.swing.border.LineBorder;
 import static dev.yoru.ui.Theme.*;
 
 /**
- * The Settings page: appearance, tracking and study music, the vault, and
- * updates.
+ * The Settings page: appearance, tracking and study music, the integrations,
+ * the vault, and updates.
  *
  * Moved out of YoruApp (#12), as the Today page was. It builds the page, and
  * reaches the window through {@link Shell} for what belongs to the window:
@@ -186,9 +186,11 @@ final class SettingsPage {
         gap(reset,SPACE_LG);
         reset.add(button("Choose data to reset…",shell::chooseReset));
         // In the order a reader looks for them (#9): how Yoru looks, how it
-        // tracks, then the vault, whose controls used to sit on the Data page.
-        // Updates are about the app rather than the workspace, so they come last.
-        for(var section:new JComponent[]{appearance,tracking,audio,shell.vaultCard(),reset,updates}) {
+        // tracks, what it connects to, then the vault, whose controls used to
+        // sit on the Data page. Updates are about the app rather than the
+        // workspace, so they come last.
+        var anki=AnkiSettings.card(shell,new dev.yoru.anki.AnkiConnect()::read);
+        for(var section:new JComponent[]{appearance,tracking,audio,anki,shell.vaultCard(),reset,updates}) {
             p.add(section);
             gap(p,SPACE_XL);
         }

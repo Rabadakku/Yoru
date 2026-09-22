@@ -19,10 +19,12 @@ import javax.swing.*;
 
 public final class AnkiCardTest {
     private static AnkiCard card;
+    /** Everything the card says: it is one line, drawn as a button. */
     private static String text(Container c) {
         var s = new StringBuilder();
         for (Component child : c.getComponents()) {
             if (child instanceof JLabel l) s.append(l.getText());
+            if (child instanceof AbstractButton b && b.getText() != null) s.append(b.getText());
             if (child instanceof Container nested) s.append(text(nested));
         }
         return s.toString();
@@ -36,6 +38,17 @@ public final class AnkiCardTest {
         }
         assert ready.get() : wanted;
     }
+    /** Waits for a read in flight to finish, so the next one is not dropped. */
+    private static void settle() throws Exception {
+        long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        var idle = new AtomicBoolean();
+        while (!idle.get() && System.nanoTime() < end) {
+            SwingUtilities.invokeAndWait(() -> idle.set(!card.refreshing()));
+            Thread.sleep(20);
+        }
+        assert idle.get() : "a refresh is still in flight";
+    }
+
     private static void render(String state) throws Exception {
         Path out = Path.of("build/anki-preview"); Files.createDirectories(out);
         SwingUtilities.invokeAndWait(() -> {
@@ -86,14 +99,16 @@ public final class AnkiCardTest {
                 }
                 if (fail.get()) throw new java.io.IOException("fixture error");
                 return snapshot;
-            }, () -> tracker, () -> zone, rebuilds::incrementAndGet);
-            Preview.button(card, "Connect Anki").doClick();
+            }, () -> tracker, () -> zone, rebuilds::incrementAndGet, () -> { });
+            // Switched on in Settings, as the owner does (#85), then shown.
+            try { tracker.anki(tracker.state().anki().enabled(true)); }
+            catch (Exception e) { throw new RuntimeException(e); }
+            card.render();
+            card.refresh();
         });
-        await("24 reviews today");
-        await("Anki profile: Practice");
-        await("15m studied in Anki today · 15m in your tracked time");
-        await("1 sitting · 15m to your tracked time.");
-        await("under “Anki” once nothing has been answered for 10 minutes");
+        await("24 reviews");
+        await("15m tracked");
+        await("updated");
         SwingUtilities.invokeAndWait(() -> { });
         assert rebuilds.get() == 1 : "the page is rebuilt once to show the new totals";
         var sittings = tracker.state().sessions();
@@ -101,27 +116,36 @@ public final class AnkiCardTest {
         assert tracker.state().activities().getFirst().name().equals("Anki");
         assert reaches.getFirst() == AnkiCard.CATCH_UP_DAYS : "the first refresh catches up on a week";
         render("connected");
+        // The counts are kept in the vault, so the line survives Anki closing (#51).
+        assert tracker.state().anki().last() != null && tracker.state().anki().last().today() == 24
+            : "the counts reach the vault: " + tracker.state().anki().last();
+        settle();
         SwingUtilities.invokeAndWait(card::refresh);
-        await("Updated");
+        settle();
+        await("24 reviews");
         assert reaches.getLast() == 1 : "later refreshes read a day: " + reaches;
         assert tracker.state().sessions().size() == 1 && rebuilds.get() == 1 : "and add nothing twice";
-        fail.set(true); SwingUtilities.invokeAndWait(card::refresh); await("Showing previous data.");
-        SwingUtilities.invokeAndWait(() -> { assert text(card).contains("24 reviews today"); });
+        settle();
+        fail.set(true); SwingUtilities.invokeAndWait(card::refresh); await("Anki is closed");
+        SwingUtilities.invokeAndWait(() -> { assert text(card).contains("24 reviews"); });
         render("stale");
+        settle();
         fail.set(false); blocked.set(true); SwingUtilities.invokeAndWait(card::refresh);
         assert started.await(5, TimeUnit.SECONDS);
         SwingUtilities.invokeAndWait(card::disconnect);
         Thread.sleep(150);
-        SwingUtilities.invokeAndWait(() -> {
-            assert !text(card).contains("24 reviews today");
-            assert Preview.button(card, "Connect Anki") != null;
-        });
         assert cancelled.get() : "disconnect cancels pending refresh";
         gate.countDown();
-        render("disconnected");
-        SwingUtilities.invokeAndWait(() -> card.disconnect("Another vault is open. Connect Anki again to add your Anki time to it."));
-        await("Connect Anki again");
-        System.out.println("PASS: Anki card asynchronous refresh, study time into the tracker, stale data, disconnect race and theme renders");
+        // Switched off in Settings: the line goes, and Anki is not contacted.
+        SwingUtilities.invokeAndWait(() -> {
+            try { tracker.anki(tracker.state().anki().enabled(false)); } catch (Exception e) { throw new RuntimeException(e); }
+            card.render();
+            assert !card.isVisible() : "switched off, the card shows nothing at all";
+            int before = reaches.size();
+            card.refresh();
+            assert reaches.size() == before : "and asks Anki nothing";
+        });
+        System.out.println("PASS: Anki status line, counts kept in the vault, stale data, disconnect race and theme renders");
         System.exit(0);
     }
 }

@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=15, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=16, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -277,6 +277,26 @@ public final class EncryptedVault implements Repository {
                     byte[] body = page.body().getBytes(java.nio.charset.StandardCharsets.UTF_8);
                     out.writeInt(body.length); out.write(body);
                 }
+                // Schema 16: the Anki integration. Counts and times, and the key
+                // the owner entered in Settings, which is a secret and so lives
+                // in the encrypted vault rather than in this computer's
+                // preferences (#85).
+                var anki = state.anki();
+                out.writeBoolean(anki.enabled());
+                out.writeUTF(anki.key());
+                out.writeBoolean(anki.addsTime());
+                out.writeInt(anki.refreshMinutes());
+                out.writeBoolean(anki.last() != null);
+                if (anki.last() != null) {
+                    out.writeUTF(anki.last().profile());
+                    out.writeLong(anki.last().today());
+                    out.writeInt(anki.last().days().size());
+                    for (var day : anki.last().days().entrySet()) {
+                        out.writeLong(day.getKey().toEpochDay());
+                        out.writeLong(day.getValue());
+                    }
+                    instant(out, anki.last().fetchedAt());
+                }
             }
             if(bytes.size()>31_000_000)throw new IOException("Vault is too large.");
             byte[] header=ByteBuffer.allocate(24).putInt(MAGIC).putInt(VERSION).put(salt).array(),nonce=new byte[12];
@@ -379,7 +399,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 14.
+     * Reads any schema from 1 to 16.
      *
      * Every field older vaults lack arrives as a sensible empty, and everything
      * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
@@ -537,8 +557,25 @@ public final class EncryptedVault implements Repository {
                     pages.add(new Page(id,folder,title,body,created,updated,deleted));
                 }
             }
+            // Schema 16: the Anki integration, its key and the counts it last saw.
+            var anki=Anki.off();
+            if(schema>=16) {
+                boolean on=in.readBoolean();
+                String key=in.readUTF();
+                boolean addsTime=in.readBoolean();
+                int refresh=in.readInt();
+                AnkiSnapshot last=null;
+                if(in.readBoolean()) {
+                    String profile=in.readUTF();
+                    long todayCount=in.readLong();
+                    var days=new java.util.TreeMap<LocalDate,Long>();
+                    for(int n=count(in);n>0;n--) days.put(LocalDate.ofEpochDay(in.readLong()),in.readLong());
+                    last=new AnkiSnapshot(profile,todayCount,days,instant(in));
+                }
+                anki=new Anki(on,key,addsTime,refresh,last);
+            }
             if(in.available()!=0)throw new IOException("Unexpected vault content.");
-            return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,new Notes(folders,pages));
+            return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,new Notes(folders,pages),anki);
         }
         catch(RuntimeException e) {
             throw new IOException("Invalid vault data.",e);

@@ -39,6 +39,8 @@ public final class YoruApp extends JPanel implements Shell {
     private LocalDate week;
     private final MusicPlayer music=new MusicPlayer();
     private final DateTimeFormatter dateTime=DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    /** The activity the heat map is filtered to, or null for all of them. */
+    private UUID heatActivity;
     /** Window for the focus-distribution chart, in days; 0 means all time. */
     private int mixDays=7;
     private final TodayPage todayPage=new TodayPage(this);
@@ -696,6 +698,92 @@ public final class YoruApp extends JPanel implements Shell {
         return t;
     }
 
+    /**
+     * The 52-week heat map, on the page that owns the numbers.
+     *
+     * It was the largest thing on Today, which is a glance at the day rather
+     * than a year in review (#86).
+     */
+    private JPanel heatCard(LocalDate today) {
+        var heat=card();
+        var top=row();
+        top.add(sectionHeader("ACTIVITY · 52 WEEKS"));
+        var filter=plainCombo(new JComboBox<String>());
+        filter.addItem("All activities");
+        tracker.state().activities().forEach(a->filter.addItem(a.name()));
+        if(heatActivity!=null)filter.setSelectedItem(name(heatActivity));
+        filter.getAccessibleContext().setAccessibleName("Heat map activity filter");
+        filter.addActionListener(e-> {
+            int index=filter.getSelectedIndex();heatActivity=index==0?null:tracker.state().activities().get(index-1).id();showPage("Data");
+        }
+        );
+        top.add(filter);
+        heat.add(top);
+        var days=Analytics.daily(tracker.state(),heatActivity,zone,Instant.now());
+        // An empty 52x7 grid reads as a broken chart rather than as a first run.
+        if(days.values().stream().noneMatch(seconds->seconds>0)) {
+            gap(heat,SPACE_LG);
+            heat.add(emptyState("No time recorded yet.","Your first session fills this in.",null));
+            return heat;
+        }
+        heat.add(new Heatmap(days,today,tracker.state().settings().dailyGoalHours(),
+            tracker.state().settings().weekStartsOn()));
+        heat.add(TodayPage.heatLegend(today,tracker.state().settings().dailyGoalHours()));
+        return heat;
+    }
+
+    /**
+     * Anki's reviews, day by day, on the page that holds the numbers (#85).
+     *
+     * Today keeps one line; the month of history that used to sit under it, as
+     * seven lines of text, is drawn here as the chart it always was.
+     */
+    private JPanel ankiHistory(Anki anki) {
+        var last=anki.last();
+        var card=card();
+        card.add(cardHead(sectionHeader("ANKI REVIEWS · LAST 30 DAYS"),
+            label("profile “"+last.profile()+"” · read "+AnkiCard.ago(last.fetchedAt(),tracker.now()),TYPE_CAPTION,MUTED)));
+        gap(card,SPACE_LG);
+        var today=LocalDate.now(zone);
+        long most=1;
+        for(int i=0;i<30;i++) most=Math.max(most,last.days().getOrDefault(today.minusDays(i),0L));
+        int floor=grow(CHART_HEIGHT);
+        var bars=new JPanel(new GridLayout(1,30,SPACE_XS/2,0)) {
+            @Override public Dimension getPreferredSize() { return tall(super.getPreferredSize()); }
+            @Override public Dimension getMinimumSize() { return tall(super.getMinimumSize()); }
+            @Override public Dimension getMaximumSize() { return tall(super.getMaximumSize()); }
+            private Dimension tall(Dimension d) { return new Dimension(d.width,floor); }
+        };
+        bars.setOpaque(false);
+        bars.setAlignmentX(0);
+        for(int i=29;i>=0;i--) {
+            var day=today.minusDays(i);
+            long reviews=last.days().getOrDefault(day,0L);
+            var column=new JPanel(new BorderLayout());
+            column.setOpaque(false);
+            var bar=new JPanel();
+            bar.setBackground(reviews==0?LINE:CYAN);
+            int height=reviews==0?HAIRLINE*2:(int)Math.max(HAIRLINE*2,floor*reviews/most);
+            bar.setPreferredSize(new Dimension(SPACE_SM,height));
+            bar.setToolTipText(DateText.date(day)+" · "+plural((int)reviews,"review"));
+            column.add(bar,BorderLayout.SOUTH);
+            bars.add(column);
+        }
+        card.add(bars);
+        gap(card,SPACE_SM);
+        var scale=row();
+        scale.add(label(DateText.date(today.minusDays(29)),TYPE_CAPTION,MUTED));
+        scale.add(label("most in a day: "+plural((int)most,"review"),TYPE_CAPTION,MUTED));
+        scale.add(label("today",TYPE_CAPTION,MUTED));
+        card.add(scale);
+        gap(card,SPACE_MD);
+        long tracked=dev.yoru.application.AnkiTime.recordedOn(tracker.state(),today,zone,tracker.now());
+        card.add(bodyLabel(tracked==0?"No Anki time has been added to your tracked time today."
+            :Analytics.report(tracked)+" of Anki time is in your tracked time today, under “"
+             +dev.yoru.application.AnkiTime.ACTIVITY+"”. Correct or delete those sessions like any other."));
+        return card;
+    }
+
     private JPanel data() {
         var p=stack();
         // An ellipsis on every action that opens a dialog, and none on the ones
@@ -710,6 +798,10 @@ public final class YoruApp extends JPanel implements Shell {
         // are already on screen.
         p.add(ActivityManager.activities(tracker,this,()->showPage("Data")));
         gap(p,SPACE_LG);
+        p.add(heatCard(LocalDate.now()));
+        gap(p,SPACE_LG);
+        var anki=tracker.state().anki();
+        if(anki.enabled()&&anki.last()!=null) { p.add(ankiHistory(anki)); gap(p,SPACE_LG); }
 
         var days=Analytics.daily(tracker.state(),null,zone,Instant.now());
         var chart=card();
@@ -1292,7 +1384,7 @@ public final class YoruApp extends JPanel implements Shell {
         if(parts.isEmpty()){Dialogs.info(this,"Nothing selected. No data was changed.");return;}
         String selected=choices.entrySet().stream().filter(e->parts.contains(e.getKey())).map(e->"• "+e.getValue().getText()).collect(java.util.stream.Collectors.joining("\n"));
         if(!Dialogs.confirmDestructive(this,"Reset these sections?\n\n"+selected+"\n\nA backup will be saved first. This also removes an active timer if sessions are selected.","Confirm reset","Reset"))return;
-        perform(()->{tracker.reset(parts);todayPage.forgetActivityFilter();});
+        perform(()->{tracker.reset(parts);heatActivity=null;});
     }
     /**
      * Tells the owner where their game save went, once (#58).

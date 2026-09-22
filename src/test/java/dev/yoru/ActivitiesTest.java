@@ -58,7 +58,7 @@ public final class ActivitiesTest {
     private static State rebuild(State state,List<Activity> activities,List<Session> sessions,
                                  List<ScheduleBlock> blocks,List<RecurringBlock> recurring,List<Task> tasks) {
         return new State(activities,sessions,blocks,recurring,tasks,state.habits(),state.tags(),
-            state.settings(),state.notes());
+            state.settings(),state.notes(),state.anki());
     }
 
     /** Three activities and one of everything that can point at them. */
@@ -84,7 +84,7 @@ public final class ActivitiesTest {
             new Task(UUID.nameUUIDFromBytes(new byte[]{53}),null,null,"Order textbook","",null,TaskStatus.DONE,"manual",NOW,2,null));
         var habits=List.of(new Habit(UUID.nameUUIDFromBytes(new byte[]{61}),"Daily reading",HabitKind.DAILY,"UTC",Set.of(LocalDate.of(2026,9,8)),List.of()));
         var tags=List.of(new Tag(TAG,"Class",0x3366CC));
-        return new State(activities,sessions,blocks,recurring,tasks,habits,tags,Settings.defaults(),Notes.empty());
+        return new State(activities,sessions,blocks,recurring,tasks,habits,tags,Settings.defaults(),Notes.empty(),Anki.off());
     }
 
     private static Tracker tracker(Memory repo)throws IOException {

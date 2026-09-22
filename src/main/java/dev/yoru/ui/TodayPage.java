@@ -33,7 +33,6 @@ final class TodayPage {
     private JLabel timerLabel, statusLabel;
     private DailyGoal dailyGoal;
     /** The heat map's activity filter; null shows every activity. */
-    private UUID heatActivity;
     private final AnkiCard ankiCard;
     /** Whether Today is the page on screen, so Anki time added in the background rebuilds it and nothing else. */
     private boolean shown;
@@ -45,7 +44,7 @@ final class TodayPage {
     TodayPage(Shell shell) {
         this.shell = shell;
         ankiCard = new AnkiCard(new dev.yoru.anki.AnkiConnect()::read, this::tracker, this::zone,
-            () -> { if (shown) shell.refresh(); });
+            () -> { if (shown) shell.refresh(); }, () -> shell.show("Data"));
     }
 
     private Tracker tracker() { return shell.tracker(); }
@@ -70,10 +69,7 @@ final class TodayPage {
      * Another vault is open. Anki time is added to the vault that was open when
      * Anki was connected, so connecting again is what agrees to add it here.
      */
-    void vaultChanged() { ankiCard.disconnect("Another vault is open. Connect Anki again to add your Anki time to it."); }
-
-    /** A reset may remove the activity the heat map was filtered to. */
-    void forgetActivityFilter() { heatActivity=null; }
+    void vaultChanged() { ankiCard.disconnect(); }
 
     JPanel view() {
         shown=true;
@@ -113,9 +109,10 @@ final class TodayPage {
         // has gone. The agenda is in the hero above, so that order still holds.
         p.add(stats);
         gap(p,SPACE_LG);
-        p.add(heatCard(today));
-        gap(p,SPACE_LG);
-        p.add(activitiesCard(today));
+        // What is left of the day, side by side: the tasks it wants and the
+        // habits still to tick off. Both are summaries; the pages that own them
+        // hold the detail (#86).
+        p.add(new Hero(tasksCard(today),HabitChecklist.card(tracker,()->shell.show("Today"),shell::error)));
         gap(p,SPACE_LG);
         ankiCard.render();
         p.add(ankiCard);
@@ -184,34 +181,46 @@ final class TodayPage {
         return focus;
     }
 
-    /** The 52-week heat map, or the first-run state when there is nothing to draw. */
-    private JPanel heatCard(LocalDate today) {
+    /** How many tasks today wants, and the first few of them, each ready to tick off. */
+    private JPanel tasksCard(LocalDate today) {
         var tracker=tracker();
-        var heat=card();
-        var top=row();
-        top.add(sectionHeader("ACTIVITY · 52 WEEKS"));
-        var filter=plainCombo(new JComboBox<String>());
-        filter.addItem("All activities");
-        tracker.state().activities().forEach(a->filter.addItem(a.name()));
-        if(heatActivity!=null)filter.setSelectedItem(shell.activityName(heatActivity));
-        filter.getAccessibleContext().setAccessibleName("Heat map activity filter");
-        filter.addActionListener(e-> {
-            int index=filter.getSelectedIndex();heatActivity=index==0?null:tracker.state().activities().get(index-1).id();shell.show("Today");
+        var card=card();
+        var open=tracker.state().tasks().stream()
+            .filter(t->!t.done()&&t.workOn()!=null&&!t.workOn().isAfter(today))
+            .sorted(java.util.Comparator.comparing(dev.yoru.domain.Model.Task::workOn)).toList();
+        long overdue=open.stream().filter(t->t.workOn().isBefore(today)).count();
+        card.add(cardHead(sectionHeader("TASKS TODAY"),
+            label(open.isEmpty()?"all clear":open.size()+" left"+(overdue>0?" · "+overdue+" overdue":""),
+                TYPE_CAPTION,overdue>0?GOLD_TEXT:MUTED)));
+        gap(card,SPACE_SM);
+        if(open.isEmpty()) {
+            card.add(bodyLabel("Nothing due or planned for today."));
+            gap(card,SPACE_SM);
         }
-        );
-        top.add(filter);
-        heat.add(top);
-        var days=Analytics.daily(tracker.state(),heatActivity,zone(),Instant.now());
-        // An empty 52x7 grid reads as a broken chart rather than as a first run.
-        if(days.values().stream().noneMatch(seconds->seconds>0)) {
-            gap(heat,SPACE_LG);
-            heat.add(emptyState("No time recorded yet.","Your first session fills this in.",null));
-            return heat;
+        // Three: enough to know what the day holds, few enough to stay a glance.
+        for(var task:open.stream().limit(3).toList()) {
+            var line=new JPanel(new BorderLayout(SPACE_SM,0));
+            line.setOpaque(false);
+            line.setAlignmentX(0);
+            var check=new JCheckBox(task.title());
+            check.setOpaque(false);
+            check.setFont(labelFont());
+            check.setToolTipText(task.title());
+            check.setName("today.task."+task.id());
+            check.getAccessibleContext().setAccessibleName(task.title()+", not done");
+            check.addActionListener(e->shell.perform(()->tracker.taskStatus(task.id(),
+                dev.yoru.domain.Model.TaskStatus.DONE)));
+            line.add(check,BorderLayout.CENTER);
+            if(task.workOn().isBefore(today))
+                line.add(label(DateText.date(task.workOn()),TYPE_CAPTION,GOLD_TEXT),BorderLayout.EAST);
+            line.setMaximumSize(new Dimension(Integer.MAX_VALUE,line.getPreferredSize().height));
+            card.add(line);
         }
-        heat.add(new Heatmap(days,today,tracker.state().settings().dailyGoalHours(),
-            tracker.state().settings().weekStartsOn()));
-        heat.add(heatLegend(today,tracker.state().settings().dailyGoalHours()));
-        return heat;
+        gap(card,SPACE_SM);
+        var all=ghost(button(open.size()>3?"See all "+open.size()+" →":"Open Tasks →",()->shell.show("Tasks")));
+        all.setName("today.tasks.all");
+        card.add(all);
+        return card;
     }
 
     /**
@@ -250,41 +259,6 @@ final class TodayPage {
         return chip;
     }
 
-    /** Every activity with today's time and the two controls that change it. */
-    private JPanel activitiesCard(LocalDate today) {
-        var tracker=tracker();
-        var categories=card();
-        categories.add(sectionHeader("TRACKED ACTIVITIES"));
-        gap(categories,SPACE_MD);
-        if(tracker.state().activities().isEmpty()) {
-            categories.add(emptyState("No activities yet.","Create one to start a session.",null));
-            return categories;
-        }
-        // One grid for the whole list, shared with the Data page: the controls
-        // sit in their own column rather than after each row's text, so they line
-        // up down the card instead of stepping along with the label lengths.
-        var table=ActivityManager.activityTable();
-        int row=0;
-        for(var a:tracker.state().activities()) {
-            long sec=Analytics.daily(tracker.state(),a.id(),zone(),Instant.now()).getOrDefault(today,0L);
-            // Management sits with the picker's own list, by identity: the buttons
-            // carry the activity's id, so renaming one can never move another's time.
-            var rename=ghost(button("Rename",()->ActivityManager.rename(shell.owner(),tracker,a,()->shell.show("Today"))));
-            rename.setName("activity.rename."+a.id());
-            // "Delete", not "Remove": this is the control that can destroy the
-            // recorded time, and the dialog it opens says so.
-            var remove=ghost(button("Delete",()->ActivityManager.remove(shell.owner(),tracker,a,()->shell.show("Today"))));
-            remove.setName("activity.remove."+a.id());
-            boolean timing=!ActivityManager.canRemove(tracker,a.id());
-            remove.setEnabled(!timing);
-            remove.setToolTipText(timing?"Clock out before deleting this activity":"Delete this activity");
-            ActivityManager.activityRow(table,row++,shortenable(a.name(),TYPE_PROSE,TEXT),
-                label(Analytics.duration(sec)+(a.targetMinutes()==0?" · open-ended":" · target "+a.targetMinutes()+"m"),TYPE_BODY,MUTED),
-                ActivityManager.targetButton(shell.owner(),tracker,a,()->shell.show("Today")),rename,remove);
-        }
-        categories.add(table);
-        return categories;
-    }
 
     /**
      * Two cards side by side, or stacked when the window is too narrow for both.

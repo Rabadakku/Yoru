@@ -509,6 +509,24 @@ public final class Tracker {
         var next=new ArrayList<>(state.habits()); next.set(next.indexOf(habit(h.id())),h); commit(state.withHabits(next));
     }
 
+    // ---- Anki ----------------------------------------------------------------
+
+    /** Saves the integration's settings: switched on, its key, and how it behaves (#85). */
+    public void anki(Anki next) throws IOException {
+        commit(state.withAnki(Objects.requireNonNull(next)));
+    }
+
+    /**
+     * Keeps what Anki last said, so the card can show it while Anki is closed.
+     *
+     * Counts and times only. Nothing is written when the numbers are the ones
+     * already kept, so an idle refresh costs no vault write.
+     */
+    public void ankiSeen(AnkiSnapshot snapshot) throws IOException {
+        if (Objects.equals(state.anki().last(), Objects.requireNonNull(snapshot))) return;
+        commit(state.withAnki(state.anki().withSnapshot(snapshot)));
+    }
+
     /** A weekly-template entry. Overlaps on the same weekday are refused by State. */
     public RecurringBlock repeat(UUID activityId,DayOfWeek day,LocalTime start,LocalTime end) throws IOException {
         requireActivity(activityId);
@@ -547,6 +565,7 @@ public final class Tracker {
         TIME_SINCE("Time-since trackers"),
         SETTINGS("Settings"),
         PAGES("Pages and folders (tasks are kept, unlinked)"),
+        ANKI("Anki connection and its saved counts"),
         ACTIVITIES("Activities (also clears sessions and schedule; tasks are kept, unlinked)");
 
         public final String label;
@@ -579,7 +598,8 @@ public final class Tracker {
             state.habits().stream().filter(h->!(h.kind()==HabitKind.DAILY?parts.contains(ResetPart.DAILY_HABITS):parts.contains(ResetPart.TIME_SINCE))).toList(),
             clearTags?List.of():state.tags(),
             parts.contains(ResetPart.SETTINGS)?Settings.defaults():state.settings(),
-            clearPages?Notes.empty():state.notes());
+            clearPages?Notes.empty():state.notes(),
+            parts.contains(ResetPart.ANKI)?Anki.off():state.anki());
         repository.backup();commit(next);
     }
 

@@ -76,13 +76,14 @@ public final class ActivityUiTest {
                 var app=new YoruApp(tracker,repo);
                 app.setSize(1280,900);
 
-                // Both pages render, and both carry the manager.
+                // The manager lives on Data, where the counts it acts on are (#86).
                 render(app,1280,"Today");
-                check(button(app,"activity.rename."+coding)!=null,"Today offers a rename by identity");
+                check(button(app,"activity.rename."+coding)==null,"Today keeps no activity table: it is a glance");
+                render(app,1040,"Data");
+                check(button(app,"activity.rename."+coding)!=null,"Data offers a rename by identity");
                 check(button(app,"activity.rename."+japanese)!=null,"for every activity, not just the first");
                 check(button(app,"activity.remove."+coding)!=null,"and a removal for each");
                 check(button(app,"activity.target."+coding)!=null,"and a daily target for each (#21)");
-                render(app,1040,"Data");
                 check(button(app,"activity.target."+japanese)!=null,"the Data page offers the daily target too");
                 check(ActivityManager.minutes("45")==45&&ActivityManager.minutes(" 45 min ")==45&&ActivityManager.minutes("")==0,
                     "a typed target reads minutes, with or without a unit");
@@ -107,8 +108,8 @@ public final class ActivityUiTest {
 
                 // The timer that is running is the one activity that cannot be removed.
                 tracker.start(coding);
-                render(app,1280,"Today");
-                check(!button(app,"activity.remove."+coding).isEnabled(),"the activity being timed cannot be removed from Today");
+                render(app,1040,"Data");
+                check(!button(app,"activity.remove."+coding).isEnabled(),"the activity being timed cannot be removed");
                 check(button(app,"activity.remove."+japanese).isEnabled(),"another activity still can be");
                 check(!ActivityManager.canRemove(tracker,coding)&&ActivityManager.canRemove(tracker,japanese),
                     "and the page agrees with the vault");
