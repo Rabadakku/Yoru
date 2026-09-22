@@ -25,8 +25,10 @@ public final class PortableVault {
      * Export format version. Not the storage schema; this one is plain text.
      * Format 2 replaced the tracker's own collection with the campaign and the
      * game save; format 1 files still import, their catches becoming rewards.
+     * Format 3 added pages, folders and the pages a task links to. A build that
+     * reads only 1 and 2 refuses a format 3 file rather than dropping its pages.
      */
-    public static final int FORMAT = 2;
+    public static final int FORMAT = 3;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -50,6 +52,8 @@ public final class PortableVault {
         out.put("campaign", campaign(state.campaign()));
         out.put("rewards", state.rewards().stream().map(PortableVault::reward).toList());
         out.put("game", state.game() == null ? null : game(state.game()));
+        out.put("folders", state.notes().folders().stream().map(PortableVault::folder).toList());
+        out.put("pages", state.notes().pages().stream().map(PortableVault::page).toList());
         return Json.pretty(out);
     }
 
@@ -121,6 +125,29 @@ public final class PortableVault {
         m.put("createdAt", t.createdAt().toString());
         m.put("order", t.order());
         m.put("plannedFor", t.plannedFor() == null ? null : t.plannedFor().toString());
+        m.put("pageIds", t.pageIds().stream().map(UUID::toString).toList());
+        return m;
+    }
+
+    private static Map<String, Object> folder(Folder f) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("id", f.id().toString());
+        m.put("parentId", f.parentId() == null ? null : f.parentId().toString());
+        m.put("name", f.name());
+        m.put("createdAt", f.createdAt().toString());
+        m.put("deletedAt", f.deletedAt() == null ? null : f.deletedAt().toString());
+        return m;
+    }
+
+    private static Map<String, Object> page(Page p) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("id", p.id().toString());
+        m.put("folderId", p.folderId() == null ? null : p.folderId().toString());
+        m.put("title", p.title());
+        m.put("createdAt", p.createdAt().toString());
+        m.put("updatedAt", p.updatedAt().toString());
+        m.put("deletedAt", p.deletedAt() == null ? null : p.deletedAt().toString());
+        m.put("body", p.body());
         return m;
     }
 
@@ -173,9 +200,9 @@ public final class PortableVault {
     public static State parse(String text) {
         var root = Json.object(Json.read(text, READ_LIMIT));
         long format = integer(root, "yoru");
-        if (format != 1 && format != FORMAT)
+        if (format < 1 || format > FORMAT)
             throw new IllegalArgumentException("This file says it is Yoru export format " + format
-                + ". This build reads formats 1 and " + FORMAT + ".");
+                + ". This build reads formats 1 to " + FORMAT + ".");
 
         var settings = Json.object(required(root, "settings"));
         List<Reward> rewards = root.get("rewards") == null ? List.of() : list(root, "rewards", PortableVault::readReward);
@@ -208,7 +235,20 @@ public final class PortableVault {
                 int32(settings, "dailyGoalHours"),
                 int32(settings, "minSessionSeconds"),
                 enumeration(java.time.DayOfWeek.class, text(settings, "weekStartsOn"))),
-            campaign, rewards, game);
+            campaign, rewards, game,
+            // Before format 3 there were no pages: an older file has none.
+            new Notes(root.get("folders") == null ? List.of() : list(root, "folders", PortableVault::readFolder),
+                root.get("pages") == null ? List.of() : list(root, "pages", PortableVault::readPage)));
+    }
+
+    private static Folder readFolder(Map<?, ?> m) {
+        return new Folder(id(m, "id"), optionalId(m, "parentId"), text(m, "name"),
+            instant(m, "createdAt"), optionalInstant(m, "deletedAt"));
+    }
+
+    private static Page readPage(Map<?, ?> m) {
+        return new Page(id(m, "id"), optionalId(m, "folderId"), text(m, "title"), text(m, "body"),
+            instant(m, "createdAt"), instant(m, "updatedAt"), optionalInstant(m, "deletedAt"));
     }
 
     private static Activity readActivity(Map<?, ?> m) {
@@ -237,7 +277,20 @@ public final class PortableVault {
         return new Task(id(m, "id"), optionalId(m, "activityId"), optionalId(m, "tagId"),
             text(m, "title"), text(m, "notes"), optionalDate(m, "due"),
             enumeration(TaskStatus.class, text(m, "status")), text(m, "source"),
-            instant(m, "createdAt"), int32(m, "order"), optionalDate(m, "plannedFor"));
+            instant(m, "createdAt"), int32(m, "order"), optionalDate(m, "plannedFor"),
+            optionalIds(m, "pageIds"));
+    }
+
+    /** A list of identifiers that older files leave out entirely. */
+    private static List<UUID> optionalIds(Map<?, ?> m, String key) {
+        var value = m.get(key);
+        if (value == null) return List.of();
+        var out = new ArrayList<UUID>();
+        for (var item : Json.array(value)) {
+            try { out.add(UUID.fromString(Json.string(item))); }
+            catch (IllegalArgumentException e) { throw new IllegalArgumentException("\"" + key + "\" holds something that is not an identifier."); }
+        }
+        return out;
     }
 
     private static Habit readHabit(Map<?, ?> m) {

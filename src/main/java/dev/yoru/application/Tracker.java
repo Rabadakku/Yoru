@@ -667,6 +667,7 @@ public final class Tracker {
         TIME_SINCE("Time-since trackers"),
         GAME("Game save (the game starts over)"),
         SETTINGS("Settings"),
+        PAGES("Pages and folders (tasks are kept, unlinked)"),
         ACTIVITIES("Activities (also clears sessions and schedule; tasks are kept, unlinked)");
 
         public final String label;
@@ -688,14 +689,15 @@ public final class Tracker {
         if(active()!=null&&!sessions)throw new IllegalArgumentException("Clock out before resetting other data.");
         var tasks=parts.contains(ResetPart.TASKS)?List.<Task>of():state.tasks();
         // Clearing activities unlinks tasks from them; the tasks themselves survive.
-        if(activities)tasks=tasks.stream().map(x->new Task(x.id(),null,x.tagId(),x.title(),x.notes(),
-            x.due(),x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor())).toList();
+        if(activities)tasks=tasks.stream().map(x->x.withActivity(null)).toList();
         // Tags are their own section. Clearing tasks used to clear them too,
         // which the dialog never said and a new term never wanted: the classes
         // survive the assignments filed under them.
         boolean clearTags=parts.contains(ResetPart.TAGS);
-        if(clearTags)tasks=tasks.stream().map(x->new Task(x.id(),x.activityId(),null,x.title(),x.notes(),
-            x.due(),x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor())).toList();
+        if(clearTags)tasks=tasks.stream().map(x->x.withTag(null)).toList();
+        // Clearing pages unlinks the tasks that pointed at them; the tasks stay.
+        boolean clearPages=parts.contains(ResetPart.PAGES);
+        if(clearPages)tasks=tasks.stream().map(x->x.withPages(List.of())).toList();
         var next=new State(
             activities?List.of():state.activities(),
             sessions?List.of():state.sessions(),
@@ -707,7 +709,8 @@ public final class Tracker {
             parts.contains(ResetPart.SETTINGS)?Settings.defaults():state.settings(),
             sessions?state.campaign().withRewardedSeconds(0):state.campaign(),
             state.rewards(),
-            parts.contains(ResetPart.GAME)?null:state.game());
+            parts.contains(ResetPart.GAME)?null:state.game(),
+            clearPages?Notes.empty():state.notes());
         repository.backup();commit(next);
     }
 
@@ -743,9 +746,7 @@ public final class Tracker {
     /** Tasks keep everything except the tag; deleting a tag never deletes work. */
     public void deleteTag(UUID id) throws IOException {
         if(state.tags().stream().noneMatch(t->t.id().equals(id)))throw new IllegalArgumentException("Tag no longer exists.");
-        var tasks=state.tasks().stream().map(t->id.equals(t.tagId())
-            ? new Task(t.id(),t.activityId(),null,t.title(),t.notes(),t.due(),t.status(),t.source(),t.createdAt(),t.order(),t.plannedFor())
-            : t).toList();
+        var tasks=state.tasks().stream().map(t->id.equals(t.tagId())?t.withTag(null):t).toList();
         repository.backup();
         // Untag first: removing a tag a task still points at would not validate.
         commit(state.withTasks(tasks)
@@ -767,9 +768,7 @@ public final class Tracker {
         var positions=new HashMap<UUID,Integer>();
         for(int i=0;i<order.size();i++) positions.put(order.get(i),i);
         commit(state.withTasks(state.tasks().stream()
-            .map(t->positions.containsKey(t.id())
-                ? new Task(t.id(),t.activityId(),t.tagId(),t.title(),t.notes(),t.due(),t.status(),t.source(),t.createdAt(),positions.get(t.id()),t.plannedFor())
-                : t)
+            .map(t->positions.containsKey(t.id())?t.withOrder(positions.get(t.id())):t)
             .toList()));
     }
 }

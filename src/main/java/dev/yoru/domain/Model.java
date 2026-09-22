@@ -201,7 +201,15 @@ public final class Model {
      */
     public record Task(UUID id, UUID activityId, UUID tagId, String title, String notes,
                        LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
-                       LocalDate plannedFor) {
+                       LocalDate plannedFor, List<UUID> pageIds) {
+        /** The most pages one task may link to. */
+        public static final int MAX_PAGES = 100;
+        /** A task that links to no page: every task before Pages, and every new one. */
+        public Task(UUID id, UUID activityId, UUID tagId, String title, String notes,
+                    LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
+                    LocalDate plannedFor) {
+            this(id,activityId,tagId,title,notes,due,status,source,createdAt,order,plannedFor,List.of());
+        }
         /** Predates the planned/deadline split; everything before it planned nothing. */
         public Task(UUID id, UUID activityId, UUID tagId, String title, String notes,
                     LocalDate due, TaskStatus status, String source, Instant createdAt, int order) {
@@ -221,6 +229,9 @@ public final class Model {
             if (notes.length() > 4000 || source.length() > 160)
                 throw new IllegalArgumentException("Task notes or source are too long.");
             if (order < 0) throw new IllegalArgumentException("Invalid task order.");
+            // The pages a task links to, in the order they were linked, once each.
+            pageIds = List.copyOf(new LinkedHashSet<>(Objects.requireNonNull(pageIds)));
+            if (pageIds.size() > MAX_PAGES) throw new IllegalArgumentException("A task can link to at most " + MAX_PAGES + " pages.");
         }
         public boolean done() { return status==TaskStatus.DONE; }
         /**
@@ -249,8 +260,23 @@ public final class Model {
         /** Planning to start it after it is due is worth saying out loud. */
         public boolean scheduledLate() { return plannedFor != null && due != null && plannedFor.isAfter(due); }
 
+        // One field changed and everything else kept, page links included. Every
+        // rebuild of an existing task goes through these rather than a
+        // constructor, which is where a forgotten field used to go missing.
         public Task withStatus(TaskStatus next) {
-            return new Task(id,activityId,tagId,title,notes,due,next,source,createdAt,order,plannedFor);
+            return new Task(id,activityId,tagId,title,notes,due,next,source,createdAt,order,plannedFor,pageIds);
+        }
+        public Task withActivity(UUID next) {
+            return new Task(id,next,tagId,title,notes,due,status,source,createdAt,order,plannedFor,pageIds);
+        }
+        public Task withTag(UUID next) {
+            return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds);
+        }
+        public Task withOrder(int next) {
+            return new Task(id,activityId,tagId,title,notes,due,status,source,createdAt,next,plannedFor,pageIds);
+        }
+        public Task withPages(List<UUID> next) {
+            return new Task(id,activityId,tagId,title,notes,due,status,source,createdAt,order,plannedFor,next);
         }
     }
 
@@ -367,6 +393,113 @@ public final class Model {
     }
 
     /**
+     * What a page or folder may be called.
+     *
+     * The same rules Obsidian applies to a file name, because a page is exported
+     * as one: no path separators, and none of the characters link syntax
+     * reserves (# heading, ^ block, | alias, [ ] the brackets themselves).
+     */
+    public static String requirePageName(String value, String what) {
+        value = Objects.requireNonNull(value).strip();
+        if (value.isEmpty() || value.length() > 200)
+            throw new IllegalArgumentException("Use a " + what + " of 1–200 characters.");
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (Character.isISOControl(c) || "/\\:#^[]|".indexOf(c) >= 0)
+                throw new IllegalArgumentException("A " + what + " cannot contain / \\ : # ^ [ ] or |.");
+        }
+        if (value.equals(".") || value.equals("..") || value.startsWith("."))
+            throw new IllegalArgumentException("A " + what + " cannot start with a dot.");
+        return value;
+    }
+
+    /** A folder in the Pages tree. No parent means the top level; deletedAt means it is in the trash. */
+    public record Folder(UUID id, UUID parentId, String name, Instant createdAt, Instant deletedAt) {
+        public Folder {
+            Objects.requireNonNull(id);
+            name = requirePageName(name, "folder name");
+            requireTime(createdAt);
+            if (deletedAt != null) requireTime(deletedAt);
+            if (id.equals(parentId)) throw new IllegalArgumentException("A folder cannot be inside itself.");
+        }
+        public boolean trashed() { return deletedAt != null; }
+    }
+
+    /**
+     * A page: a title and its Markdown, kept exactly as written.
+     *
+     * The body is the whole text, frontmatter included. Links, headings and tags
+     * are read out of it when they are needed and never stored beside it, so the
+     * text is the only thing that can be true (docs/ARCHITECTURE.md, rule 3).
+     */
+    public record Page(UUID id, UUID folderId, String title, String body, Instant createdAt,
+                       Instant updatedAt, Instant deletedAt) {
+        /** About three hundred printed pages of text; the vault itself stops at 31 MB. */
+        public static final int MAX_BODY = 1_000_000;
+        public Page {
+            Objects.requireNonNull(id);
+            title = requirePageName(title, "page title");
+            Objects.requireNonNull(body);
+            if (body.length() > MAX_BODY) throw new IllegalArgumentException("This page is too long to save.");
+            requireTime(createdAt);
+            requireTime(updatedAt);
+            if (deletedAt != null) requireTime(deletedAt);
+        }
+        public boolean trashed() { return deletedAt != null; }
+        public Page withBody(String next, Instant when) { return new Page(id, folderId, title, next, createdAt, when, deletedAt); }
+        public Page withTitle(String next, Instant when) { return new Page(id, folderId, next, body, createdAt, when, deletedAt); }
+        public Page withFolder(UUID next, Instant when) { return new Page(id, next, title, body, createdAt, when, deletedAt); }
+        public Page withDeletedAt(Instant when) { return new Page(id, folderId, title, body, createdAt, updatedAt, when); }
+    }
+
+    /**
+     * Every folder and page, checked as one tree.
+     *
+     * Names are unique within a folder, ignoring case, among the things that are
+     * not in the trash: two live pages called "Notes" in one folder could not be
+     * exported side by side, and a link to either would be a guess. Something in
+     * the trash keeps its name without reserving it. A live page or folder never
+     * sits inside a trashed one, which is what lets a trashed folder take its
+     * whole subtree with it and bring it back whole.
+     */
+    public record Notes(List<Folder> folders, List<Page> pages) {
+        public Notes {
+            folders = List.copyOf(folders);
+            pages = List.copyOf(pages);
+            if (folders.size() > 100_000 || pages.size() > 100_000)
+                throw new IllegalArgumentException("Vault record limit reached.");
+            var byId = new HashMap<UUID, Folder>();
+            for (var f : folders) if (byId.put(f.id(), f) != null) throw new IllegalArgumentException("Duplicate folder.");
+            for (var f : folders) {
+                if (f.parentId() != null && !byId.containsKey(f.parentId()))
+                    throw new IllegalArgumentException("A folder is inside a folder that does not exist.");
+                // Walking up must reach the top: a cycle would never get there.
+                var seen = new HashSet<UUID>();
+                for (var at = f; at.parentId() != null; at = byId.get(at.parentId()))
+                    if (!seen.add(at.id())) throw new IllegalArgumentException("A folder cannot be inside itself.");
+                if (!f.trashed() && f.parentId() != null && byId.get(f.parentId()).trashed())
+                    throw new IllegalArgumentException("A folder cannot be inside a folder in the trash.");
+            }
+            var pageIds = new HashSet<UUID>();
+            for (var p : pages) {
+                if (!pageIds.add(p.id())) throw new IllegalArgumentException("Duplicate page.");
+                if (p.folderId() != null && !byId.containsKey(p.folderId()))
+                    throw new IllegalArgumentException("A page is inside a folder that does not exist.");
+                if (!p.trashed() && p.folderId() != null && byId.get(p.folderId()).trashed())
+                    throw new IllegalArgumentException("A page cannot be inside a folder in the trash.");
+            }
+            var names = new HashSet<String>();
+            for (var f : folders) if (!f.trashed() && !names.add("f" + f.parentId() + "/" + f.name().toLowerCase(Locale.ROOT)))
+                throw new IllegalArgumentException("Another folder here is already called \"" + f.name() + "\".");
+            for (var p : pages) if (!p.trashed() && !names.add("p" + p.folderId() + "/" + p.title().toLowerCase(Locale.ROOT)))
+                throw new IllegalArgumentException("Another page here is already called \"" + p.title() + "\".");
+        }
+        public static Notes empty() { return new Notes(List.of(), List.of()); }
+        public Optional<Page> page(UUID id) { return pages.stream().filter(p -> p.id().equals(id)).findFirst(); }
+        public Optional<Folder> folder(UUID id) { return folders.stream().filter(f -> f.id().equals(id)).findFirst(); }
+    }
+
+    /**
      * Everything a vault holds.
      *
      * One canonical constructor with every part, and a wither for each, so
@@ -378,11 +511,11 @@ public final class Model {
      */
     public record State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks,
                         List<RecurringBlock> recurring, List<Task> tasks, List<Habit> habits, List<Tag> tags,
-                        Settings settings, Campaign campaign, List<Reward> rewards, GameSave game) {
+                        Settings settings, Campaign campaign, List<Reward> rewards, GameSave game, Notes notes) {
         /** The time-tracking core alone, with everything else empty. */
         public State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks) {
             this(activities, sessions, blocks, List.of(), List.of(), List.of(), List.of(), Settings.defaults(),
-                Campaign.start(0), List.of(), null);
+                Campaign.start(0), List.of(), null, Notes.empty());
         }
         public State {
             activities = List.copyOf(activities);
@@ -395,6 +528,7 @@ public final class Model {
             rewards = List.copyOf(rewards);
             Objects.requireNonNull(settings);
             Objects.requireNonNull(campaign);
+            Objects.requireNonNull(notes);
             if (rewards.stream().map(Reward::id).distinct().count() != rewards.size())
                 throw new IllegalArgumentException("Duplicate reward.");
             if(habits.stream().map(Habit::id).distinct().count()!=habits.size()) throw new IllegalArgumentException("Duplicate habit.");
@@ -427,6 +561,12 @@ public final class Model {
                 if (t.activityId() != null && !ids.contains(t.activityId())) throw new IllegalArgumentException("Unknown task activity.");
                 if (t.tagId() != null && !tagIds.contains(t.tagId())) throw new IllegalArgumentException("Unknown task tag.");
             }
+            // A task may link to a page in the trash, so restoring the page
+            // restores the link; it may not link to one that is gone for good.
+            var pageIds = new HashSet<UUID>();
+            for (var p : notes.pages()) pageIds.add(p.id());
+            for (var t : tasks) for (var page : t.pageIds())
+                if (!pageIds.contains(page)) throw new IllegalArgumentException("A task links to a page that does not exist.");
         }
         /**
          * Removes one activity, keeping or deleting the time recorded under it.
@@ -484,24 +624,23 @@ public final class Model {
             var nextRepeats = recurring.stream().map(r -> r.activityId().equals(activityId)
                 ? new RecurringBlock(r.id(), replacement, r.dayOfWeek(), r.startTime(), r.endTime()) : r).toList();
             var nextTasks = tasks.stream().map(t -> activityId.equals(t.activityId())
-                ? new Task(t.id(), replacement, t.tagId(), t.title(), t.notes(), t.due(), t.status(),
-                    t.source(), t.createdAt(), t.order(), t.plannedFor())
-                : t).toList();
+                ? t.withActivity(replacement) : t).toList();
             return new State(kept, nextSessions, nextBlocks, nextRepeats, nextTasks, habits, tags,
-                settings, campaign, rewards, game);
+                settings, campaign, rewards, game, notes);
         }
 
         public State withCore(List<Activity> a, List<Session> s, List<ScheduleBlock> b) {
-            return new State(a,s,b,recurring,tasks,habits,tags,settings,campaign,rewards,game);
+            return new State(a,s,b,recurring,tasks,habits,tags,settings,campaign,rewards,game,notes);
         }
-        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,campaign,rewards,game); }
-        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,campaign,rewards,game); }
-        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,campaign,rewards,game); }
-        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,campaign,rewards,game); }
-        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,campaign,rewards,game); }
-        public State withCampaign(Campaign next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,rewards,game); }
-        public State withRewards(List<Reward> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,next,game); }
-        public State withGame(GameSave next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,rewards,next); }
+        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,campaign,rewards,game,notes); }
+        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,campaign,rewards,game,notes); }
+        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,campaign,rewards,game,notes); }
+        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,campaign,rewards,game,notes); }
+        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,campaign,rewards,game,notes); }
+        public State withCampaign(Campaign next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,rewards,game,notes); }
+        public State withRewards(List<Reward> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,next,game,notes); }
+        public State withGame(GameSave next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,rewards,next,notes); }
+        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,rewards,game,next); }
         /** Rewards earned for the real game and not yet recorded as delivered. */
         public List<Reward> pendingRewards() { return rewards.stream().filter(r -> !r.delivered()).toList(); }
         public static State empty() { return new State(List.of(), List.of(), List.of()); }

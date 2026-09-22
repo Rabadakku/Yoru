@@ -760,7 +760,9 @@ final class TasksPanel extends JPanel implements Scrollable {
             existing==null?"":existing.source(),
             existing==null?Instant.now():existing.createdAt(),
             existing==null?orderForNew:existing.order(),
-            plannedFor);
+            plannedFor,
+            // The form does not show page links, so an edit keeps them.
+            existing==null?List.of():existing.pageIds());
     }
 
     /** A new task lands at the bottom of the manual order, not on top of row one. */

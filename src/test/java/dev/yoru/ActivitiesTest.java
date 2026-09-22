@@ -58,7 +58,7 @@ public final class ActivitiesTest {
     private static State rebuild(State state,List<Activity> activities,List<Session> sessions,
                                  List<ScheduleBlock> blocks,List<RecurringBlock> recurring,List<Task> tasks) {
         return new State(activities,sessions,blocks,recurring,tasks,state.habits(),state.tags(),
-            state.settings(),state.campaign(),state.rewards(),state.game());
+            state.settings(),state.campaign(),state.rewards(),state.game(),state.notes());
     }
 
     /** Three activities and one of everything that can point at them. */
@@ -88,7 +88,7 @@ public final class ActivitiesTest {
             new Reward(DELIVERED,255,10,Instant.parse("2026-09-01T10:00:00Z"),Instant.parse("2026-09-02T10:00:00Z")),
             new Reward(EARNED,252,12,Instant.parse("2026-09-08T10:00:00Z"),null));
         return new State(activities,sessions,blocks,recurring,tasks,habits,tags,Settings.defaults(),
-            new Campaign(4242,7,3600),rewards,new GameSave(new byte[]{1,2,3,4},NOW));
+            new Campaign(4242,7,3600),rewards,new GameSave(new byte[]{1,2,3,4},NOW),Notes.empty());
     }
 
     private static Tracker tracker(Memory repo)throws IOException {

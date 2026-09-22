@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=13, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=14, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -242,6 +242,8 @@ public final class EncryptedVault implements Repository {
                     instant(out, task.createdAt()); out.writeInt(task.order());
                     out.writeBoolean(task.plannedFor() != null);
                     if (task.plannedFor() != null) out.writeLong(task.plannedFor().toEpochDay());
+                    out.writeInt(task.pageIds().size());
+                    for (var page : task.pageIds()) uuid(out, page);
                 }
                 out.writeInt(state.habits().size());
                 for(var h:state.habits()) {
@@ -269,6 +271,27 @@ public final class EncryptedVault implements Repository {
                     instant(out, state.game().updatedAt());
                     byte[] save = state.game().bytes();
                     out.writeInt(save.length); out.write(save);
+                }
+                // Schema 14: the Pages tree, after everything older schemas held.
+                out.writeInt(state.notes().folders().size());
+                for (var f : state.notes().folders()) {
+                    uuid(out, f.id()); out.writeBoolean(f.parentId() != null);
+                    if (f.parentId() != null) uuid(out, f.parentId());
+                    out.writeUTF(f.name()); instant(out, f.createdAt());
+                    out.writeBoolean(f.deletedAt() != null);
+                    if (f.deletedAt() != null) instant(out, f.deletedAt());
+                }
+                out.writeInt(state.notes().pages().size());
+                for (var page : state.notes().pages()) {
+                    uuid(out, page.id()); out.writeBoolean(page.folderId() != null);
+                    if (page.folderId() != null) uuid(out, page.folderId());
+                    out.writeUTF(page.title()); instant(out, page.createdAt()); instant(out, page.updatedAt());
+                    out.writeBoolean(page.deletedAt() != null);
+                    if (page.deletedAt() != null) instant(out, page.deletedAt());
+                    // Length and bytes rather than writeUTF, which stops at 64 KB:
+                    // a long page is an ordinary page.
+                    byte[] body = page.body().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    out.writeInt(body.length); out.write(body);
                 }
             }
             if(bytes.size()>31_000_000)throw new IOException("Vault is too large.");
@@ -372,7 +395,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 13.
+     * Reads any schema from 1 to 14.
      *
      * Every field older vaults lack arrives as a sensible empty. Schemas 2 to 10
      * kept a collection of their own after the tasks and gym records after the
@@ -419,7 +442,10 @@ public final class EncryptedVault implements Repository {
                     // Schema 8 split the deadline from the day you plan to work on
                     // it. Older vaults planned nothing, which is exactly null.
                     var planned=schema>=8&&in.readBoolean()?LocalDate.ofEpochDay(in.readLong()):null;
-                    tasks.add(new Task(id,activity,tag,title,notes,due,status,source,created,order,planned));
+                    // Schema 14 linked tasks to pages; before it, none were.
+                    var pages=new ArrayList<UUID>();
+                    if(schema>=14) for(int p=count(in);p>0;p--) pages.add(uuid(in));
+                    tasks.add(new Task(id,activity,tag,title,notes,due,status,source,created,order,planned,pages));
                 }
                 if (schema <= 10) collection = LegacyCollection.read(in, schema, () -> {
                     try { return count(in); } catch (IOException e) { throw new UncheckedIOException(e); }
@@ -464,9 +490,27 @@ public final class EncryptedVault implements Repository {
                 if (length <= 0 || length > GameSave.MAX_BYTES) throw new IOException("Invalid game save.");
                 game = new GameSave(in.readNBytes(length), updated);
             }
+            var folders=new ArrayList<Folder>();
+            var pages=new ArrayList<Page>();
+            if(schema>=14) {
+                for(int n=count(in);n>0;n--) {
+                    var id=uuid(in); var parent=in.readBoolean()?uuid(in):null; var name=in.readUTF();
+                    var created=instant(in); var deleted=in.readBoolean()?instant(in):null;
+                    folders.add(new Folder(id,parent,name,created,deleted));
+                }
+                for(int n=count(in);n>0;n--) {
+                    var id=uuid(in); var folder=in.readBoolean()?uuid(in):null; var title=in.readUTF();
+                    var created=instant(in); var updated=instant(in); var deleted=in.readBoolean()?instant(in):null;
+                    int length=in.readInt();
+                    // Four bytes a character at most: anything longer is not a page.
+                    if(length<0||length>Page.MAX_BODY*4)throw new IOException("Invalid page.");
+                    var body=new String(in.readNBytes(length),java.nio.charset.StandardCharsets.UTF_8);
+                    pages.add(new Page(id,folder,title,body,created,updated,deleted));
+                }
+            }
             if(in.available()!=0)throw new IOException("Unexpected vault content.");
             return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,campaign,
-                collection != null ? collection.rewards(rewards) : rewards, game);
+                collection != null ? collection.rewards(rewards) : rewards, game, new Notes(folders,pages));
         }
         catch(RuntimeException e) {
             throw new IOException("Invalid vault data.",e);

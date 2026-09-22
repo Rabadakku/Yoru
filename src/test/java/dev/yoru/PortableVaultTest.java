@@ -50,6 +50,19 @@ public final class PortableVaultTest {
         var delivered=new Reward(UUID.randomUUID(),4,7,Instant.parse("2026-09-02T08:00:00Z"),
             Instant.parse("2026-09-02T09:00:00Z"));
         var tag=new Tag(UUID.randomUUID(),"Reading",0x90D8DA);
+        // Pages: nested folders, a trashed folder holding a trashed page, and a
+        // page long enough to prove nothing caps a body at 64 KB.
+        var classes=new Folder(UUID.randomUUID(),null,"Classes",Instant.parse("2026-09-01T07:00:00Z"),null);
+        var biology=new Folder(UUID.randomUUID(),classes.id(),"Biology",Instant.parse("2026-09-01T07:01:00Z"),null);
+        var old=new Folder(UUID.randomUUID(),null,"Old term",Instant.parse("2026-08-01T07:00:00Z"),Instant.parse("2026-09-02T07:00:00Z"));
+        var lecture=new Page(UUID.randomUUID(),biology.id(),"Lecture 1",
+            "---\ntags: [bio]\n---\n# Cells\nSee [[Lecture 2#Membranes|the next one]] and ![[diagram.png]].\n- [ ] read ch. 1 日本語\n"
+                +"x".repeat(70_000),
+            Instant.parse("2026-09-01T08:00:00Z"),Instant.parse("2026-09-03T08:00:00Z"),null);
+        var scrap=new Page(UUID.randomUUID(),old.id(),"Scrap","",Instant.parse("2026-08-01T08:00:00Z"),
+            Instant.parse("2026-08-01T08:00:00Z"),Instant.parse("2026-09-02T07:00:00Z"));
+        var inbox=new Page(UUID.randomUUID(),null,"Inbox","Loose thoughts.",Instant.parse("2026-09-04T08:00:00Z"),
+            Instant.parse("2026-09-04T08:00:00Z"),null);
         return new State(
             List.of(study,japanese),
             List.of(new Session(UUID.randomUUID(),study.id(),Instant.parse("2026-09-03T09:00:00Z"),
@@ -67,7 +80,7 @@ public final class PortableVaultTest {
             List.of(new Task(UUID.randomUUID(),study.id(),tag.id(),"Read chapter 4",
                         "Worked examples\nsecond line, with \"quotes\" and 日本語",
                         LocalDate.parse("2026-09-10"),TaskStatus.DOING,"reading-list.txt",
-                        Instant.parse("2026-09-01T12:00:00Z"),3),
+                        Instant.parse("2026-09-01T12:00:00Z"),3).withPages(List.of(lecture.id(),scrap.id())),
                     new Task(UUID.randomUUID(),null,null,"Order textbook","",null,
                         TaskStatus.DONE,"",Instant.parse("2026-09-01T12:00:01Z"),7),
                     // A task planned for a different day than it is due (#25).
@@ -82,7 +95,8 @@ public final class PortableVaultTest {
             new Settings(ThemeId.SAKURA,TrainerId.MAY,7,120,DayOfWeek.MONDAY),
             new Campaign(0x9E3779B97F4A7C15L,12,21600),
             List.of(pending,delivered),
-            new GameSave(dev.yoru.game.Gen3Fixture.save(2,4),Instant.parse("2026-09-07T08:00:00Z")));
+            new GameSave(dev.yoru.game.Gen3Fixture.save(2,4),Instant.parse("2026-09-07T08:00:00Z")),
+            new Notes(List.of(classes,biology,old),List.of(lecture,scrap,inbox)));
     }
 
     public static void main(String[] args)throws Exception{
@@ -116,6 +130,15 @@ public final class PortableVaultTest {
         check(restored.tasks().getFirst().createdAt().equals(Instant.parse("2026-09-01T12:00:00Z")),"createdAt survives");
         check(restored.tasks().getFirst().notes().equals(original.tasks().getFirst().notes()),"Newlines and quotes in notes survive");
         check(restored.rewards().get(1).deliveredAt().equals(Instant.parse("2026-09-02T09:00:00Z")),"The delivery time survives");
+        check(restored.notes().equals(original.notes()),"Folders and pages survive, trashed ones included");
+        check(restored.tasks().getFirst().pageIds().size()==2,"A task keeps the pages it links to");
+        check(restored.notes().pages().getFirst().body().length()>70_000,"A long page is not cut short");
+        // A format 2 file, from before Pages, still imports: no pages, no links.
+        var formatTwo=json.replace("\"yoru\": 3","\"yoru\": 2").replaceAll(",\\s*\"pageIds\": \\[[^\\]]*\\]","");
+        formatTwo=formatTwo.substring(0,formatTwo.indexOf(",\n  \"folders\""))+"\n}";
+        var older=PortableVault.parse(formatTwo);
+        check(older.notes().pages().isEmpty()&&older.tasks().stream().allMatch(t->t.pageIds().isEmpty()),
+            "A format 2 file reads with no pages and no links");
         check(restored.rewards().get(1).level()==7,"The delivered level survives");
         check(restored.campaign().rewardedSeconds()==21600,"The reward ledger survives");
         check(restored.campaign().encountersUsed()==12,"Opened encounters survive");
@@ -147,7 +170,7 @@ public final class PortableVaultTest {
 
         // Refusals name the field. This is the tool people reach for when a vault
         // already looks wrong; "Invalid JSON" would not help anyone.
-        refuses(json.replace("\"yoru\": 2","\"yoru\": 99"),"format","A future format version is refused by name");
+        refuses(json.replace("\"yoru\": 3","\"yoru\": 99"),"format","A future format version is refused by name");
         refuses(json.replace("\"activities\"","\"activitys\""),"activities","A missing section is named");
         refuses(json.replace("\"targetMinutes\": 30","\"targetMinutes\": \"thirty\""),"targetMinutes","A wrong type is named");
         refuses(json.replace("\"name\": \"Study\"","\"name\": 5"),"name","A wrong type in a record is named");
@@ -173,7 +196,7 @@ public final class PortableVaultTest {
         refuses(json.replace("\"level\": 7","\"level\": 4294967303"),"level","A level past the int range is refused");
         // And in a format 1 file, where 2^32 would otherwise be the first species.
         String capture="{\"id\": \""+UUID.randomUUID()+"\", \"species\": SPECIES, \"caughtAt\": \"2026-09-01T08:00:00Z\"}";
-        String formatOne=json.replace("\"yoru\": 2","\"yoru\": 1,\n  \"collection\": {\"captures\": ["+capture
+        String formatOne=json.replace("\"yoru\": 3","\"yoru\": 1,\n  \"collection\": {\"captures\": ["+capture
             +"], \"encountersUsed\": 3, \"rewardedSeconds\": 5400}");
         check(PortableVault.parse(formatOne.replace("SPECIES","0")).rewards().stream().anyMatch(r->r.nationalDex()==252),
             "A format 1 capture still imports as a reward");
@@ -184,7 +207,7 @@ public final class PortableVaultTest {
         var cutTask=new Task(UUID.randomUUID(),null,null,"Revise \uD83D","",null,TaskStatus.TODO,"notion",
             Instant.parse("2026-09-01T12:00:00Z"),0,null);
         var cut=new State(List.of(),List.of(),List.of(),List.of(),List.of(cutTask),List.of(),List.of(),
-            Settings.defaults(),Campaign.start(1),List.of(),null);
+            Settings.defaults(),Campaign.start(1),List.of(),null,Notes.empty());
         var exported=java.nio.file.Files.createTempFile("yoru-export-",".json");
         try{
             java.nio.file.Files.writeString(exported,PortableVault.export(cut,when));
