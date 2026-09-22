@@ -281,7 +281,27 @@ public final class Model {
     }
 
     public record Habit(UUID id, String name, HabitKind kind, String zone,
-                        Set<LocalDate> checkIns, List<Instant> starts) {
+                        Set<LocalDate> checkIns, List<Instant> starts, LocalDate since) {
+        /** Kept for callers that predate the day a habit began (#55). */
+        public Habit(UUID id, String name, HabitKind kind, String zone, Set<LocalDate> checkIns, List<Instant> starts) {
+            this(id, name, kind, zone, checkIns, starts, began(checkIns, starts, zone));
+        }
+
+        /**
+         * The day a habit older than this field began: its first check-off, or
+         * the day its first period started, or today for one with no history.
+         *
+         * Consistency counts the days since a habit began (#55), so a habit
+         * from an older vault needs a beginning. The earliest thing it records
+         * is the honest one: it cannot have been kept before that.
+         */
+        private static LocalDate began(Set<LocalDate> checkIns, List<Instant> starts, String zone) {
+            var earliest = checkIns.stream().min(LocalDate::compareTo);
+            if (earliest.isPresent()) return earliest.get();
+            if (!starts.isEmpty()) return starts.getFirst().atZone(ZoneId.of(zone)).toLocalDate();
+            return LocalDate.now(ZoneId.of(zone));
+        }
+
         public Habit {
             Objects.requireNonNull(id); Objects.requireNonNull(kind);
             name = requireName(name,60,"name");
@@ -289,6 +309,7 @@ public final class Model {
             if (checkIns.size() > 100_000 || starts.size() > 100_000) throw new IllegalArgumentException("History limit reached.");
             if (kind == HabitKind.DAILY && !starts.isEmpty() || kind == HabitKind.TIME_SINCE && (starts.isEmpty() || !checkIns.isEmpty()))
                 throw new IllegalArgumentException("Invalid tracker history.");
+            Objects.requireNonNull(since);
             starts.forEach(Model::requireTime);
             for (int i=1; i<starts.size(); i++) if (!starts.get(i).isAfter(starts.get(i-1)))
                 throw new IllegalArgumentException("Restart must follow the previous start.");

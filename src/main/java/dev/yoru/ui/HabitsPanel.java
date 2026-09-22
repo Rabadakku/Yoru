@@ -1,5 +1,6 @@
 package dev.yoru.ui;
 import dev.yoru.application.Analytics;
+import dev.yoru.application.HabitStats;
 import dev.yoru.application.Tracker;
 import dev.yoru.domain.Model.*;
 import javax.swing.*;
@@ -29,62 +30,189 @@ final class HabitsPanel {
 
     static JPanel view(Tracker tracker,Runnable refresh) {
         var body=stack();
-        body.add(YoruApp.pageHeaderFor("Habits","DAILY CHECK-OFFS · TIME SINCE",
+        body.add(YoruApp.pageHeaderFor("Habits","STREAKS · CONSISTENCY · TIME SINCE",
             button("+ Daily check-off",()->create(tracker,refresh,HabitKind.DAILY,body)),
             button("+ Time since",()->create(tracker,refresh,HabitKind.TIME_SINCE,body))));
         if(tracker.state().habits().isEmpty()) {
             body.add(emptyState("No habits yet.",
                 "Check off a day, or count the time since you stopped.",null));
-            gap(body,SPACE_LG);
+            return body;
         }
-        for(var h:tracker.state().habits()) {
-            body.add(habitCard(tracker,refresh,h));
-            gap(body,SPACE_MD);
+        // Two columns of their own kind, so both are on screen at once: the two
+        // kinds used to alternate down one column of full-width cards, each tall
+        // enough that you saw two of them (#53).
+        var daily=stack();
+        var since=stack();
+        daily.add(sectionHeader("DAILY · STREAKS AND CONSISTENCY"));
+        gap(daily,SPACE_SM);
+        since.add(sectionHeader("TIME SINCE"));
+        gap(since,SPACE_SM);
+        int dailyCount=0,sinceCount=0;
+        for(var habit:tracker.state().habits()) {
+            if(habit.kind()==HabitKind.DAILY) { daily.add(dailyRow(tracker,refresh,habit)); gap(daily,SPACE_SM); dailyCount++; }
+            else { since.add(sinceRow(tracker,refresh,habit)); gap(since,SPACE_SM); sinceCount++; }
         }
+        if(dailyCount==0) daily.add(bodyLabel("No daily check-offs yet. Tick them off on the Tasks page once you have one."));
+        if(sinceCount==0) since.add(bodyLabel("No time-since trackers yet."));
+        glue(daily);
+        glue(since);
+        body.add(new Columns(daily,since));
+        gap(body,SPACE_XL);
         return body;
     }
 
-    private static JPanel habitCard(Tracker tracker,Runnable refresh,Habit habit) {
+    /**
+     * One daily habit: the streak, how consistent it has been, and the week so
+     * far. The whole history is a click away rather than always on screen.
+     */
+    private static JPanel dailyRow(Tracker tracker,Runnable refresh,Habit habit) {
+        var today=HabitStats.today(habit);
         var card=card();
-        var rename=ghost(button("Rename",()-> {
-            var input=new JTextField(habit.name(),24);
-            input.getAccessibleContext().setAccessibleName("Habit name");
-            while(Dialogs.confirm(card,input,"Rename habit","Save")) {
-                try {tracker.renameHabit(habit.id(),input.getText());refresh.run();break;}
-                catch(Exception error){Dialogs.error(card,error.getMessage());}
-            }
+        var name=shortenable(habit.name(),TYPE_HEADING,TEXT);
+        var month=HabitStats.lastDays(habit,today,30);
+        var history=ghost(button("History",()->Dialogs.info(card,habit.name(),historyGrid(tracker,refresh,habit))));
+        history.setName("habit.history."+habit.id());
+        history.setToolTipText("Every day this habit has been checked off, and the controls to correct them");
+        card.add(cardHead(name,history,renameButton(tracker,refresh,card,habit),deleteButton(tracker,refresh,card,habit)));
+        gap(card,SPACE_SM);
+        // A grid, not a flow row: four columns of two lines each, every column
+        // as tall as the tallest, so a wrapped caption cannot push its number
+        // out of the row it is in.
+        var numbers=new JPanel(new GridLayout(1,4,SPACE_MD,0));
+        numbers.setOpaque(false);
+        numbers.setAlignmentX(0);
+        var week=HabitStats.thisWeek(habit,today,tracker.state().settings().weekStartsOn());
+        numbers.add(figureLine(habit.streak(today)+"","DAY STREAK"));
+        numbers.add(figureLine(month.of()==0?"—":month.percent()+"%","LAST 30 DAYS"));
+        numbers.add(figureLine(HabitStats.longestStreak(habit)+"","BEST RUN"));
+        numbers.add(figureLine(week.done()+" / "+Math.max(week.of(),week.done()),"THIS WEEK"));
+        numbers.setMaximumSize(new Dimension(Integer.MAX_VALUE,numbers.getPreferredSize().height));
+        card.add(numbers);
+        gap(card,SPACE_SM);
+        card.add(weekStrip(tracker,refresh,habit,today));
+        gap(card,SPACE_XS);
+        card.add(label(month.of()==0?"Started today":month.toString()+" kept since "+DateText.date(habit.since()),
+            TYPE_CAPTION,MUTED));
+        return card;
+    }
+
+    /** A number over what it counts, for the row of figures on a habit. */
+    private static JPanel figureLine(String number,String caption) {
+        var column=stack();
+        var figure=label(number,TYPE_HEADING,TEXT);
+        var what=shortenable(caption,TYPE_CAPTION,MUTED);
+        what.setToolTipText(caption);
+        column.add(figure);
+        column.add(what);
+        return column;
+    }
+
+    /** The last seven days, each a cell that can still be corrected. */
+    private static JPanel weekStrip(Tracker tracker,Runnable refresh,Habit habit,LocalDate today) {
+        var strip=new JPanel(new GridLayout(1,7,SPACE_XS,0));
+        strip.setOpaque(false);
+        strip.setAlignmentX(0);
+        int side=grow(SPACE_XL);
+        strip.setMaximumSize(new Dimension(7*side+6*SPACE_XS,side));
+        for(int i=6;i>=0;i--) {
+            var date=today.minusDays(i);
+            boolean done=habit.checkIns().contains(date);
+            var cell=selected(button("",()->act(strip,refresh,()->tracker.checkIn(habit.id(),date,!done))),done);
+            cell.setName("habit.day."+date);
+            cell.setPreferredSize(new Dimension(side,side));
+            cell.setToolTipText(DateText.date(date)+(done?" · done · click to undo":" · click to check off"));
+            cell.getAccessibleContext().setAccessibleName(date+(done?" completed":" not completed"));
+            if(date.equals(today)) cell.setBorder(controlBorder(ringFor(cell.getBackground())));
+            strip.add(cell);
+        }
+        return strip;
+    }
+
+    /** One time-since tracker, as a line rather than a card of its own (#52). */
+    private static JPanel sinceRow(Tracker tracker,Runnable refresh,Habit habit) {
+        var card=card();
+        var zone=ZoneId.of(habit.zone());
+        var elapsed=label("",TYPE_HEADING,CYAN);
+        elapsed.setName("habit.elapsed."+habit.id());
+        Runnable update=()-> {
+            long seconds=Math.max(0,Duration.between(habit.starts().getLast(),Instant.now()).getSeconds());
+            // No seconds: they tick for nothing, and two trackers started in the
+            // same minute now agree to the minute anyway (#50, #52).
+            elapsed.setText(String.format("%dd %02dh %02dm",seconds/86400,seconds/3600%24,seconds/60%60));
+        };
+        update.run();
+        // A minute is as often as this can change.
+        var timer=new Timer(60_000,e->update.run());
+        elapsed.addHierarchyListener(e->{if(elapsed.isShowing())timer.start();else timer.stop();});
+        var again=ghost(button("Start again",()-> {
+            if(Dialogs.confirm(card,"Start a new period now? Your previous periods stay in history.","Start again","Start again"))
+                act(card,refresh,()->tracker.restartHabit(habit.id()));
         }));
+        again.setName("habit.restart."+habit.id());
+        again.setToolTipText("End this period and start a new one now");
+        var more=ghost(button("⋯",()->{ }));
+        more.setName("habit.more."+habit.id());
+        more.setToolTipText("Edit the start, see the history, rename or delete");
+        more.addActionListener(e->sinceMenu(tracker,refresh,card,habit,zone).show(more,0,more.getHeight()));
+        card.add(cardHead(shortenable(habit.name(),TYPE_HEADING,TEXT),again,more));
+        gap(card,SPACE_SM);
+        card.add(elapsed);
+        card.add(label("since "+habit.starts().getLast().atZone(zone).toLocalDateTime().format(WHEN),TYPE_CAPTION,MUTED));
+        return card;
+    }
+
+    private static JPopupMenu sinceMenu(Tracker tracker,Runnable refresh,JPanel card,Habit habit,ZoneId zone) {
+        var menu=Menus.popup();
+        menu.add(Menus.item("Edit start date…","habit.editStart."+habit.id(),true,()-> {
+            var input=new DateTimeField(habit.starts().getLast(),zone);
+            while(Dialogs.confirm(card,input,"Edit current period start","Save")) {
+                try{tracker.editHabitStart(habit.id(),input.value());refresh.run();break;}
+                catch(Exception error){Dialogs.error(card,"Check date",error.getMessage());}
+            }
+        },null));
+        menu.add(Menus.item("History…","habit.periods."+habit.id(),true,
+            ()->Dialogs.info(card,"Your history",history(tracker,habit.id(),zone,refresh)),null));
+        menu.addSeparator();
+        menu.add(Menus.item("Rename…","habit.renameMenu."+habit.id(),true,()->rename(tracker,refresh,card,habit),null));
+        menu.add(Menus.item("Delete…","habit.deleteMenu."+habit.id(),true,()->delete(tracker,refresh,card,habit),null));
+        return menu;
+    }
+
+    private static JButton renameButton(Tracker tracker,Runnable refresh,JPanel card,Habit habit) {
+        var rename=ghost(button("Rename",()->rename(tracker,refresh,card,habit)));
         rename.setName("habit.rename."+habit.id());
         rename.getAccessibleContext().setAccessibleName("Rename "+habit.name());
-        var delete=ghost(button("Delete",()-> {
-            if(Dialogs.confirm(card,"Delete this habit and its history? Other habits and study records stay unchanged. A vault backup is kept first.",
-                "Delete "+habit.name(),"Delete habit"))
-                act(card,refresh,()->tracker.deleteHabit(habit.id()));
-        }));
+        return rename;
+    }
+
+    private static JButton deleteButton(Tracker tracker,Runnable refresh,JPanel card,Habit habit) {
+        var delete=ghost(button("Delete",()->delete(tracker,refresh,card,habit)));
         delete.setName("habit.delete."+habit.id());
         delete.getAccessibleContext().setAccessibleName("Delete "+habit.name());
-        // The one thing this card is for sits with its name, where the eye
-        // already is, and the two that manage the card follow it.
-        var name=shortenable(habit.name(),TYPE_HEADING,TEXT);
-        if(habit.kind()==HabitKind.DAILY) {
-            var today=LocalDate.now(ZoneId.of(habit.zone()));
-            boolean checked=habit.checkIns().contains(today);
-            // The app's own check control rather than a stock JCheckBox: a stock
-            // box is 14 px of platform chrome sitting among drawn cells and
-            // buttons, and its label baseline missed the row rhythm.
-            var check=button("Done today",()->act(card,refresh,()->tracker.checkIn(habit.id(),today,!checked)));
-            check.setName("habit.done");
-            check.getAccessibleContext().setAccessibleName(checked?"Done today, checked":"Done today, not checked");
-            selected(check,checked);
-            card.add(cardHead(name,check,rename,delete));
-            gap(card,SPACE_MD);
-            daily(tracker,refresh,habit,card);
-        } else {
-            card.add(cardHead(name,rename,delete));
-            gap(card,SPACE_MD);
-            since(tracker,refresh,habit,card);
+        return delete;
+    }
+
+    private static void rename(Tracker tracker,Runnable refresh,java.awt.Component owner,Habit habit) {
+        var input=new JTextField(habit.name(),24);
+        input.getAccessibleContext().setAccessibleName("Habit name");
+        while(Dialogs.confirm(owner,input,"Rename habit","Save")) {
+            try {tracker.renameHabit(habit.id(),input.getText());refresh.run();break;}
+            catch(Exception error){Dialogs.error(owner,error.getMessage());}
         }
-        return card;
+    }
+
+    private static void delete(Tracker tracker,Runnable refresh,java.awt.Component owner,Habit habit) {
+        if(Dialogs.confirm(owner,"Delete this habit and its history? Other habits and study records stay unchanged. A vault backup is kept first.",
+            "Delete "+habit.name(),"Delete habit"))
+            act(owner,refresh,()->tracker.deleteHabit(habit.id()));
+    }
+
+    /** Every day a daily habit has been checked off, with the grid to correct them. */
+    static JComponent historyGrid(Tracker tracker,Runnable refresh,Habit habit) {
+        var box=stack();
+        box.setPreferredSize(new Dimension(grow(520),grow(360)));
+        daily(tracker,refresh,habit,box);
+        return new JScrollPane(box);
     }
 
     private static void daily(Tracker tracker,Runnable refresh,Habit habit,JPanel card) {

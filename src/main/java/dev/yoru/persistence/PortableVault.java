@@ -27,9 +27,10 @@ public final class PortableVault {
      * dropped the game: a file from an older format still imports, and whatever
      * it held for the game is read past. A build that reads only up to 3 refuses
      * a format 4 file rather than dropping what it does not understand. Format 5
-     * added the Anki integration and the counts it last saw.
+     * added the Anki integration and the counts it last saw. Format 6 added the
+     * day a habit began.
      */
-    public static final int FORMAT = 5;
+    public static final int FORMAT = 6;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -180,6 +181,7 @@ public final class PortableVault {
         // is useless for diffing one against another.
         m.put("checkIns", h.checkIns().stream().sorted().map(LocalDate::toString).toList());
         m.put("starts", h.starts().stream().map(Instant::toString).toList());
+        m.put("since", h.since().toString());
         return m;
     }
 
@@ -291,8 +293,12 @@ public final class PortableVault {
         for (var value : Json.array(required(m, "checkIns"))) checkIns.add(LocalDate.parse(Json.string(value)));
         var starts = new ArrayList<Instant>();
         for (var value : Json.array(required(m, "starts"))) starts.add(Instant.parse(Json.string(value)));
-        return new Habit(id(m, "id"), text(m, "name"), enumeration(HabitKind.class, text(m, "kind")),
-            text(m, "zone"), checkIns, starts);
+        // Before format 6 a habit had no beginning; the record works one out.
+        return m.get("since") == null
+            ? new Habit(id(m, "id"), text(m, "name"), enumeration(HabitKind.class, text(m, "kind")),
+                text(m, "zone"), checkIns, starts)
+            : new Habit(id(m, "id"), text(m, "name"), enumeration(HabitKind.class, text(m, "kind")),
+                text(m, "zone"), checkIns, starts, optionalDate(m, "since"));
     }
 
     // --------------------------------------------------------------- reading

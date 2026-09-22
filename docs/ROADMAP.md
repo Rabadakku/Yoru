@@ -1,6 +1,19 @@
 # Yoru roadmap
 
-## In review — Today at a glance, Anki in Settings (#85, #86, #54)
+## In review — the Habits page (#53, #52, #55)
+
+Both kinds of habit are on screen at once: daily habits on the left with their
+streak, consistency, best run and week, and time-since trackers on the right as
+a line each rather than a card each. The four-week grid moved into a history a
+click away, and the page keeps the last seven days, which is what a correction
+usually needs.
+
+Consistency is the share of days kept since the habit began (`HabitStats`),
+which is the number a streak cannot give: one missed day sets a streak to zero
+however well the month went. A habit now records the day it began (schema 17,
+export format 6); one from an older vault takes its first check-off.
+
+## Shipped — Today at a glance, Anki in Settings (#85, #86, #54)
 
 Today is what today is: the clock, the day's schedule, the tasks it wants and
 the habits still to tick off, and one line of Anki. The 52-week heat map and

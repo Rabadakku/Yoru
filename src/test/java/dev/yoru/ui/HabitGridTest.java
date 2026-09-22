@@ -66,7 +66,9 @@ public final class HabitGridTest {
             var settings=tracker.state().settings();
             tracker.settings(new Settings(settings.theme(),settings.dailyGoalHours(),
                 settings.minSessionSeconds(),start));
-            var page=HabitsPanel.view(tracker,()->{});
+            // The four-week grid moved into the history a click away; the page
+            // itself shows the last seven days (#53).
+            var page=HabitsPanel.historyGrid(tracker,()->{},tracker.state().habits().getFirst());
 
             var oldest=today.with(java.time.temporal.TemporalAdjusters.previousOrSame(start)).minusWeeks(3);
             check(cell(page,oldest)!=null,"The grid reaches back four weeks, to "+oldest);
@@ -100,9 +102,12 @@ public final class HabitGridTest {
                 "The heat map's first cell is the "+start+" fifty-two weeks back, got "+corner);
         }
 
-        // The grid is still the way a day is corrected.
-        var page=HabitsPanel.view(tracker,()->{});
-        var yesterday=cell(page,LocalDate.now().minusDays(1));
+        // The week strip on the page is the quick way to correct a day; the
+        // grid in the history is the long way. Both check the same days off.
+        var strip=HabitsPanel.view(tracker,()->{});
+        var yesterday=cell(strip,LocalDate.now().minusDays(1));
+        check(yesterday!=null,"The page shows the last seven days");
+        check(cell(strip,LocalDate.now().minusDays(7))==null,"and no more than seven");
         yesterday.doClick();
         check(tracker.state().habits().getFirst().checkIns().contains(LocalDate.now().minusDays(1)),
             "Clicking a day checks it off");

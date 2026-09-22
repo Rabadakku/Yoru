@@ -90,7 +90,7 @@ final class TodayPage {
         var rail=stack();
         rail.add(agenda);
         glue(rail);
-        p.add(new Hero(focusCard(),rail));
+        p.add(new Columns(focusCard(),rail));
         gap(p,SPACE_XL);
 
         var daily=Analytics.daily(tracker.state(),null,zone,Instant.now());
@@ -112,7 +112,7 @@ final class TodayPage {
         // What is left of the day, side by side: the tasks it wants and the
         // habits still to tick off. Both are summaries; the pages that own them
         // hold the detail (#86).
-        p.add(new Hero(tasksCard(today),HabitChecklist.card(tracker,()->shell.show("Today"),shell::error)));
+        p.add(new Columns(tasksCard(today),HabitChecklist.card(tracker,()->shell.show("Today"),shell::error)));
         gap(p,SPACE_LG);
         ankiCard.render();
         p.add(ankiCard);
@@ -266,45 +266,6 @@ final class TodayPage {
      * The threshold is met by a layout swap rather than a fixed width on one of
      * the children, so the pair reflows instead of overflowing.
      */
-    private static final class Hero extends JPanel {
-        private static final int STACK_BELOW=760;
-        private final JComponent left,right;
-        private boolean stacked;
-        Hero(JComponent left,JComponent right) {
-            this.left=left; this.right=right;
-            setOpaque(false);
-            setAlignmentX(0);
-            apply(false);
-            addComponentListener(new ComponentAdapter() {
-                @Override public void componentResized(ComponentEvent e) { apply(getWidth()<STACK_BELOW); }
-            });
-        }
-        private void apply(boolean stack) {
-            if(getComponentCount()>0&&stack==stacked)return;
-            stacked=stack;
-            removeAll();
-            if(stack) {
-                // A vertical box, not a 2x1 grid: a grid forces both rows to the
-                // same height, so the shorter card was padded with empty space
-                // instead of being the size its own content asks for.
-                setLayout(new BoxLayout(this,BoxLayout.Y_AXIS));
-                holdToOwnHeight(left);
-                holdToOwnHeight(right);
-                add(left);
-                add(Box.createVerticalStrut(SPACE_LG));
-                add(right);
-            } else {
-                setLayout(new GridLayout(1,2,SPACE_LG,0));
-                add(left); add(right);
-            }
-            revalidate(); repaint();
-        }
-
-        /** In the vertical box each card takes its own height; the box pads nothing. */
-        private static void holdToOwnHeight(JComponent card) {
-            card.setMaximumSize(new Dimension(Integer.MAX_VALUE,card.getPreferredSize().height));
-        }
-    }
 
     private JPanel schedulePreview() {
         var tracker=tracker();

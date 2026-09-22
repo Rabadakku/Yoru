@@ -131,7 +131,7 @@ public final class PortableVaultTest {
         check(restored.tasks().getFirst().pageIds().size()==2,"A task keeps the pages it links to");
         check(restored.notes().pages().getFirst().body().length()>70_000,"A long page is not cut short");
         // A format 2 file, from before Pages, still imports: no pages, no links.
-        var formatTwo=json.replace("\"yoru\": 5","\"yoru\": 2").replaceAll(",\\s*\"pageIds\": \\[[^\\]]*\\]","");
+        var formatTwo=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 2").replaceAll(",\\s*\"pageIds\": \\[[^\\]]*\\]","");
         formatTwo=formatTwo.substring(0,formatTwo.indexOf(",\n  \"folders\""))+"\n}";
         var older=PortableVault.parse(formatTwo);
         check(older.notes().pages().isEmpty()&&older.tasks().stream().allMatch(t->t.pageIds().isEmpty()),
@@ -162,7 +162,7 @@ public final class PortableVaultTest {
 
         // Refusals name the field. This is the tool people reach for when a vault
         // already looks wrong; "Invalid JSON" would not help anyone.
-        refuses(json.replace("\"yoru\": 5","\"yoru\": 99"),"format","A future format version is refused by name");
+        refuses(json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 99"),"format","A future format version is refused by name");
         refuses(json.replace("\"activities\"","\"activitys\""),"activities","A missing section is named");
         refuses(json.replace("\"targetMinutes\": 30","\"targetMinutes\": \"thirty\""),"targetMinutes","A wrong type is named");
         refuses(json.replace("\"name\": \"Study\"","\"name\": 5"),"name","A wrong type in a record is named");
@@ -187,7 +187,7 @@ public final class PortableVaultTest {
             "A daily goal past the int range is refused, not read as 7");
         // A file from before the game was removed still imports: what it held
         // for the game is simply ignored (#58).
-        String withGame=json.replace("\"yoru\": 5","\"yoru\": 3,\n  \"campaign\": {\"seed\": 42, \"encountersUsed\": 3, \"rewardedSeconds\": 5400},\n"
+        String withGame=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 3,\n  \"campaign\": {\"seed\": 42, \"encountersUsed\": 3, \"rewardedSeconds\": 5400},\n"
             +"  \"rewards\": [{\"id\": \""+UUID.randomUUID()+"\", \"nationalDex\": 252, \"level\": 5, \"earnedAt\": \"2026-09-01T08:00:00Z\", \"deliveredAt\": null}]");
         var withoutGame=PortableVault.parse(withGame);
         check(withoutGame.tasks().size()==restored.tasks().size(),"An older file's tasks still import");

@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=16, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=17, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -249,6 +249,8 @@ public final class EncryptedVault implements Repository {
                     uuid(out,h.id()); out.writeUTF(h.name()); out.writeUTF(h.kind().name()); out.writeUTF(h.zone());
                     out.writeInt(h.checkIns().size()); for(var day:new TreeSet<>(h.checkIns())) out.writeLong(day.toEpochDay());
                     out.writeInt(h.starts().size()); for(var start:h.starts()) instant(out,start);
+                    // Schema 17: the day the habit began, which consistency counts from (#55).
+                    out.writeLong(h.since().toEpochDay());
                 }
                 out.writeInt(state.tags().size());
                 for (var tag : state.tags()) { uuid(out,tag.id()); out.writeUTF(tag.name()); out.writeInt(tag.colour()); }
@@ -399,7 +401,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 16.
+     * Reads any schema from 1 to 17.
      *
      * Every field older vaults lack arrives as a sensible empty, and everything
      * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
@@ -504,7 +506,10 @@ public final class EncryptedVault implements Repository {
                 var dates=new HashSet<LocalDate>();
                 for(int d=count(in);d>0;d--) dates.add(LocalDate.ofEpochDay(in.readLong()));
                 var starts=new ArrayList<Instant>(); for(int d=count(in);d>0;d--) starts.add(instant(in));
-                habits.add(new Habit(id,name,kind,zone,dates,starts));
+                // Before schema 17 a habit had no beginning; the record works one
+                // out from the earliest thing it records.
+                habits.add(schema>=17 ? new Habit(id,name,kind,zone,dates,starts,LocalDate.ofEpochDay(in.readLong()))
+                    : new Habit(id,name,kind,zone,dates,starts));
             }
             var tags=new ArrayList<Tag>();
             var settings=Settings.defaults();
