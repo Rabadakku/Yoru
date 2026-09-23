@@ -32,9 +32,10 @@ public final class TaskCalendarTest {
 
     /** Records what the calendar asked for, so a drag can be asserted exactly. */
     private static final class Recorder implements TaskCalendar.Edits {
-        UUID task; LocalDate date; int calls; LocalDate created; int creates;
+        UUID task; LocalDate date; int calls; LocalDate created; int creates; UUID opened;
         public void reschedule(UUID task,LocalDate date){this.task=task;this.date=date;calls++;}
         public void create(LocalDate date){created=date;creates++;}
+        public void open(UUID task){opened=task;}
     }
 
     private static void doubleClick(TaskCalendar calendar,Point at){
@@ -153,6 +154,7 @@ public final class TaskCalendarTest {
             "double-clicking an empty day asks for a task due that day");
         doubleClick(calendar,calendar.pointOn(dated));
         check(recorder.creates==1,"double-clicking a task's chip does not make another task");
+        check(dated.equals(recorder.opened),"it opens that task instead (#57)");
         doubleClick(calendar,calendar.centreOfTray());
         check(recorder.creates==1,"the undated strip is not a day");
         check(recorder.calls==before,"and making a task moves nothing");

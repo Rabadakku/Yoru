@@ -27,6 +27,8 @@ final class TaskCalendar extends JPanel {
         void reschedule(UUID taskId, LocalDate date);
         /** A day was double-clicked where no task sits: a new task for that day (#67). */
         default void create(LocalDate date) { }
+        /** A task's chip was double-clicked: open it, to finish, skip or change it there (#57). */
+        default void open(UUID taskId) { }
     }
 
     /**
@@ -358,7 +360,8 @@ final class TaskCalendar extends JPanel {
                 // form opens due that day rather than today (#67).
                 if (e.getClickCount() != 2 || !SwingUtilities.isLeftMouseButton(e)) return;
                 relayout();
-                if (taskAt(e.getPoint()) != null) return;
+                var task = taskAt(e.getPoint());
+                if (task != null) { edits.open(task); return; }
                 var date = dateAt(e.getPoint());
                 if (date != null) edits.create(date);
             }

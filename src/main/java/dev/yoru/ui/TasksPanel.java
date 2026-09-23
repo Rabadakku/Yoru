@@ -328,6 +328,9 @@ final class TasksPanel extends JPanel implements Scrollable {
                 } catch(Exception e){error(e);}
             }
             @Override public void create(LocalDate date) { edit(null,date); }
+            @Override public void open(UUID taskId) {
+                tracker.state().tasks().stream().filter(t->t.id().equals(taskId)).findFirst().ifPresent(t->edit(t));
+            }
         });
         calendar.setName("task.calendar");
         var frame=new JPanel(new BorderLayout());
