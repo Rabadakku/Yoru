@@ -4,8 +4,11 @@ import dev.yoru.application.Tracker;
 import dev.yoru.domain.Model.Habit;
 import dev.yoru.domain.Model.HabitKind;
 import java.awt.*;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import static dev.yoru.ui.Theme.*;
@@ -27,10 +30,19 @@ final class HabitChecklist {
 
     /** The daily habits, each with today's box. Empty when there are none. */
     static JPanel card(Tracker tracker, Runnable refresh, java.util.function.Consumer<Exception> onError) {
+        return card(tracker, refresh, onError, Clock.systemUTC());
+    }
+
+    /**
+     * The same, on a given clock. Each habit's today is read in the habit's
+     * own zone, so the day turns over at that zone's midnight whatever the
+     * clock's zone is.
+     */
+    static JPanel card(Tracker tracker, Runnable refresh, java.util.function.Consumer<Exception> onError, Clock clock) {
         var daily = tracker.state().habits().stream().filter(h -> h.kind() == HabitKind.DAILY).toList();
         var card = Theme.card();
         int done = 0;
-        for (var habit : daily) if (checkedToday(habit)) done++;
+        for (var habit : daily) if (checkedToday(habit, clock)) done++;
         card.add(cardHead(sectionHeader("HABITS TODAY"),
             label(daily.isEmpty() ? "" : done + " of " + daily.size() + " done", TYPE_CAPTION,
                 done == daily.size() ? ACCENT_TEXT : MUTED)));
@@ -39,18 +51,54 @@ final class HabitChecklist {
             card.add(bodyLabel("No daily habits yet. Add one on the Habits page."));
             return card;
         }
-        for (var habit : daily) card.add(row(tracker, habit, refresh, onError));
+        var boxes = new ArrayList<JCheckBox>();
+        for (var habit : daily) {
+            var row = row(tracker, habit, refresh, onError, clock);
+            boxes.add((JCheckBox) ((BorderLayout) row.getLayout()).getLayoutComponent(BorderLayout.CENTER));
+            card.add(row);
+        }
+        arrows(boxes);
         return card;
     }
 
+    /**
+     * Up and Down step through the list as they do through a list anywhere
+     * else, and Space ticks the one that has focus: the whole morning's
+     * habits can be ticked off without the mouse.
+     */
+    private static void arrows(List<JCheckBox> boxes) {
+        for (int i = 0; i < boxes.size(); i++) {
+            var box = boxes.get(i);
+            var above = i > 0 ? boxes.get(i - 1) : null;
+            var below = i + 1 < boxes.size() ? boxes.get(i + 1) : null;
+            step(box, "UP", "habit.previous", above);
+            step(box, "DOWN", "habit.next", below);
+        }
+    }
+
+    private static void step(JCheckBox from, String key, String name, JCheckBox to) {
+        from.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(key), name);
+        from.getActionMap().put(name, new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent e) {
+                if (to != null) to.requestFocusInWindow();
+            }
+            @Override public boolean isEnabled() { return to != null; }
+        });
+    }
+
     /** Whether this habit is checked off for today, in the habit's own zone. */
-    static boolean checkedToday(Habit habit) {
-        return habit.checkIns().contains(LocalDate.now(ZoneId.of(habit.zone())));
+    static boolean checkedToday(Habit habit, Clock clock) {
+        return habit.checkIns().contains(today(habit, clock));
+    }
+
+    /** Today where the habit is kept, which is where its day begins and ends. */
+    static LocalDate today(Habit habit, Clock clock) {
+        return LocalDate.ofInstant(clock.instant(), ZoneId.of(habit.zone()));
     }
 
     private static JPanel row(Tracker tracker, Habit habit, Runnable refresh,
-                              java.util.function.Consumer<Exception> onError) {
-        var today = LocalDate.now(ZoneId.of(habit.zone()));
+                              java.util.function.Consumer<Exception> onError, Clock clock) {
+        var today = today(habit, clock);
         boolean done = habit.checkIns().contains(today);
         var line = new JPanel(new BorderLayout(SPACE_SM, 0));
         line.setOpaque(false);

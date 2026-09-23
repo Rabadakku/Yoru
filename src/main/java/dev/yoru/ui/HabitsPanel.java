@@ -6,7 +6,6 @@ import dev.yoru.domain.Model.*;
 import javax.swing.*;
 import java.awt.*;
 import java.time.*;
-import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.Locale;
 import static dev.yoru.ui.Theme.*;
@@ -20,9 +19,6 @@ import static dev.yoru.ui.Theme.*;
  * stack and lets the window scroll it, like every other page.
  */
 final class HabitsPanel {
-    /** One formatter for every "when" this page prints, so they cannot disagree. */
-    private static final DateTimeFormatter WHEN=DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-
     /** How far back a daily habit's grid reaches: four weeks of columns. */
     private static final int WEEKS=4;
 
@@ -40,20 +36,27 @@ final class HabitsPanel {
         }
         // Two columns of their own kind, so both are on screen at once: the two
         // kinds used to alternate down one column of full-width cards, each tall
-        // enough that you saw two of them (#53).
+        // enough that you saw two of them (#53). Each kind is one card of rows,
+        // a list rather than a card per habit, so six daily habits and eight
+        // trackers fit beside each other at a desktop size (#52).
+        var dailyHabits=tracker.state().habits().stream().filter(h->h.kind()==HabitKind.DAILY).toList();
+        var sinceHabits=tracker.state().habits().stream().filter(h->h.kind()==HabitKind.TIME_SINCE).toList();
         var daily=stack();
         var since=stack();
         daily.add(sectionHeader("DAILY · STREAKS AND CONSISTENCY"));
         gap(daily,SPACE_SM);
         since.add(sectionHeader("TIME SINCE"));
         gap(since,SPACE_SM);
-        int dailyCount=0,sinceCount=0;
-        for(var habit:tracker.state().habits()) {
-            if(habit.kind()==HabitKind.DAILY) { daily.add(dailyRow(tracker,refresh,habit)); gap(daily,SPACE_SM); dailyCount++; }
-            else { since.add(sinceRow(tracker,refresh,habit)); gap(since,SPACE_SM); sinceCount++; }
-        }
-        if(dailyCount==0) daily.add(bodyLabel("No daily check-offs yet. Tick them off on the Tasks page once you have one."));
-        if(sinceCount==0) since.add(bodyLabel("No time-since trackers yet."));
+        var dailyList=list();
+        for(int i=0;i<dailyHabits.size();i++)
+            dailyList.add(dailyRow(tracker,refresh,dailyHabits.get(i),i==dailyHabits.size()-1));
+        if(dailyHabits.isEmpty()) dailyList.add(bodyLabel("No daily check-offs yet. Tick them off on the Tasks page once you have one."));
+        var sinceList=list();
+        for(int i=0;i<sinceHabits.size();i++)
+            sinceList.add(sinceRow(tracker,refresh,sinceHabits.get(i),i==sinceHabits.size()-1));
+        if(sinceHabits.isEmpty()) sinceList.add(bodyLabel("No time-since trackers yet."));
+        daily.add(dailyList);
+        since.add(sinceList);
         glue(daily);
         glue(since);
         body.add(new Columns(daily,since));
@@ -61,59 +64,135 @@ final class HabitsPanel {
         return body;
     }
 
-    /**
-     * One daily habit: the streak, how consistent it has been, and the week so
-     * far. The whole history is a click away rather than always on screen.
-     */
-    private static JPanel dailyRow(Tracker tracker,Runnable refresh,Habit habit) {
-        var today=HabitStats.today(habit);
-        var card=card();
-        var name=shortenable(habit.name(),TYPE_HEADING,TEXT);
-        var month=HabitStats.lastDays(habit,today,30);
-        var history=ghost(button("History",()->Dialogs.info(card,habit.name(),historyGrid(tracker,refresh,habit))));
-        history.setName("habit.history."+habit.id());
-        history.setToolTipText("Every day this habit has been checked off, and the controls to correct them");
-        card.add(cardHead(name,history,renameButton(tracker,refresh,card,habit),deleteButton(tracker,refresh,card,habit)));
-        gap(card,SPACE_SM);
-        // A grid, not a flow row: four columns of two lines each, every column
-        // as tall as the tallest, so a wrapped caption cannot push its number
-        // out of the row it is in.
-        var numbers=new JPanel(new GridLayout(1,4,SPACE_MD,0));
-        numbers.setOpaque(false);
-        numbers.setAlignmentX(0);
-        var week=HabitStats.thisWeek(habit,today,tracker.state().settings().weekStartsOn());
-        numbers.add(figureLine(habit.streak(today)+"","DAY STREAK"));
-        numbers.add(figureLine(month.of()==0?"—":month.percent()+"%","LAST 30 DAYS"));
-        numbers.add(figureLine(HabitStats.longestStreak(habit)+"","BEST RUN"));
-        numbers.add(figureLine(week.done()+" / "+Math.max(week.of(),week.done()),"THIS WEEK"));
-        numbers.setMaximumSize(new Dimension(Integer.MAX_VALUE,numbers.getPreferredSize().height));
-        card.add(numbers);
-        gap(card,SPACE_SM);
-        card.add(weekStrip(tracker,refresh,habit,today));
-        gap(card,SPACE_XS);
-        card.add(label(month.of()==0?"Started today":month.toString()+" kept since "+DateText.date(habit.since()),
-            TYPE_CAPTION,MUTED));
-        return card;
+    /** One card that a column's rows are listed in, edge to edge, divided by hairlines. */
+    private static JPanel list() {
+        var list=card();
+        // The rows carry their own padding and rules, as the task table's do;
+        // the card keeps only enough room to round its corners.
+        list.setBorder(new javax.swing.border.EmptyBorder(SPACE_XS,SPACE_SM,SPACE_XS,SPACE_SM));
+        return list;
     }
 
-    /** A number over what it counts, for the row of figures on a habit. */
-    private static JPanel figureLine(String number,String caption) {
-        var column=stack();
-        var figure=label(number,TYPE_HEADING,TEXT);
-        var what=shortenable(caption,TYPE_CAPTION,MUTED);
-        what.setToolTipText(caption);
-        column.add(figure);
-        column.add(what);
+    /**
+     * One daily habit, as two lines: its name over the last seven days, then
+     * the run it is on and how consistent it has been, which is the number a
+     * streak cannot give (#55). The best run and the week so far are in the
+     * tooltips and the history, which is behind the name, a click away.
+     */
+    private static JPanel dailyRow(Tracker tracker,Runnable refresh,Habit habit,boolean last) {
+        var today=HabitStats.today(habit);
+        var month=HabitStats.lastDays(habit,today,30);
+        var line=listLine(last);
+        line.setName("habit.row."+habit.id());
+
+        var left=stack();
+        var name=shortenable(habit.name(),TYPE_BODY,TEXT);
+        name.setName("habit.name."+habit.id());
+        name.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        name.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                if(SwingUtilities.isLeftMouseButton(e)) showHistory(tracker,refresh,line,habit);
+            }
+        });
+        left.add(name);
+        gap(left,SPACE_XS);
+        left.add(weekStrip(tracker,refresh,habit,today));
+        line.add(left,BorderLayout.CENTER);
+
+        String summary=summary(tracker,habit,today);
+        int streak=habit.streak(today);
+        // "day streak" is one compound, so the count never makes it a plural.
+        var run=figure(streak+"","day streak",summary);
+        run.setName("habit.streak."+habit.id());
+        run.getAccessibleContext().setAccessibleName("Streak: "+plural(streak,"day"));
+        var kept=figure(month.of()==0?"—":month.percent()+"%","last 30 days",
+            (month.of()==0?"Started today":month+" kept since "+DateText.date(habit.since())));
+        kept.setName("habit.consistency."+habit.id());
+        kept.getAccessibleContext().setAccessibleName("Consistency, last 30 days: "
+            +(month.of()==0?"not started":month.percent()+" percent, "+month));
+        var more=ghost(button("⋯",()->{ }));
+        more.setName("habit.more."+habit.id());
+        more.setToolTipText("History, rename or delete");
+        more.getAccessibleContext().setAccessibleName("Actions for "+habit.name());
+        more.addActionListener(e->dailyMenu(tracker,refresh,line,habit).show(more,0,more.getHeight()));
+        line.add(trailing(run,kept,more),BorderLayout.EAST);
+        return line;
+    }
+
+    /** Everything the row does not say out loud: the run, the best run, the week and the month. */
+    static String summary(Tracker tracker,Habit habit,LocalDate today) {
+        var week=HabitStats.thisWeek(habit,today,tracker.state().settings().weekStartsOn());
+        var month=HabitStats.lastDays(habit,today,30);
+        return plural(habit.streak(today),"day")+" in a row · best run "+plural(HabitStats.longestStreak(habit),"day")
+            +" · "+week.done()+" of "+Math.max(week.of(),week.done())+" this week · "
+            +(month.of()==0?"started today":month+" in the last 30");
+    }
+
+    /** A number over what it counts, right-aligned at a row's end, with the detail on hover. */
+    private static JPanel figure(String number,String caption,String detail) {
+        var column=new JPanel();
+        column.setOpaque(false);
+        column.setLayout(new BoxLayout(column,BoxLayout.Y_AXIS));
+        var value=label(number,TYPE_HEADING,TEXT);
+        var what=label(caption,TYPE_CAPTION,MUTED);
+        for(var part:new JLabel[]{value,what}) {
+            part.setAlignmentX(1f);
+            part.setToolTipText(detail);
+            column.add(part);
+        }
+        column.setToolTipText(detail);
+        column.getAccessibleContext().setAccessibleDescription(detail);
         return column;
+    }
+
+    private static JPopupMenu dailyMenu(Tracker tracker,Runnable refresh,JPanel owner,Habit habit) {
+        var menu=Menus.popup();
+        menu.add(Menus.item("History…","habit.history."+habit.id(),true,()->showHistory(tracker,refresh,owner,habit),null));
+        menu.addSeparator();
+        menu.add(Menus.item("Rename…","habit.rename."+habit.id(),true,()->rename(tracker,refresh,owner,habit),null));
+        menu.add(Menus.item("Delete…","habit.delete."+habit.id(),true,()->delete(tracker,refresh,owner,habit),null));
+        return menu;
+    }
+
+    private static void showHistory(Tracker tracker,Runnable refresh,Component owner,Habit habit) {
+        Dialogs.info(owner,habit.name(),historyGrid(tracker,refresh,habit));
+    }
+
+    /** A row of the list: what it is in the middle, its figures and controls at the end. */
+    private static JPanel listLine(boolean last) {
+        var line=new JPanel(new BorderLayout(SPACE_MD,0)) {
+            @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE,getPreferredSize().height); }
+        };
+        line.setOpaque(false);
+        line.setAlignmentX(0);
+        line.setBorder(last?listEnd():listRow());
+        return line;
+    }
+
+    /** The end of a row, centred on its height, with the controls last. */
+    private static JPanel trailing(JComponent... parts) {
+        var end=new JPanel();
+        end.setOpaque(false);
+        end.setLayout(new BoxLayout(end,BoxLayout.X_AXIS));
+        for(var part:parts) {
+            if(end.getComponentCount()>0) end.add(Box.createHorizontalStrut(SPACE_MD));
+            part.setAlignmentY(0.5f);
+            end.add(part);
+        }
+        return end;
     }
 
     /** The last seven days, each a cell that can still be corrected. */
     private static JPanel weekStrip(Tracker tracker,Runnable refresh,Habit habit,LocalDate today) {
+        int side=grow(SPACE_XL);
         var strip=new JPanel(new GridLayout(1,7,SPACE_XS,0));
         strip.setOpaque(false);
         strip.setAlignmentX(0);
-        int side=grow(SPACE_XL);
-        strip.setMaximumSize(new Dimension(7*side+6*SPACE_XS,side));
+        // Its own size in a column that would otherwise stretch seven cells
+        // across the whole row.
+        var size=new Dimension(7*side+6*SPACE_XS,side);
+        strip.setPreferredSize(size);
+        strip.setMaximumSize(size);
         for(int i=6;i>=0;i--) {
             var date=today.minusDays(i);
             boolean done=habit.checkIns().contains(date);
@@ -121,44 +200,70 @@ final class HabitsPanel {
             cell.setName("habit.day."+date);
             cell.setPreferredSize(new Dimension(side,side));
             cell.setToolTipText(DateText.date(date)+(done?" · done · click to undo":" · click to check off"));
-            cell.getAccessibleContext().setAccessibleName(date+(done?" completed":" not completed"));
+            cell.getAccessibleContext().setAccessibleName(DateText.date(date)+(done?" completed":" not completed"));
             if(date.equals(today)) cell.setBorder(controlBorder(ringFor(cell.getBackground())));
             strip.add(cell);
         }
         return strip;
     }
 
-    /** One time-since tracker, as a line rather than a card of its own (#52). */
-    private static JPanel sinceRow(Tracker tracker,Runnable refresh,Habit habit) {
-        var card=card();
+    /**
+     * How long a period has run, to the minute: "12d 4h 33m", "4h 33m", "33m".
+     *
+     * No seconds, which tick for nothing and pull the eye from the rest of the
+     * page, and no leading units that are zero (#52).
+     */
+    static String elapsed(Duration running) {
+        long minutes=Math.max(0,running.toMinutes());
+        long days=minutes/1440, hours=minutes/60%24, rest=minutes%60;
+        if(days>0) return days+"d "+hours+"h "+rest+"m";
+        if(hours>0) return hours+"h "+rest+"m";
+        return rest+"m";
+    }
+
+    /** When a period began, as every other date on this page is written. */
+    static String began(Instant start,ZoneId zone) {
+        var local=start.atZone(zone);
+        return DateText.date(local.toLocalDate())+", "+DateText.time(local.toLocalTime());
+    }
+
+    /**
+     * One time-since tracker, as a line (#52): its name and when it began, then
+     * how long it has run, to the minute, and Start again. Everything else is in
+     * the ⋯ menu.
+     */
+    private static JPanel sinceRow(Tracker tracker,Runnable refresh,Habit habit,boolean last) {
+        var line=listLine(last);
+        line.setName("habit.row."+habit.id());
         var zone=ZoneId.of(habit.zone());
-        var elapsed=label("",TYPE_HEADING,CYAN);
+        var left=stack();
+        left.add(shortenable(habit.name(),TYPE_BODY,TEXT));
+        // Gives way to the figures beside it like the name above it does, with
+        // the whole of it in the tooltip.
+        left.add(shortenable("since "+began(habit.starts().getLast(),zone),TYPE_CAPTION,MUTED));
+        line.add(left,BorderLayout.CENTER);
+
+        var elapsed=label("",TYPE_HEADING,TEXT);
         elapsed.setName("habit.elapsed."+habit.id());
-        Runnable update=()-> {
-            long seconds=Math.max(0,Duration.between(habit.starts().getLast(),Instant.now()).getSeconds());
-            // No seconds: they tick for nothing, and two trackers started in the
-            // same minute now agree to the minute anyway (#50, #52).
-            elapsed.setText(String.format("%dd %02dh %02dm",seconds/86400,seconds/3600%24,seconds/60%60));
-        };
+        Runnable update=()->elapsed.setText(elapsed(Duration.between(habit.starts().getLast(),Instant.now())));
         update.run();
-        // A minute is as often as this can change.
+        // A minute is as often as this can change, and nothing ticks off screen.
         var timer=new Timer(60_000,e->update.run());
         elapsed.addHierarchyListener(e->{if(elapsed.isShowing())timer.start();else timer.stop();});
         var again=ghost(button("Start again",()-> {
-            if(Dialogs.confirm(card,"Start a new period now? Your previous periods stay in history.","Start again","Start again"))
-                act(card,refresh,()->tracker.restartHabit(habit.id()));
+            if(Dialogs.confirm(line,"Start a new period now? Your previous periods stay in history.","Start again","Start again"))
+                act(line,refresh,()->tracker.restartHabit(habit.id()));
         }));
         again.setName("habit.restart."+habit.id());
         again.setToolTipText("End this period and start a new one now");
+        again.getAccessibleContext().setAccessibleName("Start "+habit.name()+" again");
         var more=ghost(button("⋯",()->{ }));
         more.setName("habit.more."+habit.id());
         more.setToolTipText("Edit the start, see the history, rename or delete");
-        more.addActionListener(e->sinceMenu(tracker,refresh,card,habit,zone).show(more,0,more.getHeight()));
-        card.add(cardHead(shortenable(habit.name(),TYPE_HEADING,TEXT),again,more));
-        gap(card,SPACE_SM);
-        card.add(elapsed);
-        card.add(label("since "+habit.starts().getLast().atZone(zone).toLocalDateTime().format(WHEN),TYPE_CAPTION,MUTED));
-        return card;
+        more.getAccessibleContext().setAccessibleName("Actions for "+habit.name());
+        more.addActionListener(e->sinceMenu(tracker,refresh,line,habit,zone).show(more,0,more.getHeight()));
+        line.add(trailing(elapsed,again,more),BorderLayout.EAST);
+        return line;
     }
 
     private static JPopupMenu sinceMenu(Tracker tracker,Runnable refresh,JPanel card,Habit habit,ZoneId zone) {
@@ -176,20 +281,6 @@ final class HabitsPanel {
         menu.add(Menus.item("Rename…","habit.renameMenu."+habit.id(),true,()->rename(tracker,refresh,card,habit),null));
         menu.add(Menus.item("Delete…","habit.deleteMenu."+habit.id(),true,()->delete(tracker,refresh,card,habit),null));
         return menu;
-    }
-
-    private static JButton renameButton(Tracker tracker,Runnable refresh,JPanel card,Habit habit) {
-        var rename=ghost(button("Rename",()->rename(tracker,refresh,card,habit)));
-        rename.setName("habit.rename."+habit.id());
-        rename.getAccessibleContext().setAccessibleName("Rename "+habit.name());
-        return rename;
-    }
-
-    private static JButton deleteButton(Tracker tracker,Runnable refresh,JPanel card,Habit habit) {
-        var delete=ghost(button("Delete",()->delete(tracker,refresh,card,habit)));
-        delete.setName("habit.delete."+habit.id());
-        delete.getAccessibleContext().setAccessibleName("Delete "+habit.name());
-        return delete;
     }
 
     private static void rename(Tracker tracker,Runnable refresh,java.awt.Component owner,Habit habit) {
@@ -217,15 +308,12 @@ final class HabitsPanel {
 
     private static void daily(Tracker tracker,Runnable refresh,Habit habit,JPanel card) {
         var today=LocalDate.now(ZoneId.of(habit.zone()));
-        // "day streak" is one compound, so the count never takes a plural —
-        // the plural helper stays for the phrase where "day" stands alone.
-        // The count is the sentence, so it is drawn in body ink and the accent
-        // is saved for the filled day cells below, where it marks which days
-        // are done. Drawn whole in the accent this line measured 3.0:1 on Linen
-        // and 3.5:1 on Sakura — under AA for a 13 px label, and the numbers are
-        // the only reason to read it.
-        card.add(label(habit.streak(today)+" day streak · "
-            +Theme.plural(habit.checkIns().size(),"day")+" checked off",TYPE_LABEL,TEXT));
+        // The whole of what the row only hints at, in body ink: the accent is
+        // saved for the filled day cells below, where it marks which days are
+        // done. Drawn in the accent this line measured 3.0:1 on Linen and 3.5:1
+        // on Sakura, under AA for a 13 px label.
+        card.add(wrapping(summary(tracker,habit,today)+" · "
+            +Theme.plural(habit.checkIns().size(),"day")+" checked off in all",TYPE_LABEL,TEXT));
         gap(card,SPACE_MD);
         // A filled cell is a day done and an outlined one is a day not done: the
         // state reads at a glance, without a glyph to decode, and each cell is
@@ -293,43 +381,6 @@ final class HabitsPanel {
         card.add(bodyLabel("Last "+WEEKS+" weeks · click a day to correct it"));
     }
 
-    private static void since(Tracker tracker,Runnable refresh,Habit habit,JPanel card) {
-        var elapsed=label("",TYPE_FIGURE,CYAN);
-        card.add(elapsed);
-        gap(card,SPACE_SM);
-        Runnable update=()-> {
-            long sec=Math.max(0,Duration.between(habit.starts().getLast(),Instant.now()).getSeconds());
-            elapsed.setText(String.format("%dd  %02dh  %02dm  %02ds",sec/86400,sec/3600%24,sec/60%60,sec%60));
-        };
-        update.run();
-        // Nothing ticks for a card that is not on screen.
-        var timer=new Timer(1000,e->update.run());
-        elapsed.addHierarchyListener(e->{if(elapsed.isShowing())timer.start();else timer.stop();});
-        var zone=ZoneId.of(habit.zone());
-        card.add(bodyLabel("Since "+habit.starts().getLast().atZone(zone).toLocalDateTime().format(WHEN)));
-        gap(card,SPACE_MD);
-        var buttons=row();
-        var again=button("Start again",()-> {
-            if(Dialogs.confirm(card,"Start a new period now? Your previous periods stay in history.","Start again","Start again"))
-                act(card,refresh,()->tracker.restartHabit(habit.id()));
-        });
-        again.setToolTipText("End this period and start a new one now");
-        buttons.add(again);
-        var edit=button("Edit start date",()-> {
-            var input=new DateTimeField(habit.starts().getLast(),zone);
-            while(Dialogs.confirm(card,input,"Edit current period start","Save")) {
-                try{tracker.editHabitStart(habit.id(),input.value());refresh.run();break;}
-                catch(Exception error){Dialogs.error(card,"Check date",error.getMessage());}
-            }
-        });
-        edit.setToolTipText("Correct when this period began");
-        buttons.add(edit);
-        var history=button("History",()->Dialogs.info(card,"Your history",history(tracker,habit.id(),zone,refresh)));
-        history.setToolTipText("Every period this tracker has recorded");
-        buttons.add(history);
-        card.add(buttons);
-    }
-
     /**
      * Every period a time-since tracker has recorded, each with Edit and Delete (#21).
      *
@@ -358,7 +409,7 @@ final class HabitsPanel {
                 for(int i=0;i<starts.size();i++) {
                     var start=starts.get(i);
                     var end=i+1<starts.size()?starts.get(i+1):Instant.now();
-                    String when=start.atZone(zone).toLocalDateTime().format(WHEN);
+                    String when=began(start,zone);
                     var line=row();
                     line.add(label(when,TYPE_BODY,TEXT));
                     line.add(label(Analytics.report(Duration.between(start,end).getSeconds()),TYPE_BODY,MUTED));
