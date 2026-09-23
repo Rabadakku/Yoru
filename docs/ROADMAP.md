@@ -9,7 +9,8 @@ with optional system light/dark and accent following. The five vault palettes
 remain available. Pages trades side panels at narrow widths to preserve room
 for writing; Tasks wraps titles around fixed controls at enlarged sizes.
 
-The shared foundation is implemented on `codex/minimal-workspace`. #63 remains
+The shared foundation shipped in 1.0.18 through PR #94. The README now reflects
+the released interface, Pages features and persistent Anki setup. #63 remains
 open for owner visual approval and further page-specific controls, sheets,
 popovers and animations. See [release details](RELEASE-1.0.18.md).
 

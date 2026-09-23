@@ -1,265 +1,211 @@
-<p align="center">
-  <img src="docs/media/hero.jpg" alt="Yoru: study time that turns into play. The Today page, with a focus timer running, over a moonlit lake." width="100%">
-</p>
+# Yoru
 
-<p align="center">
-  <b>A local-first workspace for the work you actually have to do.</b><br>
-  Track focus and time, plan your week, keep tasks and habits, and write linked Markdown pages —
-  in one app, on your own machine, in an encrypted vault.
-</p>
+**A local desktop workspace for time, tasks, habits and Markdown notes.**
 
-<p align="center">
-  <a href="https://github.com/Rabadakku/Yoru/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Rabadakku/Yoru?style=for-the-badge&label=release&color=8FD9DA&labelColor=0B1020"></a>
-  <a href="#install"><img alt="macOS, Windows and Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-8FD9DA?style=for-the-badge&labelColor=0B1020"></a>
-  <a href="LICENSE"><img alt="Public domain: the Unlicense" src="https://img.shields.io/badge/license-Unlicense-8FD9DA?style=for-the-badge&labelColor=0B1020"></a>
-  <a href="#private-by-design"><img alt="Your data stays on your machine" src="https://img.shields.io/badge/data-stays%20on%20your%20machine-8FD9DA?style=for-the-badge&labelColor=0B1020"></a>
-</p>
+Plan your week, track focused work, review your Anki study time and keep linked
+notes in one encrypted vault on your own machine. No account, no cloud sync.
 
-<p align="center">
-  <a href="https://github.com/Rabadakku/Yoru/releases/latest"><b>Download</b></a> ·
-  <a href="#features">Features</a> ·
-  <a href="#install">Install</a> ·
-  <a href="#faq">FAQ</a>
-</p>
+[Download](https://github.com/Rabadakku/Yoru/releases/latest) ·
+[Features](#features) · [Install](#install) · [Connect Anki](#connect-anki) ·
+[Build from source](#build-from-source)
 
----
+![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.18/yoru-today-light.png)
 
-## How it works
+*Screenshots use invented sample data. The interface shown is from version 1.0.18.*
 
-Clock in when you start working and out when you stop. That is the whole ritual. Everything
-else — the week's plan, the tasks due today, the habits you are keeping, the pages you are
-writing, the Anki reviews you did — hangs off the time you actually spent.
+## What's new in 1.0.18
 
-Nothing leaves your computer. There is no account, no server and no sync: one encrypted file
-you can back up like any other.
+A collapsible sidebar, system typography, quieter surfaces and cleaner lists.
+On macOS, Yoru has a native menu bar and unified title bar, with an optional
+setting to follow the system's light/dark appearance and accent. Pages keeps
+room for writing in narrow windows by showing one side panel at a time.
+
+See the [release notes](docs/RELEASE-1.0.18.md) or
+[all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.18/Yoru-1.0.18-previews.zip).
+Further interface refinements are tracked in the [roadmap](docs/ROADMAP.md).
 
 ## Features
 
-### ⏱️ A focus timer that stays out of your way
+### Focus and time
 
-<img src="docs/media/today.png" alt="The Today page: a running focus timer, the daily goal bar and today's plan" width="100%">
+Clock in when you start and clock out when you stop. There is no forced
+pomodoro. A running timer survives closing the app, and you can correct recorded
+sessions afterwards. Track multiple activities, set a daily goal and play your
+own WAV, AIFF or AU music while the timer runs.
 
-Clock in, clock out, and correct either one afterwards. There is no forced pomodoro. A running
-timer survives closing the app, the daily goal fills as you go, and you can track as many
-activities as you like. Beside the clock is the day itself: what you planned, and what is
-left.
+**Today** brings together the timer, today's schedule, tasks, habits and Anki
+summary. **Data** holds the activity breakdown, 52-week heat map, recent totals
+and Anki history. Heat-map colours scale to your daily goal.
 
-### 📊 A year at a glance
+### Weekly planning
 
-<img src="docs/media/heatmap.png" alt="Today, last 7 days and current streak tiles above a 52-week heat map" width="100%">
+Compare planned blocks with recorded time in a week grid. Drag to create,
+move or resize a plan, add weekly repeats and choose which day starts the week.
 
-A 52-week heat map whose colours scale to *your* daily goal, with a rainbow tier for days that
-beat it. Streaks, the last seven days and a breakdown of where your time went sit alongside it.
+### Tasks and habits
 
-### 🧠 Anki counts too <sup>new in 1.0.15</sup>
+Tasks have due dates, **To do → Doing → Done** status, colour tags, search,
+manual ordering and a month calendar. Paste a task list or import a Notion
+export, then review it before adding anything. Link tasks to Markdown pages.
 
-<p align="center">
-  <img src="docs/media/anki.png" alt="The Anki card: 120 reviews today, 19 minutes studied in Anki and 19 minutes in tracked time" width="70%">
-</p>
+Daily habits show streaks, consistency, recent check-offs and editable history.
+Time-since trackers record elapsed time and previous periods. Daily check-offs
+are also available alongside tasks.
 
-Connect Anki and every finished sitting is added to your tracked time, at the length Anki
-itself reports. It reaches your totals, heat map and streak like any other session.
-Yoru only reads from Anki, and never counts the same minute twice.
-[Set it up →](#connect-anki)
+![Yoru Habits in the dark theme, with daily habits and time-since trackers](https://github.com/Rabadakku/Yoru/releases/download/v1.0.18/yoru-habits-dark.png)
 
-### 🗓️ Plan the week, then see how it went
+### Linked Markdown pages
 
-<img src="docs/media/schedule.png" alt="The week grid, with a plan lane and an actual lane for each day" width="100%">
+Write notes in folders with open-page tabs, autosave, undo/redo, search,
+reading mode, page links, backlinks, outlines and linked tasks. Import Markdown
+files or folders and export notes as plain Markdown.
 
-A real week grid with a plan lane and an actual lane for every day. Drag on empty space to plan
-a block, drag it to move it, drag its edges to resize it, and repeat it every week. The week
-starts on whichever day you choose.
+Pages currently provides a source editor and a separate reading view. Live
+preview, attachment storage and several larger workspace features remain on
+the roadmap. See [the Pages guide](docs/PAGES.md) for shortcuts and current limits.
 
-### ✅ Tasks and habits
+![The Pages editor preserves writing space in a narrow window](https://github.com/Rabadakku/Yoru/releases/download/v1.0.18/yoru-pages-narrow.png)
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/media/tasks.png" alt="The Tasks table with statuses, tags and due dates"></td>
-    <td width="50%"><img src="docs/media/habits.png" alt="Habits with streaks and a four-week check-off grid"></td>
-  </tr>
-</table>
+### Anki integration
 
-**Tasks** have due dates, a *To do → Doing → Done* status, colour tags, search, drag-to-reorder
-and a month calendar you can drag them onto. Paste a list from an AI chat or import a Notion
-export, and review it before anything is added. **Habits** have daily check-offs, streaks, an
-editable 28-day history, and "time since" trackers for something you have quit.
+Read review counts and study time through AnkiConnect. Optionally add completed
+study sittings to your tracked time. Saved counts remain available after
+restarting Yoru with Anki closed, and automatic retries continue while you work
+on other pages. Setup lives in **Settings → Integrations · Anki**.
 
-### 🎨 Make it yours
+[Connect Anki](#connect-anki)
 
-<img src="docs/media/themes.png" alt="The Today page in all five themes: Midnight, Ember, Sakura, Linen and Moonlight" width="100%">
+### Appearance and navigation
 
-Five themes, text at 100–200%, and study music from your own WAV, AIFF or AU files while the
-timer runs.
+- Collapsible sidebar for Today, Tasks, Pages, Habits, Schedule, Data and Settings.
+- Five themes: Midnight, Ember, Sakura, Linen and Moonlight.
+- Text sizes from 100% to 200%, keyboard shortcuts and visible focus indicators.
+- Native macOS menus and an optional **Follow macOS appearance and accent** setting.
+  Choosing a theme switches automatic appearance off. Windows and Linux use an
+  in-window menu bar.
 
-### 🔒 Private by design
+## Private by design
 
-- **No account, no server, no sync.** Everything lives in an encrypted vault (AES-256-GCM) on
-  your own computer, with an optional password.
-- **Portable.** Export the whole vault as readable JSON, or your sessions as CSV, whenever you like.
-- **Offline unless you ask.** The only time Yoru goes online is when you press
-  *Check for updates*. Anki is read on your own computer, at `127.0.0.1`.
+- **Local storage.** Your workspace lives in an AES-256-GCM encrypted vault,
+  with an optional password. No account or cloud sync is required.
+- **Your exports.** Export the vault as readable JSON, sessions as CSV and notes
+  as Markdown. These exports are plain text; a full vault export includes saved
+  integration settings, including the Anki API key.
+- **Explicit network access.** Checking for updates contacts GitHub; downloading
+  an update retrieves its installer. Anki communication stays on your computer
+  at `127.0.0.1:8765`. Yoru does not upload your workspace.
 
-[SECURITY.md](SECURITY.md) explains what the vault does, and does not, protect.
+Without a password, a random key is kept beside the vault: convenient, but not
+protection from someone who can read both files. [SECURITY.md](SECURITY.md)
+explains the security model.
 
 ## Install
 
-| Platform | Download | Then |
+| Platform | Download | Install |
 |---|---|---|
-| **macOS** (Apple silicon) | [Latest `.dmg`](https://github.com/Rabadakku/Yoru/releases/latest) | Open it and drag Yoru into Applications. |
-| **Windows** | [Latest `.msi`](https://github.com/Rabadakku/Yoru/releases/latest) | Double-click it. No admin rights needed. |
-| **Linux** (64-bit Intel/AMD) | [Latest `.deb`](https://github.com/Rabadakku/Yoru/releases/latest) | `sudo apt install ./<the file you downloaded>` |
+| macOS (Apple silicon) | [Latest `.dmg`](https://github.com/Rabadakku/Yoru/releases/latest) | Open it and drag Yoru into Applications. |
+| Windows | [Latest `.msi`](https://github.com/Rabadakku/Yoru/releases/latest) | Double-click it. No admin rights needed. |
+| Linux (64-bit Intel/AMD) | [Latest `.deb`](https://github.com/Rabadakku/Yoru/releases/latest) | Run `sudo apt install ./<downloaded-file>.deb`. |
 
-Each installer carries its own Java runtime, so there is nothing else to install. On first
-launch, create a workspace. A password is optional. Without one, a random key is kept beside
-the vault, which is convenience rather than protection.
+Each installer includes its own Java runtime. On first launch, create a
+workspace or open an existing vault. A password is optional.
 
-<details>
-<summary><b>macOS says it can't verify who made Yoru</b></summary>
+### First launch on macOS
 
-The macOS build is not signed with a paid Apple Developer certificate, so macOS cannot verify
-who built it the first time you open it. That is expected, and it does not mean the download is
-damaged. Open it once with **Control-click → Open**, then **Open** again in the dialog, or allow
-it from **System Settings → Privacy & Security → Open Anyway**. After that it opens like any
-other app. The whole source is right here if you would rather build it yourself.
+The macOS build is unsigned. If macOS blocks it, use **Control-click → Open**
+where available, or **System Settings → Privacy & Security → Open Anyway**.
+The source is available below if you prefer to build it yourself.
 
-</details>
+### Updating
 
-<details>
-<summary><b>Updating</b></summary>
-
-**Settings → Updates → Check for updates** asks GitHub for the newest release, and only when you
-press it. On a Mac, Yoru downloads the `.dmg`, checks it against the release's SHA-256, closes
-your vault, replaces itself and reopens. On Windows it runs the verified `.msi` after
-closing. On Linux it verifies the `.deb` and gives you the one `sudo apt install` command to run.
-Versions before 1.0.5 have no updater, so install 1.0.5 or later by hand once. Your workspace
-stays as it is: vaults are migrated forward and never reset.
-
-</details>
+Use **Settings → Updates → Check for updates**. On macOS, Yoru downloads and
+verifies the installer, closes your vault, replaces the app and reopens it.
+Windows launches the verified installer; Linux provides the install command.
+You can also download a release manually. Your vault remains separate from the
+installed app, and older vault formats are migrated forward.
 
 ## Connect Anki
 
-1. In Anki, open **Tools → Add-ons → Get Add-ons**, enter **2055492159** (AnkiConnect) and
-   restart Anki. See the [official AnkiConnect instructions](https://git.sr.ht/~foosoft/anki-connect).
+1. In Anki, open **Tools → Add-ons → Get Add-ons**, enter **2055492159**
+   (AnkiConnect), then restart Anki. See the
+   [AnkiConnect instructions](https://git.sr.ht/~foosoft/anki-connect).
 2. Keep Anki open on the profile you want to track.
-3. In Yoru, scroll to **Today → Anki reviews** and click **Connect Anki**. Enter an API key only
-   if you set one in AnkiConnect.
+3. In Yoru, open **Settings → Integrations · Anki** and switch the integration on.
+4. If AnkiConnect requires an API key, enter it and choose **Save key**. Use
+   **Test connection** to confirm the connection.
+5. Choose whether to **Add my Anki study time to my tracked time**, and select
+   a refresh interval of 1, 5 or 15 minutes.
 
-<details>
-<summary><b>How Anki time is counted</b></summary>
+Today shows the summary; Data shows the 30-day review chart. When Anki is closed,
+Yoru displays the saved counts with their fetch time and retries automatically
+while the vault is open, including when Today is not visible.
 
-Answers less than ten minutes apart are one *sitting*. Once nothing has been answered for ten
-minutes, the sitting is added as a session under an activity called **Anki**. It lasts as long
-as the answer times Anki logged, which is the figure Anki itself reports as time studied.
-Connecting catches up on the last seven days. A sitting is never added twice, and one that
-overlaps time you clocked in Yoru, or is shorter than your minimum session, is left out. The
-card shows Anki's minutes for today beside how many of them are in your tracked time.
+### How study time is counted
 
-Rename the Anki activity, or move a sitting to another activity, and later sittings follow the
-latest one. Edit a sitting rather than deleting it: while Anki is connected, a sitting deleted
-from the last week is read again and put back.
+Answers less than ten minutes apart form a sitting. After ten minutes without
+another answer, a completed sitting can be added under the **Anki** activity.
+Its duration comes from Anki's recorded answer times. Yoru catches up on the
+last seven days and avoids importing a sitting twice. Sittings that overlap
+clocked time, or fall below your minimum session length, are skipped.
 
-The card refreshes every minute while Today is on screen, or when you press **Refresh**. If Anki
-is unavailable, the last successful snapshot stays on screen, marked with its time. Switching
-Anki profiles during a refresh is refused, so two profiles' counts are never mixed. **Disconnect** clears
-the snapshot and the key, and so do closing or switching the vault.
+Rename the Anki activity, or move a sitting to another activity, and later
+sittings follow the latest one. A deleted sitting from the last week can be
+imported again while time importing remains enabled; edit it to correct it.
 
-Yoru reads the active profile name, review totals and the time of each answer from AnkiConnect
-on `127.0.0.1:8765`. It never changes anything in Anki. The only Anki data kept in the vault is
-the start and end of each sitting: no card content, answers or deck names. The API key stays in
-memory for as long as the window is open. Custom ports and remote Anki instances are not
-supported.
+### What is stored
 
-</details>
-
-## FAQ
-
-<details>
-<summary><b>Where is my data, and does it survive updates?</b></summary>
-
-In an encrypted vault on your own computer: AES-256-GCM, with an optional password, and no
-account or server. Vaults are migrated forward and never reset, and migration is tested against
-vaults written by older builds. If you want an extra escape hatch before upgrading, export the
-vault as JSON, which anything can read.
-
-</details>
-
-<details>
-<summary><b>Why Java 22?</b></summary>
-
-Yoru is built against the Java 22 language and library level and ships as a Swing app with no
-third-party libraries. The installers carry their own runtime, so this only matters if you
-build from source.
-
-</details>
+Yoru only reads from Anki. The encrypted vault stores the integration settings
+and API key, the last profile/count summary and fetch time, and any imported
+study sessions. It does not store card content, answers or deck names.
+Closing the app preserves the saved summary and settings. Switching the
+integration off stops automatic reads; **Clear key** removes the saved API key.
+Custom ports and remote Anki instances are not supported.
 
 ## Build from source
 
-Requires **JDK 22 or later**. Swing and the JDK only: no build system and no network access.
+Requires **JDK 22 or later**. The application uses Swing and the JDK, with no
+third-party libraries or dependency downloads.
 
 ```bash
 ./run.sh      # build and launch
-./build.sh    # compile and jar only
-./test.sh     # the whole suite, headless
+./build.sh    # compile and package the jar
+./test.sh     # run the isolated test suite
 ```
 
 On Windows, run `build.cmd`, then `java -jar build/yoru.jar`.
+To build an installer on its target platform, use
+`tools/package-installers.sh dmg|msi|deb <version>`.
 
-<details>
-<summary><b>More for contributors</b></summary>
+### Interface previews
 
-The build produces `build/yoru.jar`, with `dev.yoru.ui.YoruApp` as its entry point.
-`tools/package-installers.sh dmg|msi|deb <version>` builds an installer for the platform it
-runs on. The suite covers the domain, persistence and schema migration, the Markdown parser and
-link rules, Anki, and the rendered interface. `PrivacyTest` fails the build if personal data or
-a stray image reaches a tracked file.
-
-One check needs a real display, so `./test.sh` does not run it. After it has built the tests:
-
-```bash
-# Keyboard focus in real dialogs; skipped headless.
-java -ea -cp build/classes dev.yoru.ui.DialogFocusTest
-```
-
-`./test.sh` already checks every page at every text size. To look at the pages as PNGs,
-`-Dtextfit.size=200` limits the run to one size:
+After `./test.sh` has compiled the test tools, render synthetic sample pages:
 
 ```bash
 java -Djava.awt.headless=true -Duser.home=path/to/empty-dir \
-     -cp build/classes dev.yoru.ui.TextFitTest path/to/render-dir
+  -Djava.util.prefs.PreferencesFactory=dev.yoru.ui.TestPreferencesFactory \
+  -cp build/classes dev.yoru.ui.Preview build/preview
 ```
 
-The pictures in this README are drawn by `dev.yoru.ui.ReadmeMedia` from an invented vault:
-
-```bash
-java -Djava.awt.headless=true -Duser.home=path/to/empty-dir -Duser.timezone=UTC \
-     -cp build/classes dev.yoru.ui.ReadmeMedia docs/media
-```
-
-</details>
+Use `dev.yoru.ui.DialogPreview` to render representative dialogs.
+`TextFitTest` checks layouts through 200% text. The optional `DialogFocusTest`
+and macOS `NativeDesktopTest` need a real display; use the same isolated home
+and preferences options, omit headless mode and add `-ea` when running them.
 
 ## Contributing
 
-Several people and AI agents work on this repository at once. **Read
-[CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before pushing:** work on a
-branch, never commit straight to `main`, and run `./test.sh` before you push.
+Read [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[collaboration guide](docs/COLLABORATION.md) before making changes. Use a branch,
+coordinate through the issue tracker and run `./test.sh` before pushing.
+Never commit personal data, vaults, keys or screenshots of real workspaces.
 
-- [docs/ROADMAP.md](docs/ROADMAP.md): the plan, status and what is next
-- [docs/PRODUCT-GOALS.md](docs/PRODUCT-GOALS.md): what Yoru is for, and what it is not
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): module boundaries and the rules that keep them
-- [docs/DATA-MODEL.md](docs/DATA-MODEL.md): storage; read it before touching the vault
-- [SECURITY.md](SECURITY.md): the vault, and what it does not protect
+- [Product goals](docs/PRODUCT-GOALS.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Data model and migrations](docs/DATA-MODEL.md)
+- [Security](SECURITY.md)
 
-## License and legal
+## License
 
-Yoru is released into the public domain under the **[Unlicense](LICENSE)**: anyone may use it
-for anything, with no conditions.
-
-Yoru bundles no third-party code, no fonts and no images: it is Swing and the JDK, and every
-picture in the interface is drawn at runtime. Music and any files you import stay yours and
-stay on your machine.
-
-### Markdown pages
-
-The Pages workspace keeps Markdown notes in the encrypted vault, with folders,
-reading mode, search, page links and linked tasks. See [Pages](docs/PAGES.md)
-for usage, import/export and the current feature limits.
+Yoru is released into the public domain under the [Unlicense](LICENSE).
+It bundles no third-party code, fonts, images or audio. Interface graphics are
+drawn at runtime; imported files and music remain on your machine.
