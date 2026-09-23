@@ -234,7 +234,7 @@ final class TodayPage {
      * nearly the card it sits on. The Data page's chart draws this too.
      */
     static JPanel heatLegend(LocalDate day,int goalHours) {
-        var legend=row();
+        var legend=wrappingRow();
         legend.add(label("LESS",TYPE_CAPTION,MUTED));
         for(Color c:HEAT) legend.add(swatch(c));
         var rainbow=swatch(Heatmap.overGoal(day));

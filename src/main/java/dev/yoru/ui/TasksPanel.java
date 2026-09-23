@@ -365,7 +365,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         var header=tableRow();
         header.setName("task.header");
         header.setBorder(listRow());
-        for(String heading:new String[]{"","Status","Task name","Tag","Due",""}) header.add(label(heading,TYPE_CAPTION,MUTED));
+        for(String heading:new String[]{"","Status","Task","Tag","Due",""}) header.add(label(heading,TYPE_CAPTION,MUTED));
         return header;
     }
 
