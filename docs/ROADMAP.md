@@ -1,5 +1,31 @@
 # Yoru roadmap
 
+## Release 1.0.20 — habits at a glance, and open tickets closed out
+
+On `claude/close-tickets`, from 1.0.19. Tickets whose work had reached main
+without being closed were checked against their Done-when lists, and the gaps
+filled: #52, #53, #54, #55, #67 and #85. See [release details](RELEASE-1.0.20.md).
+
+- **Habits (#52, #53):** each kind is one list of rows. Six daily habits and
+  eight trackers fit side by side at 1280×900; at large text sizes a row's
+  figures move under it rather than squeezing it. `Columns` now measures in the
+  arrangement its width calls for, which also fixed stacked columns being drawn
+  in the height of side-by-side ones.
+- **Checklist (#54):** Up/Down/Space, each habit's day in its own zone from an
+  injected clock, and `HabitChecklistTest`.
+- **Task calendar (#67):** double-click a day for a task due that day; a click
+  on a chip is no longer a drop on its own day.
+- **Anki (#85):** failures carry a kind, and Settings explains each one.
+  `AnkiSettingsTest` holds the explanations apart and looks for an invented key
+  in preferences, printed output and the vault's bytes.
+- **Text size in the drawn views:** the heat map, month calendar and week grid
+  follow the text size, and the launcher is on the scale. This was PR #39,
+  rebased onto main and carried here.
+- Left open: #49's manual check with a real keyboard on a Mac (the input maps,
+  undo and the menu are covered by `TextInputTest`); #86's README screenshot is
+  refreshed with the release assets. Clock times are still written two ways
+  (24-hour in the schedule and agenda, 12-hour in fields) — the owner's call.
+
 ## Release 1.0.19 — interface detail polish (#63)
 
 Quieter page tabs keep long-title close controls visible. Rounded scrollbars
