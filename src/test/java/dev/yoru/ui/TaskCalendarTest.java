@@ -32,8 +32,17 @@ public final class TaskCalendarTest {
 
     /** Records what the calendar asked for, so a drag can be asserted exactly. */
     private static final class Recorder implements TaskCalendar.Edits {
-        UUID task; LocalDate date; int calls;
+        UUID task; LocalDate date; int calls; LocalDate created; int creates;
         public void reschedule(UUID task,LocalDate date){this.task=task;this.date=date;calls++;}
+        public void create(LocalDate date){created=date;creates++;}
+    }
+
+    private static void doubleClick(TaskCalendar calendar,Point at){
+        for(int clicks=1;clicks<=2;clicks++){
+            calendar.dispatchEvent(new MouseEvent(calendar,MouseEvent.MOUSE_PRESSED,0,MouseEvent.BUTTON1_DOWN_MASK,at.x,at.y,clicks,false,MouseEvent.BUTTON1));
+            calendar.dispatchEvent(new MouseEvent(calendar,MouseEvent.MOUSE_RELEASED,0,0,at.x,at.y,clicks,false,MouseEvent.BUTTON1));
+            calendar.dispatchEvent(new MouseEvent(calendar,MouseEvent.MOUSE_CLICKED,0,0,at.x,at.y,clicks,false,MouseEvent.BUTTON1));
+        }
     }
 
     private static void drag(TaskCalendar calendar,Point from,Point to){
@@ -75,7 +84,7 @@ public final class TaskCalendarTest {
             if(cause instanceof Error error)throw error;
             throw wrapped;
         }
-        System.out.println("PASS: "+checks+" calendar checks (layout, drag to reschedule, undated tray)");
+        System.out.println("PASS: "+checks+" calendar checks (layout, drag to reschedule, undated tray, new task on a day)");
     }
 
     private static void run()throws Exception{
@@ -137,6 +146,16 @@ public final class TaskCalendarTest {
         // Pressing on empty space and releasing is not a drag at all.
         drag(calendar,calendar.centreOf(LocalDate.of(2026,9,18)),calendar.centreOf(LocalDate.of(2026,9,19)));
         check(recorder.calls==before,"Dragging from an empty day does nothing");
+
+        // A task made from the calendar is due the day it was made on (#67).
+        doubleClick(calendar,calendar.centreOf(LocalDate.of(2026,9,18)));
+        check(recorder.creates==1&&LocalDate.of(2026,9,18).equals(recorder.created),
+            "double-clicking an empty day asks for a task due that day");
+        doubleClick(calendar,calendar.pointOn(dated));
+        check(recorder.creates==1,"double-clicking a task's chip does not make another task");
+        doubleClick(calendar,calendar.centreOfTray());
+        check(recorder.creates==1,"the undated strip is not a day");
+        check(recorder.calls==before,"and making a task moves nothing");
 
         calendar.paint(new BufferedImage(900,620,BufferedImage.TYPE_INT_RGB).getGraphics());
         check(true,"The calendar paints with tasks, an empty tray target and adjacent months");

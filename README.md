@@ -9,19 +9,21 @@ notes in one encrypted vault on your own machine. No account, no cloud sync.
 [Features](#features) · [Install](#install) · [Connect Anki](#connect-anki) ·
 [Build from source](#build-from-source)
 
-![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.19/yoru-today-light.png)
+![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.20/yoru-today-light.png)
 
-*Screenshots use invented sample data. The interface shown is from version 1.0.19.*
+*Screenshots use invented sample data. The interface shown is from version 1.0.20.*
 
-## What's new in 1.0.19
+## What's new in 1.0.20
 
-Quieter page tabs, rounded scrollbars, consistent hover feedback and Edit menus
-that reflect your selection and undo history. These refinements build on the
-collapsible sidebar, native Mac menus and optional system appearance introduced
-in 1.0.18.
+Habits are a line each, so a page of them fits on one screen: the last seven
+days, the streak and 30-day consistency for a daily habit, and the time to the
+minute for a time-since tracker. Tick today's habits off from the keyboard,
+double-click a day in the task calendar to make a task due that day, and see
+exactly why an Anki connection test failed. The heat map, task calendar and
+week grid now follow the text size setting.
 
-See the [release notes](docs/RELEASE-1.0.19.md) or
-[all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.19/Yoru-1.0.19-previews.zip).
+See the [release notes](docs/RELEASE-1.0.20.md) or
+[all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.20/Yoru-1.0.20-previews.zip).
 Further interface refinements are tracked in the [roadmap](docs/ROADMAP.md).
 
 ## Features
@@ -48,11 +50,12 @@ Tasks have due dates, **To do → Doing → Done** status, colour tags, search,
 manual ordering and a month calendar. Paste a task list or import a Notion
 export, then review it before adding anything. Link tasks to Markdown pages.
 
-Daily habits show streaks, consistency, recent check-offs and editable history.
-Time-since trackers record elapsed time and previous periods. Daily check-offs
-are also available alongside tasks.
+Daily habits show their last seven days, streak and 30-day consistency on one
+line, with the full history a click away. Time-since trackers show how long
+they have run, to the minute, and keep every previous period. Tick today's
+habits off beside your tasks, from the mouse or the keyboard.
 
-![Yoru Habits in the dark theme, with daily habits and time-since trackers](https://github.com/Rabadakku/Yoru/releases/download/v1.0.19/yoru-habits-dark.png)
+![Yoru Habits in the dark theme, with daily habits and time-since trackers](https://github.com/Rabadakku/Yoru/releases/download/v1.0.20/yoru-habits-dark.png)
 
 ### Linked Markdown pages
 
@@ -64,7 +67,7 @@ Pages currently provides a source editor and a separate reading view. Live
 preview, attachment storage and several larger workspace features remain on
 the roadmap. See [the Pages guide](docs/PAGES.md) for shortcuts and current limits.
 
-![The Pages editor preserves writing space in a narrow window](https://github.com/Rabadakku/Yoru/releases/download/v1.0.19/yoru-pages-narrow.png)
+![The Pages editor preserves writing space in a narrow window](https://github.com/Rabadakku/Yoru/releases/download/v1.0.20/yoru-pages-narrow.png)
 
 ### Anki integration
 

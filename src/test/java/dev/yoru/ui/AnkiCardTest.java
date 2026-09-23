@@ -29,6 +29,13 @@ public final class AnkiCardTest {
         }
         return s.toString();
     }
+    private static Component find(Container c, String name) {
+        for (Component child : c.getComponents()) {
+            if (name.equals(child.getName())) return child;
+            if (child instanceof Container nested) { var found = find(nested, name); if (found != null) return found; }
+        }
+        return null;
+    }
     private static void await(String wanted) throws Exception {
         long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         var ready = new AtomicBoolean();
@@ -88,6 +95,7 @@ public final class AnkiCardTest {
         }, Clock.systemUTC());
         var reaches = new CopyOnWriteArrayList<Integer>();
         var rebuilds = new AtomicInteger();
+        var opened = new AtomicInteger();
         SwingUtilities.invokeAndWait(() -> {
             Theme.apply(ThemeId.values()[0]);
             card = new AnkiCard((key, reach) -> {
@@ -99,7 +107,7 @@ public final class AnkiCardTest {
                 }
                 if (fail.get()) throw new java.io.IOException("fixture error");
                 return snapshot;
-            }, () -> tracker, () -> zone, rebuilds::incrementAndGet, () -> { });
+            }, () -> tracker, () -> zone, rebuilds::incrementAndGet, opened::incrementAndGet);
             // Switched on in Settings, as the owner does (#85), then shown.
             try { tracker.anki(tracker.state().anki().enabled(true)); }
             catch (Exception e) { throw new RuntimeException(e); }
@@ -116,6 +124,13 @@ public final class AnkiCardTest {
         assert tracker.state().activities().getFirst().name().equals("Anki");
         assert reaches.getFirst() == AnkiCard.CATCH_UP_DAYS : "the first refresh catches up on a week";
         render("connected");
+        // The line is the way to the details: one click opens the page that holds them (#85).
+        SwingUtilities.invokeAndWait(() -> {
+            var line = (AbstractButton) find(card, "today.anki.status");
+            assert line != null : "the status line is a control";
+            line.doClick();
+        });
+        assert opened.get() == 1 : "clicking the line opens the details once";
         // The counts are kept in the vault, so the line survives Anki closing (#51).
         assert tracker.state().anki().last() != null && tracker.state().anki().last().today() == 24
             : "the counts reach the vault: " + tracker.state().anki().last();

@@ -23,9 +23,22 @@ import java.util.*;
  */
 final class TaskCalendar extends JPanel {
     /** date is null when a task is dropped back onto the undated strip. */
-    interface Edits { void reschedule(UUID taskId, LocalDate date); }
+    interface Edits {
+        void reschedule(UUID taskId, LocalDate date);
+        /** A day was double-clicked where no task sits: a new task for that day (#67). */
+        default void create(LocalDate date) { }
+    }
 
-    private static final int HEADER = 22, CHIP = 16, CHIP_GAP = 2, DAY_LABEL = 15, TRAY = 58;
+    /**
+     * The grid's measurements, at the size the calendar was designed at.
+     *
+     * Every one of them is a floor rather than a fixed number: this view is
+     * drawn rather than laid out, so a reader who asks for larger text (#31)
+     * grows the lettering and nothing else. At 200% the weekday names were cut
+     * off at the top of the component, the day numbers sat over the chips below
+     * them, and every chip held two-thirds of a line of its title.
+     */
+    private static final int HEADER = 22, CHIP = 16, CHIP_GAP = 2, DAY_LABEL = 15;
     /** Where a chip's label starts, and the clear edge it may not run into. */
     private static final int CHIP_TEXT_X = 6, CHIP_TEXT_EDGE = 2;
     /** A day cell holds one line of a title; the backlog strip has room for two. */
@@ -36,22 +49,48 @@ final class TaskCalendar extends JPanel {
     private static final String ELLIPSIS = "…";
 
     /**
-     * The metrics every chip label is measured in.
+     * The metrics every chip label is measured in, for the face in use now.
      *
      * Layout needs them to decide how tall a wrapped backlog chip is; paint
      * needs the same ones to decide where the ellipsis falls. Measuring with a
      * different context in each place is how a label ends up one glyph too wide
-     * for the box it was sized for. The caption face is fixed for the life of
-     * the JVM, so one scratch image is enough.
+     * for the box it was sized for. Held for the life of a face rather than of
+     * the JVM: the caption face changes when the reader changes the text size,
+     * and metrics taken before that measured every later chip in the old size.
      */
-    private static final FontMetrics CHIP_METRICS = chipMetrics();
+    private static Font metricsFace;
+    private static FontMetrics metricsHeld;
 
-    private static FontMetrics chipMetrics() {
-        var scratch = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB).createGraphics();
-        var metrics = scratch.getFontMetrics(Theme.captionFont());
-        scratch.dispose();
-        return metrics;
+    private static FontMetrics metrics() {
+        var face = Theme.captionFont();
+        if (!face.equals(metricsFace)) {
+            var scratch = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB).createGraphics();
+            metricsHeld = scratch.getFontMetrics(face);
+            scratch.dispose();
+            metricsFace = face;
+        }
+        return metricsHeld;
     }
+
+    // ---- the grid's measurements, each one at least what the text needs ----
+
+    /** The band over the grid, which the weekday names are written in. */
+    private static int header() { return Math.max(Theme.grow(HEADER), metrics().getHeight() + Theme.SPACE_SM); }
+
+    /** The room at the top of a day cell that the day's number stands in. */
+    private static int dayLabel() { return Math.max(Theme.grow(DAY_LABEL), metrics().getHeight() + Theme.SPACE_XS); }
+
+    /** One line of a chip, and the air between two of them. */
+    private static int chip() { return Math.max(Theme.grow(CHIP), metrics().getHeight() + Theme.SPACE_XS); }
+    private static int chipGap() { return Theme.grow(CHIP_GAP); }
+
+    /** The backlog strip: its own title, then a chip as tall as it may wrap to. */
+    private static int tray() {
+        return metrics().getHeight() + Theme.SPACE_SM + chipHeight(TRAY_LINES) + Theme.SPACE_XS;
+    }
+
+    /** Where a chip's first line of text sits, measured from the chip's top. */
+    private static int chipBaseline() { return (chip() - metrics().getHeight()) / 2 + metrics().getAscent(); }
 
     /** One chip: {@code lines} is 1 in a day cell, and up to {@link #TRAY_LINES} in the backlog. */
     private record Chip(UUID task, Rectangle bounds, String label, Color colour, boolean done, int lines) { }
@@ -87,8 +126,8 @@ final class TaskCalendar extends JPanel {
         long span = java.time.temporal.ChronoUnit.DAYS.between(gridStart, month.atEndOfMonth()) + 1;
         weeks = (int) Math.ceil(span / 7.0);
 
-        setPreferredSize(new Dimension(880, HEADER + weeks * 92 + TRAY));
-        setMinimumSize(new Dimension(520, HEADER + weeks * 64 + TRAY));
+        setPreferredSize(new Dimension(880, header() + weeks * weekHeight(92) + tray()));
+        setMinimumSize(new Dimension(520, header() + weeks * weekHeight(64) + tray()));
         getAccessibleContext().setAccessibleName(month + ", tasks by due date");
         if (edits != null) install(edits);
     }
@@ -96,7 +135,15 @@ final class TaskCalendar extends JPanel {
     // ------------------------------------------------------------------ layout
 
     private int columnWidth() { return Math.max(60, getWidth() / 7); }
-    private int rowHeight() { return Math.max(52, (getHeight() - HEADER - TRAY) / Math.max(1, weeks)); }
+    private int rowHeight() { return Math.max(weekHeight(52), (getHeight() - header() - tray()) / Math.max(1, weeks)); }
+
+    /**
+     * A week's row at the designed height {@code designed}, never shorter than
+     * the day number and one chip it has to hold.
+     */
+    private static int weekHeight(int designed) {
+        return Math.max(Theme.grow(designed), dayLabel() + chip() + chipGap() + Theme.SPACE_XS);
+    }
 
     /**
      * Recomputes cell and chip rectangles. Called from paintComponent, and by
@@ -109,10 +156,10 @@ final class TaskCalendar extends JPanel {
         for (int week = 0; week < weeks; week++) {
             for (int day = 0; day < 7; day++) {
                 var date = gridStart.plusDays(week * 7L + day);
-                cells.put(date, new Rectangle(day * colW, HEADER + week * rowH, colW, rowH));
+                cells.put(date, new Rectangle(day * colW, header() + week * rowH, colW, rowH));
             }
         }
-        trayBounds = new Rectangle(0, HEADER + weeks * rowH, getWidth(), TRAY);
+        trayBounds = new Rectangle(0, header() + weeks * rowH, getWidth(), tray());
 
         var byDate = new TreeMap<LocalDate, List<Task>>();
         var undated = new ArrayList<Task>();
@@ -125,11 +172,11 @@ final class TaskCalendar extends JPanel {
         byDate.forEach((date, list) -> {
             var cell = cells.get(date);
             if (cell == null) return;
-            int room = Math.max(0, (cell.height - DAY_LABEL - 4) / (CHIP + CHIP_GAP));
+            int room = Math.max(0, (cell.height - dayLabel() - Theme.SPACE_XS) / (chip() + chipGap()));
             for (int i = 0; i < list.size() && i < room; i++) {
                 var task = list.get(i);
                 chips.add(new Chip(task.id(),
-                    new Rectangle(cell.x + 3, cell.y + DAY_LABEL + i * (CHIP + CHIP_GAP), cell.width - 6, CHIP),
+                    new Rectangle(cell.x + 3, cell.y + dayLabel() + i * (chip() + chipGap()), cell.width - 6, chip()),
                     list.size() > room && i == room - 1 ? "+" + (list.size() - room + 1) + " more" : task.title(),
                     colourOf(task), task.status() == TaskStatus.DONE, 1));
             }
@@ -140,12 +187,13 @@ final class TaskCalendar extends JPanel {
             // guess under-measured, so the chip was narrower than the title it
             // held and the strip clipped a readable title in half.
             int width = Math.min(TRAY_CHIP_MAX,
-                Math.max(70, CHIP_METRICS.stringWidth(task.title()) + CHIP_TEXT_X * 2));
+                Math.max(70, metrics().stringWidth(task.title()) + CHIP_TEXT_X * 2));
             // The backlog is a strip, not a cell, so a title that will not fit on
             // one line wraps instead of being cut off at the edge.
             int lines = wrap(task.title(), textRoom(width), TRAY_LINES).size();
             if (x + width > getWidth() - 6) break;
-            chips.add(new Chip(task.id(), new Rectangle(x, trayBounds.y + 24, width, chipHeight(lines)),
+            chips.add(new Chip(task.id(), new Rectangle(x, trayBounds.y + metrics().getHeight() + Theme.SPACE_SM,
+                width, chipHeight(lines)),
                 task.title(), colourOf(task), task.status() == TaskStatus.DONE, lines));
             x += width + 6;
         }
@@ -155,7 +203,7 @@ final class TaskCalendar extends JPanel {
     private static int textRoom(int chipWidth) { return chipWidth - CHIP_TEXT_X - CHIP_TEXT_EDGE; }
 
     /** A chip's height: one row, plus the caption face's own leading for each line after the first. */
-    private static int chipHeight(int lines) { return CHIP + (lines - 1) * CHIP_METRICS.getHeight(); }
+    private static int chipHeight(int lines) { return chip() + (lines - 1) * metrics().getHeight(); }
 
     /**
      * A title broken onto at most {@code maxLines} lines that each fit {@code width}.
@@ -168,10 +216,10 @@ final class TaskCalendar extends JPanel {
     private static List<String> wrap(String text, int width, int maxLines) {
         var lines = new ArrayList<String>();
         var rest = text.strip();
-        while (lines.size() < maxLines - 1 && CHIP_METRICS.stringWidth(rest) > width) {
+        while (lines.size() < maxLines - 1 && metrics().stringWidth(rest) > width) {
             int cut = rest.length();
             // Back up to the last space that still leaves the line inside the chip.
-            while (cut > 0 && CHIP_METRICS.stringWidth(rest.substring(0, cut)) > width)
+            while (cut > 0 && metrics().stringWidth(rest.substring(0, cut)) > width)
                 cut = rest.lastIndexOf(' ', cut - 1);
             if (cut <= 0) break;   // one word wider than the chip: let the elision below take it
             lines.add(rest.substring(0, cut).stripTrailing());
@@ -191,14 +239,14 @@ final class TaskCalendar extends JPanel {
      * from the word it follows.
      */
     private static String elide(String text, int width) {
-        if (CHIP_METRICS.stringWidth(text) <= width) return text;
-        int room = width - CHIP_METRICS.stringWidth(ELLIPSIS);
+        if (metrics().stringWidth(text) <= width) return text;
+        int room = width - metrics().stringWidth(ELLIPSIS);
         var head = new StringBuilder();
         int used = 0;
         for (int i = 0; i < text.length(); ) {
             int code = text.codePointAt(i);
             var glyph = new String(Character.toChars(code));
-            int advance = CHIP_METRICS.stringWidth(glyph);
+            int advance = metrics().stringWidth(glyph);
             if (used + advance > room) break;
             head.append(glyph);
             used += advance;
@@ -232,10 +280,11 @@ final class TaskCalendar extends JPanel {
         return cell == null ? null : new Point(cell.x + cell.width / 2, cell.y + cell.height - 6);
     }
 
-    Point centreOfTray() { return new Point(trayBounds.width / 2, trayBounds.y + 12); }
+    Point centreOfTray() { return new Point(trayBounds.width / 2, trayBounds.y + trayBounds.height / 2); }
 
     Point pointOn(UUID task) {
-        for (var chip : chips) if (chip.task().equals(task)) return new Point(chip.bounds().x + 6, chip.bounds().y + 8);
+        for (var chip : chips) if (chip.task().equals(task))
+            return new Point(chip.bounds().x + 6, chip.bounds().y + chip.bounds().height / 2);
         return null;
     }
 
@@ -243,9 +292,12 @@ final class TaskCalendar extends JPanel {
 
     private void install(Edits edits) {
         var handler = new MouseAdapter() {
+            /** The day the picked-up chip was drawn on, or null for the undated strip. */
+            private LocalDate from;
             @Override public void mousePressed(MouseEvent e) {
                 relayout();
                 dragging = taskAt(e.getPoint());
+                from = dateAt(e.getPoint());
                 cursor = e.getPoint();
                 repaint();
             }
@@ -265,8 +317,19 @@ final class TaskCalendar extends JPanel {
                 repaint();
                 // A drop that lands nowhere is a no-op, not a task with no date:
                 // releasing outside the component has to be a way to change your mind.
-                if (target != null) edits.reschedule(task, target);
-                else if (tray) edits.reschedule(task, null);
+                // Put back where it was picked up is not a move either: a click on
+                // a chip would otherwise plan a task for the day it was only due.
+                if (target != null && !target.equals(from)) edits.reschedule(task, target);
+                else if (tray && from != null) edits.reschedule(task, null);
+            }
+            @Override public void mouseClicked(MouseEvent e) {
+                // A day is where a task made from the calendar belongs: the
+                // form opens due that day rather than today (#67).
+                if (e.getClickCount() != 2 || !SwingUtilities.isLeftMouseButton(e)) return;
+                relayout();
+                if (taskAt(e.getPoint()) != null) return;
+                var date = dateAt(e.getPoint());
+                if (date != null) edits.create(date);
             }
         };
         addMouseListener(handler);
@@ -279,7 +342,7 @@ final class TaskCalendar extends JPanel {
         if (task != null) return tasks.stream().filter(t -> t.id().equals(task)).findFirst()
             .map(t -> t.title() + (t.due() == null ? "  ·  no due date" : "  ·  due " + t.due())).orElse(null);
         var date = dateAt(event.getPoint());
-        return date == null ? null : date.toString() + "  ·  drop a task here to move it";
+        return date == null ? null : date.toString() + "  ·  double-click to add a task, or drop one here to move it";
     }
 
     // ------------------------------------------------------------------ paint
@@ -294,7 +357,7 @@ final class TaskCalendar extends JPanel {
         g.setColor(Theme.MUTED);
         for (int day = 0; day < 7; day++)
             g.drawString(weekStart.plus(day).getDisplayName(TextStyle.SHORT, Locale.ENGLISH).toUpperCase(Locale.ENGLISH),
-                day * colW + 6, 14);
+                day * colW + 6, metrics().getAscent() + Theme.SPACE_XS);
 
         for (var entry : cells.entrySet()) {
             var date = entry.getKey();
@@ -306,7 +369,7 @@ final class TaskCalendar extends JPanel {
             g.drawRect(cell.x, cell.y, cell.width, cell.height);
             g.setFont(Theme.captionFont());
             g.setColor(date.equals(today) ? Theme.CYAN : outside ? Theme.shade(Theme.MUTED, Theme.DARK ? -30 : 30) : Theme.MUTED);
-            g.drawString(String.valueOf(date.getDayOfMonth()), cell.x + 5, cell.y + 11);
+            g.drawString(String.valueOf(date.getDayOfMonth()), cell.x + 5, cell.y + metrics().getAscent() + 1);
         }
 
         g.setColor(Theme.LINE);
@@ -314,7 +377,7 @@ final class TaskCalendar extends JPanel {
         if (overTray) { g.setColor(Theme.shade(Theme.PANEL, Theme.DARK ? 22 : -14)); g.fillRect(trayBounds.x + 1, trayBounds.y + 1, trayBounds.width - 2, trayBounds.height - 2); }
         g.setFont(Theme.captionFont());
         g.setColor(Theme.MUTED);
-        g.drawString("No date · drag onto a day to plan it", 6, trayBounds.y + 14);
+        g.drawString("No date · drag onto a day to plan it", 6, trayBounds.y + metrics().getAscent() + Theme.SPACE_XS);
 
         for (var chip : chips) paintChip(g, chip);
 
@@ -347,7 +410,7 @@ final class TaskCalendar extends JPanel {
             ? wrap(chip.label(), textRoom(box.width), chip.lines())
             : List.of(elide(chip.label(), textRoom(box.width)));
         for (int line = 0; line < lines.size(); line++)
-            g.drawString(lines.get(line), box.x + CHIP_TEXT_X, box.y + 12 + line * CHIP_METRICS.getHeight());
+            g.drawString(lines.get(line), box.x + CHIP_TEXT_X, box.y + chipBaseline() + line * metrics().getHeight());
         g.setClip(clip);
     }
 }

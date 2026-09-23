@@ -78,7 +78,11 @@ final class TodayPage {
         var zone=zone();
         var p=stack();
         long open=tracker.state().tasks().stream().filter(t->!t.done()).count();
-        p.add(YoruApp.pageHeaderFor("Today","LOCAL VAULT · "+plural((int)open,"open task").toUpperCase(Locale.ROOT)));
+        // Anki's one line stands on the title's line (#85, #86): a glance at
+        // it is a glance at the page's head, and at the foot of the page it
+        // pushed the day past the bottom of a 1280×900 window.
+        ankiCard.render();
+        p.add(YoruApp.pageHeaderFor("Today","LOCAL VAULT · "+plural((int)open,"open task").toUpperCase(Locale.ROOT),ankiCard));
 
         // Two columns while there is room for both, stacked when there is not:
         // the companion card used to be a fixed 315 px in an EAST slot, which
@@ -114,9 +118,6 @@ final class TodayPage {
         // habits still to tick off. Both are summaries; the pages that own them
         // hold the detail (#86).
         p.add(new Columns(tasksCard(today),HabitChecklist.card(tracker,()->shell.show("Today"),shell::error)));
-        gap(p,SPACE_LG);
-        ankiCard.render();
-        p.add(ankiCard);
         gap(p,SPACE_XL);
         return p;
     }
@@ -177,7 +178,6 @@ final class TodayPage {
         gap(focus,SPACE_LG);
         dailyGoal=new DailyGoal(tracker,zone());
         focus.add(dailyGoal);
-        gap(focus,SPACE_LG);
         gap(focus,SPACE_LG);
         return focus;
     }

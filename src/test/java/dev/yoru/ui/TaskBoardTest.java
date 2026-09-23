@@ -117,15 +117,24 @@ public final class TaskBoardTest {
             if(cause instanceof Error error)throw error;
             throw wrapped;
         }
-        // A new task is due today; an existing one keeps its own date (#67).
-        check(TasksPanel.dueField(null).value().equals(java.time.LocalDate.now()),
-            "a new task's form opens with today's date");
+        // A new task is due the day it is made; an existing one keeps its own date (#67).
+        var made=java.time.LocalDate.of(2026,9,23);
+        check(TasksPanel.dueField(null,made).value().equals(made),
+            "a new task's form opens with the day it is made");
+        // Today is the owner's own day, not the UTC one: 00:00:30 in Tokyo is
+        // still the afternoon before in UTC, and the task is written down today.
+        var afterMidnight=Clock.fixed(Instant.parse("2026-09-22T15:00:30Z"),ZoneId.of("Asia/Tokyo"));
+        check(TasksPanel.today(afterMidnight).equals(java.time.LocalDate.of(2026,9,23)),
+            "just after midnight, a new task is due on the new day in the owner's zone");
+        var beforeMidnight=Clock.fixed(Instant.parse("2026-09-23T03:59:30Z"),ZoneId.of("America/New_York"));
+        check(TasksPanel.today(beforeMidnight).equals(java.time.LocalDate.of(2026,9,22)),
+            "just before midnight it is still the old day, even when UTC has moved on");
         var dated = new Task(java.util.UUID.randomUUID(), null, null, "Dated", "",
             java.time.LocalDate.now().plusDays(3), TaskStatus.TODO, "Test", java.time.Instant.now(), 0);
-        check(TasksPanel.dueField(dated).value().equals(dated.due()), "editing a task shows the date it has");
+        check(TasksPanel.dueField(dated,made).value().equals(dated.due()), "editing a task shows the date it has");
         var undated = new Task(java.util.UUID.randomUUID(), null, null, "Undated", "", null,
             TaskStatus.TODO, "Test", java.time.Instant.now(), 1);
-        check(TasksPanel.dueField(undated).value() == null, "and a task with no date still has none");
+        check(TasksPanel.dueField(undated,made).value() == null, "and a task with no date still has none");
 
         System.out.println("PASS: "+checks+" board checks (views, sorting, status, reorder, tags)");
     }

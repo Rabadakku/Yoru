@@ -269,16 +269,19 @@ final class TasksPanel extends JPanel implements Scrollable {
         nav.add(thisMonth);
         rows.add(nav);
 
-        var calendar=new TaskCalendar(tracker.state().withTasks(visible()),month,LocalDate.now(),(taskId,date)->{
-            var task=tracker.state().tasks().stream().filter(t->t.id().equals(taskId)).findFirst().orElse(null);
-            if(task==null||Objects.equals(task.plannedFor(),date))return;
-            try {
-                // Dragging moves the *plan*. A deadline is not something you drag;
-                // it is changed deliberately, in the editor.
-                tracker.updateTask(merged(task,task.activityId(),task.tagId(),task.title(),task.notes(),
-                    task.due(),task.status(),0,date));
-                rebuildRows();
-            } catch(Exception e){error(e);}
+        var calendar=new TaskCalendar(tracker.state().withTasks(visible()),month,LocalDate.now(),new TaskCalendar.Edits() {
+            @Override public void reschedule(UUID taskId,LocalDate date) {
+                var task=tracker.state().tasks().stream().filter(t->t.id().equals(taskId)).findFirst().orElse(null);
+                if(task==null||Objects.equals(task.plannedFor(),date))return;
+                try {
+                    // Dragging moves the *plan*. A deadline is not something you drag;
+                    // it is changed deliberately, in the editor.
+                    tracker.updateTask(merged(task,task.activityId(),task.tagId(),task.title(),task.notes(),
+                        task.due(),task.status(),0,date));
+                    rebuildRows();
+                } catch(Exception e){error(e);}
+            }
+            @Override public void create(LocalDate date) { edit(null,date); }
         });
         calendar.setName("task.calendar");
         var frame=new JPanel(new BorderLayout());
@@ -771,21 +774,28 @@ final class TasksPanel extends JPanel implements Scrollable {
     }
 
     /**
-     * The due date a form starts from: today for a new task (#67), and its own
-     * for one being edited.
+     * The due date a form starts from: the day a new task is made on (#67), and
+     * its own for one being edited.
      *
      * Almost every task written down is due that day, and the date is one click
      * to clear when it is not; an empty field made a deadline something you had
-     * to remember to set, so most tasks had none.
+     * to remember to set, so most tasks had none. The day is today for New task
+     * and the + New task row, and the day double-clicked for one made from the
+     * calendar.
      */
-    static DateField dueField(Task existing) {
-        return new DateField(existing==null?LocalDate.now():existing.due(),"Due",true);
+    static DateField dueField(Task existing,LocalDate day) {
+        return new DateField(existing==null?day:existing.due(),"Due",true);
     }
 
-    private void edit(Task existing) {
+    /** Today on this computer's clock and in its zone, which is the day a task is written down on. */
+    static LocalDate today(Clock clock) { return LocalDate.now(clock); }
+
+    private void edit(Task existing) { edit(existing,today(Clock.systemDefaultZone())); }
+
+    private void edit(Task existing,LocalDate day) {
         var title=new JTextField(existing==null?"":existing.title(),36);
         var notes=new JTextArea(existing==null?"":existing.notes(),5,36);notes.setLineWrap(true);notes.setWrapStyleWord(true);
-        var due=dueField(existing);
+        var due=dueField(existing,day);
         var activity=plainCombo(new JComboBox<Object>());activity.addItem("Unassigned");tracker.state().activities().forEach(activity::addItem);
         if(existing!=null&&existing.activityId()!=null)for(int i=1;i<activity.getItemCount();i++)if(((Activity)activity.getItemAt(i)).id().equals(existing.activityId()))activity.setSelectedIndex(i);
         var status=plainCombo(new JComboBox<>(TaskStatus.values()));

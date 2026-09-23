@@ -25,6 +25,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PageEditorTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PagesUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiCardTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiReconnectTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiSettingsTest
 java -ea -cp build/classes dev.yoru.CoreTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.UiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.VisualSystemTest
@@ -37,6 +38,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SystemAppearance
 java -ea -cp build/classes dev.yoru.HabitsTest
 java -ea -cp build/classes dev.yoru.HabitStatsTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.HabitGridTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.HabitChecklistTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.InputTest
 java -ea -cp build/classes dev.yoru.ui.DateTextTest
 java -ea -cp build/classes dev.yoru.ui.AgoTest

@@ -28,6 +28,18 @@ Columns(JComponent left,JComponent right) {
     }
     @Override public void doLayout() { apply(getWidth() < STACK_BELOW); super.doLayout(); }
 
+    /**
+     * Measured in the arrangement its width calls for, once it has one.
+     *
+     * The switch otherwise happened during layout, after the page had already
+     * set aside the height of the other arrangement: stacked columns were
+     * squeezed into the height of side-by-side ones until another pass came.
+     */
+    @Override public Dimension getPreferredSize() {
+        if (getWidth() > 0) apply(getWidth() < STACK_BELOW);
+        return super.getPreferredSize();
+    }
+
     private void apply(boolean stack) {
         if(getComponentCount()>0&&stack==stacked)return;
         stacked=stack;
@@ -46,6 +58,10 @@ Columns(JComponent left,JComponent right) {
             setLayout(new GridLayout(1,2,SPACE_LG,0));
             add(left); add(right);
         }
+        // What holds this measured it in the other arrangement, and a box
+        // layout keeps what it measured until it is told otherwise.
+        for (Container holder = getParent(); holder != null; holder = holder.getParent())
+            if (holder.getLayout() instanceof LayoutManager2 cached) cached.invalidateLayout(holder);
         revalidate(); repaint();
     }
 

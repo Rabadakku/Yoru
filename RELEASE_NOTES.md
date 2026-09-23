@@ -1,3 +1,10 @@
+# v1.0.20 — Habits at a glance
+
+Each habit is one line, so a page of them fits on the screen; habits tick off
+from the keyboard; the task calendar makes tasks on a day; Anki's connection
+test says what went wrong; the drawn views follow the text size. See
+[release details](docs/RELEASE-1.0.20.md). No vault migration.
+
 # v1.0.19 — Interface detail polish
 
 Quieter tabs, rounded scrollbars, consistent hover feedback and accurate Edit
