@@ -110,6 +110,10 @@ public final class DialogPreview {
                 tracker.addTag("Language", 0xE8B24C);
                 tracker.addTag("Writing", 0xA98BD4);
                 render(out, "tags", new TagEditor(tracker, () -> { }), new String[]{"Done"});
+                tracker.addList("Reading", 0x90D8DA);
+                render(out, "bulk-move", new TaskBulkActions.MoveForm(tracker.state()), new String[]{"Move", "Cancel"});
+                render(out, "bulk-date", new TaskBulkActions.DateForm(false), new String[]{"Apply", "Cancel"});
+                render(out, "bulk-tags", new TaskBulkActions.TagsForm(tracker.state()), new String[]{"Apply", "Cancel"});
 
                 // The weekly template: the only dialog that groups by weekday.
                 var planner = new Tracker(new Repository() {
@@ -132,7 +136,7 @@ public final class DialogPreview {
                     java.time.LocalTime.of(11, 0), java.time.LocalTime.of(12, 0));
                 render(out, "weekly", new WeeklyTemplate(planner, () -> { }), new String[]{"Done"});
 
-                System.out.println("Rendered 7 dialogs to " + out);
+                System.out.println("Rendered 10 dialogs to " + out);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

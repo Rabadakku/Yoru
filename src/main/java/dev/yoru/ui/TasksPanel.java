@@ -94,6 +94,9 @@ final class TasksPanel extends JPanel implements Scrollable {
     private JComponent tabsRow, toolsRow;
     private final JLabel inboxHelp = wrapping(TaskLists.INBOX_HELP, TYPE_CAPTION, MUTED);
     private JComboBox<Sort> order;
+    private final TaskBulkActions bulk;
+    private final JButton selectTasks;
+    private final Map<UUID,JCheckBox> selectionChecks = new LinkedHashMap<>();
     /** Set while the page puts a place's saved search back, so the field's own listener does not rebuild twice. */
     private boolean restoring;
 
@@ -105,6 +108,24 @@ final class TasksPanel extends JPanel implements Scrollable {
         super(new BorderLayout()); setOpaque(false);
         this.tracker=tracker; this.refresh=refresh; this.closed=closed;
         this.state=state;
+        bulk = new TaskBulkActions(tracker, this::rebuildRows, this::error, closed);
+        selectTasks = button("Select", () -> {
+            if (bulk.active()) bulk.stop(); else bulk.start();
+            rebuildRows();
+            if (bulk.active() && !selectionChecks.isEmpty())
+                selectionChecks.values().iterator().next().requestFocusInWindow();
+        });
+        getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("ESCAPE"), "tasks.cancelSelection");
+        getActionMap().put("tasks.cancelSelection", new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent e) {
+                if (!bulk.active()) return;
+                bulk.stop();
+                rebuildRows();
+                selectTasks.requestFocusInWindow();
+            }
+        });
+        selectTasks.setName("tasks.select");
+        selectTasks.getAccessibleContext().setAccessibleName("Select tasks for bulk actions");
         view=state.view; sort=state.sort; month=state.month;
         var p=stack();
         var board=stack();
@@ -143,7 +164,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         importer.addActionListener(e->importMenu().show(importer,0,importer.getHeight()));
         var left=new JPanel(new WrapFlowLayout(FlowLayout.LEFT,SPACE_SM,SPACE_XS));
         left.setOpaque(false);
-        left.add(sortControls);left.add(tags);left.add(importer);
+        left.add(sortControls);left.add(tags);left.add(importer);left.add(selectTasks);
         var find=new JPanel(new BorderLayout(SPACE_SM,0));
         find.setOpaque(false);
         var caption=label("Search",TYPE_LABEL,MUTED);
@@ -177,6 +198,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         // going (#54, #56).
         inboxHelp.setName("tasks.inbox.help");
         board.add(inboxHelp);
+        board.add(bulk);
         board.add(rows);gap(board,SPACE_MD);
         rail.setName("tasks.rail");
         p.add(new TaskLists.Rail(rail,board));
@@ -241,6 +263,7 @@ final class TasksPanel extends JPanel implements Scrollable {
 
     /** Shows another place on the rail, with the view and search it was last left with. */
     void showPlace(String place) {
+        bulk.stop();
         state.view=view; state.sort=sort; state.month=month; state.query=search.getText();
         state.enter(place);
         view=state.view; sort=state.sort; month=state.month;
@@ -262,6 +285,12 @@ final class TasksPanel extends JPanel implements Scrollable {
         rowPanels.clear();
         TaskLists.fill(rail,tracker,place,this::showPlace,this::rebuildRows,railEntries);
         boolean habits=place.equals(TaskLists.HABITS);
+        boolean canSelect = !habits && view != View.CALENDAR;
+        bulk.update(canSelect ? visible() : List.of(), canSelect);
+        selectTasks.setEnabled(canSelect);
+        selectTasks.setText(bulk.active() ? "Cancel selection" : "Select");
+        selectTasks.getAccessibleContext().setAccessibleName(bulk.active() ? "Cancel task selection" : "Select tasks for bulk actions");
+        selectionChecks.clear();
         tabsRow.setVisible(!habits);
         toolsRow.setVisible(!habits);
         if(habits) {
@@ -434,15 +463,25 @@ final class TasksPanel extends JPanel implements Scrollable {
 
         var check=new JCheckBox();
         check.setOpaque(false);
-        check.setSelected(done);
-        check.setName("task.done."+task.id());
-        check.getAccessibleContext().setAccessibleName("Done: "+task.title());
-        check.setToolTipText(done?"Mark as not done":"Mark as done");
-        check.addActionListener(e->status(task,check.isSelected()?TaskStatus.DONE:TaskStatus.TODO));
+        if (bulk.active()) {
+            check.setSelected(bulk.selected(task.id()));
+            check.setName("task.select." + task.id());
+            check.getAccessibleContext().setAccessibleName("Select task: " + task.title());
+            check.setToolTipText("Select for bulk actions · Space toggles selection");
+            selectionChecks.put(task.id(), check);
+            check.addActionListener(e -> selectTask(task.id()));
+        } else {
+            check.setSelected(done);
+            check.setName("task.done."+task.id());
+            check.getAccessibleContext().setAccessibleName("Done: "+task.title());
+            check.setToolTipText(done?"Mark as not done":"Mark as done");
+            check.addActionListener(e->status(task,check.isSelected()?TaskStatus.DONE:TaskStatus.TODO));
+        }
         line.add(check);
 
         var status=button(task.status().label,()->cycle(task));
         status.setName("task.status."+task.id());
+        status.setEnabled(!bulk.active());
         status.setBackground(TagChips.wash(switch(task.status()){case TODO->MUTED;case DOING->GOLD;case DONE->CYAN;}));
         status.setForeground(TEXT);
         status.setFont(captionFont());
@@ -466,7 +505,9 @@ final class TasksPanel extends JPanel implements Scrollable {
         title.setToolTipText(task.notes().isBlank()?"Open to edit":task.notes());
         title.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
-                if(SwingUtilities.isLeftMouseButton(e)&&e.getClickCount()==1) edit(task);
+                if(SwingUtilities.isLeftMouseButton(e)&&e.getClickCount()==1) {
+                    if (bulk.active()) selectTask(task.id()); else edit(task);
+                }
             }
         });
         line.add(title);
@@ -495,8 +536,16 @@ final class TasksPanel extends JPanel implements Scrollable {
                 if(menu!=null) menu.show(e.getComponent(),e.getX(),e.getY());
             }
         });
-        installDrag(line,tasks,index);
+        if (!bulk.active()) installDrag(line,tasks,index);
         return line;
+    }
+
+    private void selectTask(UUID id) {
+        bulk.toggle(id);
+        SwingUtilities.invokeLater(() -> {
+            var check = selectionChecks.get(id);
+            if (check != null) check.requestFocusInWindow();
+        });
     }
 
     /** Lays a row's cells into the shared column widths; the title column takes what is left. */
@@ -792,6 +841,8 @@ final class TasksPanel extends JPanel implements Scrollable {
         boolean done=task.status()==TaskStatus.DONE;
         var menu=Menus.popup();
         menu.add(Menus.item("Edit…","task.edit."+id,true,()->edit(task),null));
+        menu.add(Menus.item(bulk.selected(id) ? "Deselect task" : "Select task", "task.selectMenu." + id,
+            true, () -> selectTask(id), null));
         menu.add(Menus.item("Track time","task.track."+id,task.activityId()!=null&&!done,()->track(task),
             task.activityId()==null?"Assign an activity to time this task":"This task is finished"));
         menu.addSeparator();

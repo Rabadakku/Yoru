@@ -378,6 +378,10 @@ public final class Model {
         // One field changed and everything else kept, page links included. Every
         // rebuild of an existing task goes through these rather than a
         // constructor, which is where a forgotten field used to go missing.
+        /** Both task dates changed, with every unrelated property preserved. */
+        public Task withDates(LocalDate deadline, LocalDate planned) {
+            return new Task(id,activityId,tagIds,title,notes,deadline,status,source,createdAt,order,planned,pageIds,listId,repeat,history);
+        }
         public Task withStatus(TaskStatus next) {
             return new Task(id,activityId,tagIds,title,notes,due,next,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
         }

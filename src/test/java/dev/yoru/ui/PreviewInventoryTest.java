@@ -23,7 +23,7 @@ public final class PreviewInventoryTest {
 
     private static final int WIDTH = 1280, HEIGHT = 1000, MIN_WIDTH = 900, MIN_HEIGHT = 640;
     private static final List<String> VIEWS = List.of("today", "tasks", "pages", "pages-reading", "habits", "schedule",
-        "data", "settings", "tasks-calendar");
+        "data", "settings", "tasks-calendar", "tasks-bulk");
 
     public static void main(String[] args) {
         // Preview's windows leave timers running on the event thread, so this
