@@ -755,7 +755,37 @@ public final class Tracker {
     }
 
     public void taskStatus(UUID id,TaskStatus status) throws IOException {
-        updateTask(task(id).withStatus(Objects.requireNonNull(status)));
+        taskStatus(id,status,ZoneId.systemDefault());
+    }
+
+    /**
+     * A task's new status, with "today" read in {@code zone}.
+     *
+     * Finishing a repeating task (#57) records the occurrence and moves the
+     * task on to its next date, back to To do: it stays one task with a
+     * history rather than a pile of copies. When the rule has run out, the task
+     * is simply done.
+     */
+    public void taskStatus(UUID id,TaskStatus status,ZoneId zone) throws IOException {
+        var task=task(id);
+        if(status==TaskStatus.DONE&&task.repeats()&&task.status()!=TaskStatus.DONE) { advance(task,false,zone); return; }
+        updateTask(task.withStatus(Objects.requireNonNull(status)));
+    }
+
+    /** Passes over this occurrence of a repeating task without doing it, and moves it to the next (#57). */
+    public void skipOccurrence(UUID id,ZoneId zone) throws IOException {
+        var task=task(id);
+        if(!task.repeats()) throw new IllegalArgumentException("Only a repeating task has an occurrence to skip.");
+        if(task.status()==TaskStatus.DONE) throw new IllegalArgumentException("This task has finished repeating.");
+        advance(task,true,zone);
+    }
+
+    private void advance(Task task,boolean skipped,ZoneId zone) throws IOException {
+        var now=clock.instant();
+        var today=LocalDate.ofInstant(now,zone);
+        var behind=new Occurrence(task.due(),now,skipped);
+        var next=Repeats.following(task.repeat(),task.due(),today,state.settings().weekStartsOn(),task.history().size()+1);
+        updateTask(next==null?task.advanced(behind,task.due(),TaskStatus.DONE):task.advanced(behind,next,TaskStatus.TODO));
     }
 
     public void deleteTask(UUID id) throws IOException {

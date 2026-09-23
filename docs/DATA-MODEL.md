@@ -266,3 +266,23 @@ places they already hold, so other lists never move.
 
 The portable export is format 8: `"lists"` at the top level and `"listId"` on
 each task. A file without them reads with every task in the Inbox.
+
+## Repeating tasks (schema 20, #57)
+
+Schema 20 adds two parts to each task, after its list: an optional `Repeat`
+rule and the `Occurrence`s behind it. A rule is a unit (day, week, month,
+year), an interval, the weekdays of a weekly rule (one bit each in the vault,
+names in the export), a day of the month or an nth weekday (-1 for the last),
+the start it counts from, whether the next date comes from the schedule or
+from the day it was finished, and an optional last day or number of times.
+An occurrence is the day it was due, when it was done or skipped, and which.
+
+The rule's dates are worked out, never stored (`application.Repeats`): the
+31st falls on a shorter month's last day, the 29th of February on the 28th in
+other years, weeks and fortnights break where the owner's week starts, and a
+task finished late is next due today at the earliest rather than on the days
+it missed. The task's due date is the occurrence now in front of it, which is
+what "edit this occurrence" edits; finishing or skipping records it and moves
+the due date on, and when the rule runs out the task is simply done. A
+repeating task always has a due date. Older vaults arrive with nothing
+repeating. The export is format 9.

@@ -701,6 +701,8 @@ final class TasksPanel extends JPanel implements Scrollable {
         // A planned day that is not the deadline gets a marker, because the two
         // being different is the thing worth noticing.
         if(task.plannedFor()!=null&&task.due()!=null&&!task.plannedFor().equals(task.due())) text="→ "+text;
+        // A repeating task says so where its date is, since the date is what repeats (#57).
+        if(task.repeats()) text="↻ "+text;
         l.setText(text);
         l.setForeground(colour);
         if(task.scheduledLate())
@@ -709,6 +711,14 @@ final class TasksPanel extends JPanel implements Scrollable {
             l.setToolTipText("Planned for "+DateText.date(task.plannedFor())+", due "+DateText.date(task.due()));
         else if(when.isBefore(today)&&task.status()!=TaskStatus.DONE)
             l.setToolTipText("Overdue since "+DateText.date(when));
+        if(task.repeats()) {
+            var history=task.history();
+            String record=history.isEmpty()?"":" · done "+dev.yoru.application.Repeats.done(history)+" of "+history.size()
+                +(dev.yoru.application.Repeats.streak(history)>1?", "+dev.yoru.application.Repeats.streak(history)+" in a row":"");
+            String before=l.getToolTipText();
+            l.setToolTipText((before==null?"":before+" · ")+RepeatField.describe(task.repeat())+record);
+            l.getAccessibleContext().setAccessibleName(text.replace("↻ ","")+", repeats "+RepeatField.describe(task.repeat()).toLowerCase(Locale.ROOT));
+        }
         return l;
     }
 
@@ -789,6 +799,15 @@ final class TasksPanel extends JPanel implements Scrollable {
                 try { tracker.pages().unlinkTask(id, pageId); rebuildRows(); } catch (Exception e) { error(e); }
             }, null));
         });
+        if(task.repeats()) {
+            menu.addSeparator();
+            menu.add(Menus.item("Skip this one","task.skip."+id,!done,()->{
+                try{tracker.skipOccurrence(id,ZoneId.systemDefault());rebuildRows();}catch(Exception e){error(e);}
+            },"This task has finished repeating"));
+            menu.add(Menus.item("Stop repeating","task.stopRepeat."+id,true,()->{
+                try{tracker.updateTask(task.withRepeat(null));rebuildRows();}catch(Exception e){error(e);}
+            },null));
+        }
         menu.addSeparator();
         // Filing it elsewhere (#56): the Inbox and every list, the one it is in greyed.
         menu.add(Menus.item("Move to Inbox","task.moveTo."+TaskLists.INBOX+"."+id,task.listId()!=null,
@@ -880,7 +899,10 @@ final class TasksPanel extends JPanel implements Scrollable {
             // The form does not show page links, so an edit keeps them.
             existing==null?List.of():existing.pageIds(),
             // A new task goes in the list on screen; an edit stays where it is filed (#56).
-            existing==null?listForNew:existing.listId());
+            existing==null?listForNew:existing.listId(),
+            // Its rule is set by the form's own field; the occurrences behind it always stay (#57).
+            existing==null?null:existing.repeat(),
+            existing==null?List.of():existing.history());
     }
 
     /** A new task lands at the bottom of the manual order, not on top of row one. */
@@ -919,18 +941,24 @@ final class TasksPanel extends JPanel implements Scrollable {
         var tags=new TagField(tracker.state().tags(),existing==null?List.of():existing.tagIds());
         var planned=new DateField(existing==null?null:existing.plannedFor(),"Plan for",true);
         planned.setName("task.plannedFor");
+        var repeat=new RepeatField(existing==null?null:existing.repeat(),tracker.state().settings().weekStartsOn());
         var form=stack();form.add(new JLabel("Title"));form.add(title);gap(form,SPACE_MD);form.add(new JLabel("Notes"));form.add(new JScrollPane(notes));gap(form,SPACE_MD);
         form.add(new JLabel("Due · the deadline"));form.add(due);gap(form,SPACE_MD);
         form.add(new JLabel("Plan for · the day you mean to do it · blank to use the deadline"));form.add(planned);gap(form,SPACE_MD);
+        form.add(new JLabel("Repeat · from the due date"));form.add(repeat);gap(form,SPACE_MD);
         form.add(new JLabel("Activity"));form.add(activity);gap(form,SPACE_MD);form.add(new JLabel("Status"));form.add(status);gap(form,SPACE_MD);form.add(new JLabel("Tags · type to find or create"));form.add(tags);
         // Reopened on a refusal with everything as typed, rather than closed with it lost.
         while(Dialogs.confirm(this,form,existing==null?"New task":"Edit task","Save")) {
             try {
+                var deadline=due.value();
+                var rule=repeat.value(deadline);
+                // A repeat comes back on a date: with none given, it starts today.
+                if(rule!=null&&deadline==null) deadline=rule.start();
                 var task=merged(existing,
                     activity.getSelectedItem() instanceof Activity a?a.id():null,
                     tags.tagIds(),
-                    title.getText(),notes.getText(),due.value(),
-                    (TaskStatus)status.getSelectedItem(),nextOrder(),planned.value(),newTaskList());
+                    title.getText(),notes.getText(),deadline,
+                    (TaskStatus)status.getSelectedItem(),nextOrder(),planned.value(),newTaskList()).withRepeat(rule);
                 // The task and the tags made for it are one write.
                 tracker.saveTask(task,tags.newTags());
                 rebuildRows();

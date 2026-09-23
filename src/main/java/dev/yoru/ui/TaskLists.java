@@ -21,14 +21,14 @@ import static dev.yoru.ui.Theme.*;
 final class TaskLists {
     private TaskLists() { }
 
-    static final String ALL = "all", INBOX = "inbox", HABITS = "habits";
+    static final String ALL = "all", INBOX = "inbox", HABITS = "habits", REPEATING = "repeating";
 
     /** Marks a rail entry with the place it stands for, so a dragged task can be dropped on it. */
     static final String TARGET = "yoru.list.target";
 
     /** The list a place key names, or null for a built-in place or a list since deleted. */
     static UUID listOf(String key) {
-        if (key == null || key.equals(ALL) || key.equals(INBOX) || key.equals(HABITS)) return null;
+        if (key == null || key.equals(ALL) || key.equals(INBOX) || key.equals(HABITS) || key.equals(REPEATING)) return null;
         try { return UUID.fromString(key); } catch (IllegalArgumentException notAList) { return null; }
     }
 
@@ -37,13 +37,14 @@ final class TaskLists {
         if (key.equals(ALL)) return true;
         if (key.equals(INBOX)) return task.listId() == null;
         if (key.equals(HABITS)) return false;
+        if (key.equals(REPEATING)) return task.repeats();
         return Objects.equals(listOf(key), task.listId());
     }
 
     /** Whether a key still names somewhere: a list can be deleted from under the page. */
     static boolean exists(State state, String key) {
         var list = listOf(key);
-        return list == null ? List.of(ALL, INBOX, HABITS).contains(key)
+        return list == null ? List.of(ALL, INBOX, HABITS, REPEATING).contains(key)
             : state.lists().stream().anyMatch(l -> l.id().equals(list));
     }
 
@@ -58,6 +59,7 @@ final class TaskLists {
             case ALL -> "All tasks";
             case INBOX -> "Inbox";
             case HABITS -> "Daily habits";
+            case REPEATING -> "Repeating";
             default -> state.lists().stream().filter(l -> l.id().equals(listOf(key))).map(TaskList::name)
                 .findFirst().orElse("All tasks");
         };
@@ -173,6 +175,11 @@ final class TaskLists {
             rail.add(entry);
             entries.add(entry);
         }
+        // Every repeating task in one place (#57), once there is one.
+        if (state.tasks().stream().anyMatch(Task::repeats)) {
+            int repeating = (int) state.tasks().stream().filter(t -> t.repeats() && t.status() != TaskStatus.DONE).count();
+            rail.add(entry(REPEATING, name(state, REPEATING), null, repeating, REPEATING.equals(current), () -> pick.accept(REPEATING)));
+        }
         long habits = state.habits().stream().filter(h -> h.kind() == HabitKind.DAILY).count();
         if (habits > 0) {
             int left = (int) state.habits().stream().filter(h -> h.kind() == HabitKind.DAILY)
@@ -262,25 +269,15 @@ final class TaskLists {
         var message = stack();
         message.add(label("Delete the list \"" + list.name() + "\"?", TYPE_HEADING, TEXT));
         gap(message, SPACE_MD);
-        var toInbox = new JRadioButton("Move its " + plural((int) held, "task") + " to the Inbox", true);
-        var withIt = new JRadioButton("Delete its " + plural((int) held, "task") + " too");
-        for (var choice : List.of(toInbox, withIt)) {
-            choice.setOpaque(false);
-            choice.setForeground(TEXT);
-            choice.setFont(labelFont());
-        }
-        toInbox.setName("list.delete.toInbox");
-        withIt.setName("list.delete.tasks");
-        var group = new ButtonGroup();
-        group.add(toInbox);
-        group.add(withIt);
+        var fate = new Segmented("list.delete.fate", 0, "Move its " + plural((int) held, "task") + " to the Inbox",
+            "Delete its " + plural((int) held, "task") + " too");
         if (held == 0) message.add(bodyLabel("It holds no tasks."));
-        else { message.add(toInbox); message.add(withIt); }
+        else message.add(fate);
         gap(message, SPACE_SM);
         message.add(bodyLabel("A backup of the vault is kept first."));
         if (!Dialogs.confirmDestructive(owner, message, "Delete list", "Delete list")) return;
         try {
-            tracker.deleteList(list.id(), withIt.isSelected());
+            tracker.deleteList(list.id(), fate.chosen() == 1);
             pick.accept(INBOX);
         } catch (Exception e) { Dialogs.error(owner, e.getMessage()); }
     }

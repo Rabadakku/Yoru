@@ -93,7 +93,13 @@ final class TaskCalendar extends JPanel {
     private static int chipBaseline() { return (chip() - metrics().getHeight()) / 2 + metrics().getAscent(); }
 
     /** One chip: {@code lines} is 1 in a day cell, and up to {@link #TRAY_LINES} in the backlog. */
-    private record Chip(UUID task, Rectangle bounds, String label, Color colour, boolean done, int lines) { }
+    private record Chip(UUID task, Rectangle bounds, String label, Color colour, boolean done, int lines, boolean upcoming) {
+        Chip(UUID task, Rectangle bounds, String label, Color colour, boolean done, int lines) {
+            this(task, bounds, label, colour, done, lines, false);
+        }
+    }
+    /** A task on a day: its real date, or a later date its rule will bring it back on (#57). */
+    private record Placed(Task task, boolean upcoming) { }
 
     private final YearMonth month;
     private final LocalDate today;
@@ -161,24 +167,38 @@ final class TaskCalendar extends JPanel {
         }
         trayBounds = new Rectangle(0, header() + weeks * rowH, getWidth(), tray());
 
-        var byDate = new TreeMap<LocalDate, List<Task>>();
+        var byDate = new TreeMap<LocalDate, List<Placed>>();
         var undated = new ArrayList<Task>();
+        var gridEnd = gridStart.plusDays(weeks * 7L - 1);
         for (var task : tasks) {
             // Placed on the day it wants attention — the plan if there is one,
             // otherwise the deadline. Dragging moves the plan (#25).
             if (task.workOn() == null) undated.add(task);
-            else byDate.computeIfAbsent(task.workOn(), d -> new ArrayList<>()).add(task);
+            else byDate.computeIfAbsent(task.workOn(), d -> new ArrayList<>()).add(new Placed(task, false));
+        }
+        // The dates a repeating task will come back on, drawn dashed after the
+        // real ones (#57). Only on a schedule: a task that repeats from the day
+        // it is finished has no later dates until it is.
+        for (var task : tasks) {
+            if (!task.repeats() || task.repeat().afterDone() || task.status() == TaskStatus.DONE) continue;
+            var from = task.due().plusDays(1).isAfter(gridStart) ? task.due().plusDays(1) : gridStart;
+            for (var day : dev.yoru.application.Repeats.between(task.repeat(), from, gridEnd, weekStart, 42))
+                byDate.computeIfAbsent(day, d -> new ArrayList<>()).add(new Placed(task, true));
         }
         byDate.forEach((date, list) -> {
             var cell = cells.get(date);
             if (cell == null) return;
+            // What is really due first; what is only coming round after it.
+            list.sort(Comparator.comparing(Placed::upcoming));
             int room = Math.max(0, (cell.height - dayLabel() - Theme.SPACE_XS) / (chip() + chipGap()));
             for (int i = 0; i < list.size() && i < room; i++) {
-                var task = list.get(i);
+                var placed = list.get(i);
+                var task = placed.task();
+                boolean more = list.size() > room && i == room - 1;
                 chips.add(new Chip(task.id(),
                     new Rectangle(cell.x + 3, cell.y + dayLabel() + i * (chip() + chipGap()), cell.width - 6, chip()),
-                    list.size() > room && i == room - 1 ? "+" + (list.size() - room + 1) + " more" : task.title(),
-                    colourOf(task), task.status() == TaskStatus.DONE, 1));
+                    more ? "+" + (list.size() - room + 1) + " more" : placed.upcoming() ? "↻ " + task.title() : task.title(),
+                    colourOf(task), task.status() == TaskStatus.DONE, 1, placed.upcoming() && !more));
             }
         });
         int x = 6;
@@ -271,7 +291,8 @@ final class TaskCalendar extends JPanel {
 
     /** The task under a point, or null. */
     UUID taskAt(Point at) {
-        for (var chip : chips) if (chip.bounds().contains(at)) return chip.task();
+        // A date a task will only come back on is not the task: it cannot be picked up.
+        for (var chip : chips) if (!chip.upcoming() && chip.bounds().contains(at)) return chip.task();
         return null;
     }
 
@@ -283,8 +304,17 @@ final class TaskCalendar extends JPanel {
 
     Point centreOfTray() { return new Point(trayBounds.width / 2, trayBounds.y + trayBounds.height / 2); }
 
+    /** A point on the dashed chip of a date {@code task} will come back on, or null; for the tests. */
+    Point pointOnUpcoming(UUID task, LocalDate day) {
+        var cell = cells.get(day);
+        if (cell == null) return null;
+        for (var chip : chips) if (chip.upcoming() && chip.task().equals(task) && cell.contains(chip.bounds().getLocation()))
+            return new Point(chip.bounds().x + 6, chip.bounds().y + chip.bounds().height / 2);
+        return null;
+    }
+
     Point pointOn(UUID task) {
-        for (var chip : chips) if (chip.task().equals(task))
+        for (var chip : chips) if (!chip.upcoming() && chip.task().equals(task))
             return new Point(chip.bounds().x + 6, chip.bounds().y + chip.bounds().height / 2);
         return null;
     }
@@ -397,12 +427,22 @@ final class TaskCalendar extends JPanel {
 
     private void paintChip(Graphics2D g, Chip chip) {
         var box = chip.bounds();
-        g.setColor(Theme.shade(Theme.PANEL, Theme.DARK ? 16 : -10));
-        g.fillRoundRect(box.x, box.y, box.width, box.height, Theme.RADIUS, Theme.RADIUS);
-        g.setColor(chip.colour());
-        g.fillRect(box.x, box.y, 3, box.height);
+        if (chip.upcoming()) {
+            // Dashed and unfilled, like the Schedule's weekly repeats: a date
+            // the task will come back on, not one it is due.
+            var stroke = g.getStroke();
+            g.setColor(Theme.shade(Theme.MUTED, Theme.DARK ? -10 : 10));
+            g.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1f, new float[]{3f, 3f}, 0f));
+            g.drawRoundRect(box.x, box.y, box.width - 1, box.height - 1, Theme.RADIUS, Theme.RADIUS);
+            g.setStroke(stroke);
+        } else {
+            g.setColor(Theme.shade(Theme.PANEL, Theme.DARK ? 16 : -10));
+            g.fillRoundRect(box.x, box.y, box.width, box.height, Theme.RADIUS, Theme.RADIUS);
+            g.setColor(chip.colour());
+            g.fillRect(box.x, box.y, 3, box.height);
+        }
         g.setFont(Theme.captionFont());
-        g.setColor(chip.done() ? Theme.shade(Theme.MUTED, Theme.DARK ? -20 : 20) : Theme.TEXT);
+        g.setColor(chip.done() ? Theme.shade(Theme.MUTED, Theme.DARK ? -20 : 20) : chip.upcoming() ? Theme.MUTED : Theme.TEXT);
         var clip = g.getClip();
         g.clipRect(box.x + 5, box.y, box.width - 7, box.height);
         // A day cell takes the one line it was measured for; the backlog wraps,

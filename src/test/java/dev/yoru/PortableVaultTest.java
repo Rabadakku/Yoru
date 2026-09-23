@@ -155,6 +155,21 @@ public final class PortableVaultTest {
         check(restored.lists().equals(original.lists()),"Lists survive the round trip");
         check(restored.tasks().stream().filter(t->t.listId()!=null).map(Task::title).toList().equals(List.of("MLA citation quiz")),
             "and the task filed in one stays there, the rest in the Inbox");
+        // A repeating task and the occurrences behind it (#57).
+        var rule=Repeat.monthlyOn(2,-1,DayOfWeek.FRIDAY,LocalDate.parse("2026-09-25")).afterDone(true).ending(LocalDate.parse("2027-09-24"),0);
+        var behind=List.of(new Occurrence(LocalDate.parse("2026-07-31"),Instant.parse("2026-07-31T18:00:00Z"),false),
+            new Occurrence(LocalDate.parse("2026-09-25"),Instant.parse("2026-09-26T08:00:00Z"),true));
+        var repeating=original.withTasks(original.tasks().stream().map(t->t.title().equals("MLA citation quiz")
+            ?new Task(t.id(),t.activityId(),t.tagIds(),t.title(),t.notes(),t.due(),t.status(),t.source(),t.createdAt(),t.order(),
+                t.plannedFor(),t.pageIds(),t.listId(),rule,behind):t).toList());
+        var repeatJson=PortableVault.export(repeating,when);
+        check(PortableVault.parse(repeatJson).equals(repeating),"A repeat rule and its history survive the round trip");
+        check(repeatJson.contains("\"days\": [\n")&&repeatJson.contains("\"FRIDAY\""),"Its weekdays are written by name");
+        check(repeatJson.contains("\"skipped\": true"),"and a skipped occurrence says so");
+        check(PortableVault.parse(json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 8")
+            .replaceAll(",\\s*\"repeat\": null","").replaceAll(",\\s*\"history\": \\[\\]","")).tasks().stream()
+            .noneMatch(Task::repeats),"A format 8 file reads with nothing repeating");
+
         // A format 7 file has no lists: every task arrives in the Inbox.
         var formatSeven=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 7")
             .replaceAll(",\\s*\"listId\": (null|\"[^\"]*\")","")

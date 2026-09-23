@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=19, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=20, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -247,6 +247,11 @@ public final class EncryptedVault implements Repository {
                     // Schema 19: the list the task is filed in, or none for the Inbox (#56).
                     out.writeBoolean(task.listId() != null);
                     if (task.listId() != null) uuid(out, task.listId());
+                    // Schema 20: how it repeats, and the occurrences behind it (#57).
+                    out.writeBoolean(task.repeat() != null);
+                    if (task.repeat() != null) repeat(out, task.repeat());
+                    out.writeInt(task.history().size());
+                    for (var o : task.history()) { out.writeLong(o.due().toEpochDay()); instant(out, o.at()); out.writeBoolean(o.skipped()); }
                 }
                 out.writeInt(state.habits().size());
                 for(var h:state.habits()) {
@@ -410,7 +415,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 19.
+     * Reads any schema from 1 to 20.
      *
      * Every field older vaults lack arrives as a sensible empty, and everything
      * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
@@ -510,7 +515,12 @@ public final class EncryptedVault implements Repository {
                     if(schema>=14) for(int p=count(in);p>0;p--) pages.add(uuid(in));
                     // Schema 19 filed tasks in lists; before it every task was in the Inbox.
                     var list=schema>=19&&in.readBoolean()?uuid(in):null;
-                    tasks.add(new Task(id,activity,tags,title,notes,due,status,source,created,order,planned,pages,list));
+                    // Schema 20 let a task repeat; before it none did.
+                    var rule=schema>=20&&in.readBoolean()?repeat(in):null;
+                    var history=new ArrayList<Occurrence>();
+                    if(schema>=20) for(int h=count(in);h>0;h--)
+                        history.add(new Occurrence(LocalDate.ofEpochDay(in.readLong()),instant(in),in.readBoolean()));
+                    tasks.add(new Task(id,activity,tags,title,notes,due,status,source,created,order,planned,pages,list,rule,history));
                 }
                 if (schema <= 10) skipLegacyCollection(in, schema);
             }
@@ -605,6 +615,24 @@ public final class EncryptedVault implements Repository {
         finally {
             Arrays.fill(bytes,(byte)0);
         }
+    }
+    /** A repeat rule, field by field; weekdays as one bit each. */
+    private static void repeat(DataOutputStream out,Repeat r)throws IOException {
+        out.writeUTF(r.unit().name()); out.writeInt(r.every());
+        int days=0; for(var day:r.days()) days|=1<<day.ordinal();
+        out.writeInt(days); out.writeInt(r.monthDay()); out.writeInt(r.weekOfMonth());
+        out.writeLong(r.start().toEpochDay()); out.writeBoolean(r.afterDone());
+        out.writeBoolean(r.until()!=null); if(r.until()!=null) out.writeLong(r.until().toEpochDay());
+        out.writeInt(r.times());
+    }
+    private static Repeat repeat(DataInputStream in)throws IOException {
+        var unit=RepeatUnit.valueOf(in.readUTF()); int every=in.readInt(); int mask=in.readInt();
+        var days=EnumSet.noneOf(java.time.DayOfWeek.class);
+        for(var day:java.time.DayOfWeek.values()) if((mask&(1<<day.ordinal()))!=0) days.add(day);
+        int monthDay=in.readInt(), week=in.readInt();
+        var start=LocalDate.ofEpochDay(in.readLong()); boolean afterDone=in.readBoolean();
+        var until=in.readBoolean()?LocalDate.ofEpochDay(in.readLong()):null;
+        return new Repeat(unit,every,days,monthDay,week,start,afterDone,until,in.readInt());
     }
     private static int count(DataInputStream in)throws IOException {
         int n=in.readInt();

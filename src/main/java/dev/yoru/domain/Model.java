@@ -165,6 +165,74 @@ public final class Model {
         @Override public String toString() { return name; }
     }
 
+    /**
+     * How a task comes back (#57): every N days, weeks, months or years.
+     *
+     * Weekly, on the given weekdays. Monthly, on a day of the month — the 31st
+     * falls on the last day of a shorter month — or on the nth weekday, where
+     * -1 is the last. Yearly, on {@code start}'s month and day, the 29th of
+     * February falling on the 28th in other years. The weeks and months are
+     * counted from {@code start}, so "every 2 weeks" keeps its own fortnight.
+     *
+     * On a schedule the next date comes from the rule; {@code afterDone}, it
+     * comes from the day the task was last finished. It stops after
+     * {@code until}, or after {@code times} occurrences when that is not 0.
+     */
+    public record Repeat(RepeatUnit unit, int every, Set<DayOfWeek> days, int monthDay, int weekOfMonth,
+                         LocalDate start, boolean afterDone, LocalDate until, int times) {
+        public Repeat {
+            Objects.requireNonNull(unit);
+            Objects.requireNonNull(start);
+            days = days == null || days.isEmpty() ? Set.of() : Set.copyOf(EnumSet.copyOf(days));
+            if (every < 1 || every > 999) throw new IllegalArgumentException("Repeat every 1 to 999.");
+            if (unit == RepeatUnit.WEEK && days.isEmpty()) days = Set.of(start.getDayOfWeek());
+            if (unit != RepeatUnit.WEEK && !days.isEmpty() && !(unit == RepeatUnit.MONTH && weekOfMonth != 0 && days.size() == 1))
+                throw new IllegalArgumentException("Weekdays belong to a weekly repeat, or one to a monthly one on the nth weekday.");
+            if (unit == RepeatUnit.MONTH && weekOfMonth == 0 && (monthDay < 1 || monthDay > 31))
+                throw new IllegalArgumentException("Choose a day of the month from 1 to 31.");
+            if (weekOfMonth != 0 && (unit != RepeatUnit.MONTH || weekOfMonth < -1 || weekOfMonth > 4 || days.size() != 1))
+                throw new IllegalArgumentException("Choose the first to fourth, or the last, of one weekday.");
+            if (until != null && until.isBefore(start)) throw new IllegalArgumentException("A repeat cannot end before it starts.");
+            if (times < 0 || times > 10_000) throw new IllegalArgumentException("Repeat at most 10,000 times.");
+        }
+        /** Every {@code every} days from {@code start}. */
+        public static Repeat daily(int every, LocalDate start) {
+            return new Repeat(RepeatUnit.DAY, every, Set.of(), 0, 0, start, false, null, 0);
+        }
+        /** Every {@code every} weeks on {@code days}, counted from {@code start}'s week. */
+        public static Repeat weekly(int every, Set<DayOfWeek> days, LocalDate start) {
+            return new Repeat(RepeatUnit.WEEK, every, days, 0, 0, start, false, null, 0);
+        }
+        /** Every {@code every} months on {@code start}'s day of the month. */
+        public static Repeat monthly(int every, LocalDate start) {
+            return new Repeat(RepeatUnit.MONTH, every, Set.of(), start.getDayOfMonth(), 0, start, false, null, 0);
+        }
+        /** Every {@code every} months on the nth (or last, -1) {@code weekday}. */
+        public static Repeat monthlyOn(int every, int nth, DayOfWeek weekday, LocalDate start) {
+            return new Repeat(RepeatUnit.MONTH, every, Set.of(weekday), 0, nth, start, false, null, 0);
+        }
+        /** Every {@code every} years on {@code start}'s month and day. */
+        public static Repeat yearly(int every, LocalDate start) {
+            return new Repeat(RepeatUnit.YEAR, every, Set.of(), 0, 0, start, false, null, 0);
+        }
+        public Repeat afterDone(boolean next) { return new Repeat(unit, every, days, monthDay, weekOfMonth, start, next, until, times); }
+        public Repeat ending(LocalDate on, int count) { return new Repeat(unit, every, days, monthDay, weekOfMonth, start, afterDone, on, count); }
+    }
+
+    public enum RepeatUnit { DAY, WEEK, MONTH, YEAR }
+
+    /**
+     * One occurrence of a repeating task that is behind it: the day it was
+     * due, and when it was done or skipped (#57). The task keeps these rather
+     * than a copy of itself for every time it came round.
+     */
+    public record Occurrence(LocalDate due, Instant at, boolean skipped) {
+        public Occurrence {
+            Objects.requireNonNull(due);
+            requireTime(at);
+        }
+    }
+
     public record Session(UUID id, UUID activityId, Instant start, Instant end) {
         public Session {
             Objects.requireNonNull(id);
@@ -221,12 +289,20 @@ public final class Model {
      */
     public record Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
                        LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
-                       LocalDate plannedFor, List<UUID> pageIds, UUID listId) {
+                       LocalDate plannedFor, List<UUID> pageIds, UUID listId, Repeat repeat, List<Occurrence> history) {
+        /** The most occurrences a repeating task keeps behind it: years of a daily task. */
+        public static final int MAX_HISTORY = 10_000;
         /** A task in the Inbox: every task before lists (#56), and every one made outside a list. */
         public Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
                     LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
                     LocalDate plannedFor, List<UUID> pageIds) {
             this(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,null);
+        }
+        /** A task that does not repeat: every task before #57, and most after it. */
+        public Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
+                    LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
+                    LocalDate plannedFor, List<UUID> pageIds, UUID listId) {
+            this(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,null,List.of());
         }
         /** The most pages one task may link to. */
         public static final int MAX_PAGES = 100;
@@ -266,6 +342,10 @@ public final class Model {
             if (tagIds.size() > MAX_TAGS) throw new IllegalArgumentException("A task can carry at most " + MAX_TAGS + " tags.");
             // The pages a task links to, in the order they were linked, once each.
             pageIds = List.copyOf(new LinkedHashSet<>(Objects.requireNonNull(pageIds)));
+            // A repeating task comes back on a date, so it has one (#57).
+            history = history == null ? List.of() : List.copyOf(history);
+            if (history.size() > MAX_HISTORY) throw new IllegalArgumentException("History limit reached.");
+            if (repeat != null && due == null) throw new IllegalArgumentException("A repeating task needs a due date.");
             if (pageIds.size() > MAX_PAGES) throw new IllegalArgumentException("A task can link to at most " + MAX_PAGES + " pages.");
         }
         public boolean done() { return status==TaskStatus.DONE; }
@@ -299,27 +379,38 @@ public final class Model {
         // rebuild of an existing task goes through these rather than a
         // constructor, which is where a forgotten field used to go missing.
         public Task withStatus(TaskStatus next) {
-            return new Task(id,activityId,tagIds,title,notes,due,next,source,createdAt,order,plannedFor,pageIds,listId);
+            return new Task(id,activityId,tagIds,title,notes,due,next,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
         }
         public Task withActivity(UUID next) {
-            return new Task(id,next,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId);
+            return new Task(id,next,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
         }
         public Task withTags(List<UUID> next) {
-            return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId);
+            return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
         }
         /** The same task filed in another list, or in the Inbox for null (#56). */
         public Task withList(UUID next) {
-            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,next);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,next,repeat,history);
         }
+        /** The same task with another rule, or none (#57); its history stays. */
+        public Task withRepeat(Repeat next) {
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,next,history);
+        }
+        /** The same task moved on: the occurrence behind it recorded, the next one due. */
+        public Task advanced(Occurrence behind, LocalDate nextDue, TaskStatus nextStatus) {
+            var kept = new ArrayList<>(history);
+            kept.add(behind);
+            return new Task(id,activityId,tagIds,title,notes,nextDue,nextStatus,source,createdAt,order,null,pageIds,listId,repeat,kept);
+        }
+        public boolean repeats() { return repeat != null; }
         /** The same task without one tag, which is what deleting a tag does to it. */
         public Task withoutTag(UUID tag) {
             return withTags(tagIds.stream().filter(t -> !t.equals(tag)).toList());
         }
         public Task withOrder(int next) {
-            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,next,plannedFor,pageIds,listId);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,next,plannedFor,pageIds,listId,repeat,history);
         }
         public Task withPages(List<UUID> next) {
-            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,next,listId);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,next,listId,repeat,history);
         }
     }
 

@@ -202,6 +202,12 @@ public final class Preview {
             new Task(UUID.randomUUID(), study, cs.id(), "Practice quiz", "", today.plusDays(12), TaskStatus.TODO, "Manual entry", now, 9),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Grammar review", "", today.minusDays(4), TaskStatus.DONE, "Manual entry", now, 10)));
 
+        // A repeating task, so the board shows the mark and the calendar the
+        // dates it comes back on (#57).
+        for (var task : tracker.state().tasks())
+            if (task.title().equals("Kanji review deck"))
+                tracker.updateTask(task.withRepeat(Repeat.weekly(1, java.util.Set.of(task.due().getDayOfWeek()), task.due())));
+
         // Two lists, with most tasks filed in one, so the rail has places in it (#56).
         var classes = tracker.addList("Classes", 0x6E8FD6);
         var home = tracker.addList("Home", 0x6FBF8B);

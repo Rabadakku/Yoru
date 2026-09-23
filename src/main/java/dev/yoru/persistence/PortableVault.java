@@ -30,9 +30,10 @@ public final class PortableVault {
      * added the Anki integration and the counts it last saw. Format 6 added the
      * day a habit began. Format 7 gave a task a list of tags, "tagIds", where
      * it had room for one "tagId". Format 8 added task lists, "lists", and the
-     * list each task is filed in, "listId".
+     * list each task is filed in, "listId". Format 9 added how a task repeats,
+     * "repeat", and the occurrences behind it, "history".
      */
-    public static final int FORMAT = 8;
+    public static final int FORMAT = 9;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -135,6 +136,29 @@ public final class PortableVault {
         return m;
     }
 
+    /** A repeat rule in words a person can read back: days by name, dates as dates. */
+    private static Map<String, Object> repeat(Repeat r) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("unit", r.unit().name());
+        m.put("every", r.every());
+        m.put("days", r.days().stream().sorted().map(Enum::name).toList());
+        m.put("monthDay", r.monthDay());
+        m.put("weekOfMonth", r.weekOfMonth());
+        m.put("start", r.start().toString());
+        m.put("afterDone", r.afterDone());
+        m.put("until", r.until() == null ? null : r.until().toString());
+        m.put("times", r.times());
+        return m;
+    }
+
+    private static Repeat readRepeat(Map<?, ?> m) {
+        var days = EnumSet.noneOf(java.time.DayOfWeek.class);
+        for (var day : Json.array(required(m, "days"))) days.add(java.time.DayOfWeek.valueOf(String.valueOf(day)));
+        return new Repeat(enumeration(RepeatUnit.class, text(m, "unit")), int32(m, "every"), days,
+            int32(m, "monthDay"), int32(m, "weekOfMonth"), java.time.LocalDate.parse(text(m, "start")),
+            bool(m, "afterDone"), optionalDate(m, "until"), int32(m, "times"));
+    }
+
     private static Map<String, Object> taskList(TaskList l) {
         var m = new LinkedHashMap<String, Object>();
         m.put("id", l.id().toString());
@@ -154,6 +178,14 @@ public final class PortableVault {
         m.put("activityId", t.activityId() == null ? null : t.activityId().toString());
         m.put("tagIds", t.tagIds().stream().map(UUID::toString).toList());
         m.put("listId", t.listId() == null ? null : t.listId().toString());
+        m.put("repeat", t.repeat() == null ? null : repeat(t.repeat()));
+        m.put("history", t.history().stream().map(o -> {
+            var h = new LinkedHashMap<String, Object>();
+            h.put("due", o.due().toString());
+            h.put("at", o.at().toString());
+            h.put("skipped", o.skipped());
+            return h;
+        }).toList());
         m.put("title", t.title());
         m.put("notes", t.notes());
         m.put("due", t.due() == null ? null : t.due().toString());
@@ -294,7 +326,11 @@ public final class PortableVault {
             text(m, "title"), text(m, "notes"), optionalDate(m, "due"),
             enumeration(TaskStatus.class, text(m, "status")), text(m, "source"),
             instant(m, "createdAt"), int32(m, "order"), optionalDate(m, "plannedFor"),
-            optionalIds(m, "pageIds"), optionalId(m, "listId"));
+            optionalIds(m, "pageIds"), optionalId(m, "listId"),
+            // Before format 9 no task repeated.
+            m.get("repeat") == null ? null : readRepeat(Json.object(m.get("repeat"))),
+            m.get("history") == null ? List.of() : list(m, "history", h -> new Occurrence(
+                java.time.LocalDate.parse(text(h, "due")), instant(h, "at"), bool(h, "skipped"))));
     }
 
     /** A list of identifiers that older files leave out entirely. */
