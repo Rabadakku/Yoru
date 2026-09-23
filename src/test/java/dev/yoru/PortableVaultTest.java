@@ -60,6 +60,7 @@ public final class PortableVaultTest {
             Instant.parse("2026-08-01T08:00:00Z"),Instant.parse("2026-09-02T07:00:00Z"));
         var inbox=new Page(UUID.randomUUID(),null,"Inbox","Loose thoughts.",Instant.parse("2026-09-04T08:00:00Z"),
             Instant.parse("2026-09-04T08:00:00Z"),null);
+        var school=new TaskList(UUID.randomUUID(),"School",0x6E8FD6,0);
         return new State(
             List.of(study,japanese),
             List.of(new Session(UUID.randomUUID(),study.id(),Instant.parse("2026-09-03T09:00:00Z"),
@@ -83,7 +84,7 @@ public final class PortableVaultTest {
                     // A task planned for a different day than it is due (#25).
                     new Task(UUID.randomUUID(),study.id(),tag.id(),"MLA citation quiz","",
                         LocalDate.parse("2026-09-11"),TaskStatus.TODO,"reading-list.txt",
-                        Instant.parse("2026-09-01T12:00:02Z"),9,LocalDate.parse("2026-09-10"))),
+                        Instant.parse("2026-09-01T12:00:02Z"),9,LocalDate.parse("2026-09-10")).withList(school.id())),
             List.of(new Habit(UUID.randomUUID(),"Evening reset",HabitKind.DAILY,"America/New_York",
                         Set.of(LocalDate.parse("2026-09-01"),LocalDate.parse("2026-09-03")),List.of()),
                     new Habit(UUID.randomUUID(),"Time since last soda",HabitKind.TIME_SINCE,"Asia/Tokyo",
@@ -95,7 +96,9 @@ public final class PortableVaultTest {
             new Anki(true,"a-key-that-is-not-real",true,5,
                 new AnkiSnapshot("Practice",24,new java.util.TreeMap<>(java.util.Map.of(
                     LocalDate.parse("2026-09-03"),16L,LocalDate.parse("2026-09-04"),24L)),
-                    Instant.parse("2026-09-04T09:30:00Z"))));
+                    Instant.parse("2026-09-04T09:30:00Z"))),
+            // One list, holding the quiz; the other tasks are in the Inbox (#56).
+            List.of(school));
     }
 
     public static void main(String[] args)throws Exception{
@@ -147,7 +150,52 @@ public final class PortableVaultTest {
         check(restored.settings().theme()==ThemeId.SAKURA,"Settings survive");
         check(restored.settings().minSessionSeconds()==120,"A non-default session floor survives");
         check(!json.contains("waifu"),"The withdrawn companion choice is no longer written");
-        check(restored.tasks().getFirst().tagId().equals(original.tags().getFirst().id()),"Task tagging survives");
+        check(restored.tasks().getFirst().tagIds().equals(List.of(original.tags().getFirst().id())),"Task tagging survives");
+        check(json.contains("\"tagIds\": ["),"Format 7 writes a task's tags as a list");
+        check(restored.lists().equals(original.lists()),"Lists survive the round trip");
+        check(restored.tasks().stream().filter(t->t.listId()!=null).map(Task::title).toList().equals(List.of("MLA citation quiz")),
+            "and the task filed in one stays there, the rest in the Inbox");
+        // A repeating task and the occurrences behind it (#57).
+        var rule=Repeat.monthlyOn(2,-1,DayOfWeek.FRIDAY,LocalDate.parse("2026-09-25")).afterDone(true).ending(LocalDate.parse("2027-09-24"),0);
+        var behind=List.of(new Occurrence(LocalDate.parse("2026-07-31"),Instant.parse("2026-07-31T18:00:00Z"),false),
+            new Occurrence(LocalDate.parse("2026-09-25"),Instant.parse("2026-09-26T08:00:00Z"),true));
+        var repeating=original.withTasks(original.tasks().stream().map(t->t.title().equals("MLA citation quiz")
+            ?new Task(t.id(),t.activityId(),t.tagIds(),t.title(),t.notes(),t.due(),t.status(),t.source(),t.createdAt(),t.order(),
+                t.plannedFor(),t.pageIds(),t.listId(),rule,behind):t).toList());
+        var repeatJson=PortableVault.export(repeating,when);
+        check(PortableVault.parse(repeatJson).equals(repeating),"A repeat rule and its history survive the round trip");
+        check(repeatJson.contains("\"days\": [\n")&&repeatJson.contains("\"FRIDAY\""),"Its weekdays are written by name");
+        check(repeatJson.contains("\"skipped\": true"),"and a skipped occurrence says so");
+        check(PortableVault.parse(json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 8")
+            .replaceAll(",\\s*\"repeat\": null","").replaceAll(",\\s*\"history\": \\[\\]","")).tasks().stream()
+            .noneMatch(Task::repeats),"A format 8 file reads with nothing repeating");
+
+        // A format 7 file has no lists: every task arrives in the Inbox.
+        var formatSeven=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 7")
+            .replaceAll(",\\s*\"listId\": (null|\"[^\"]*\")","")
+            .replaceAll("\"lists\": \\[[^\\]]*\\],\\s*","");
+        check(!formatSeven.contains("listId")&&!formatSeven.contains("\"lists\""),"The format 7 fixture has no lists");
+        var seven=PortableVault.parse(formatSeven);
+        check(seven.lists().isEmpty()&&seven.tasks().stream().allMatch(t->t.listId()==null),
+            "A format 7 file reads with every task in the Inbox");
+
+        // Several tags a task (#66), in the order they were given.
+        var seminar=new Tag(UUID.randomUUID(),"Seminar",0xA98BD4);
+        var withTwo=original.withTags(List.of(original.tags().getFirst(),seminar));
+        withTwo=withTwo.withTasks(withTwo.tasks().stream().map(t->t.tagIds().isEmpty()?t
+            :t.withTags(List.of(seminar.id(),original.tags().getFirst().id()))).toList());
+        var twoBack=PortableVault.parse(PortableVault.export(withTwo,when));
+        check(twoBack.equals(withTwo),"Two tags on a task survive the round trip");
+        check(twoBack.tasks().getFirst().tagIds().getFirst().equals(seminar.id()),"in the order they were given");
+        // A format 6 file names one tag per task, and still imports with it.
+        var formatSix=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 6")
+            .replaceAll("\"tagIds\": \\[\\s*(\"[^\"]+\")\\s*\\]","\"tagId\": $1")
+            .replaceAll("\"tagIds\": \\[\\s*\\]","\"tagId\": null");
+        check(!formatSix.contains("tagIds"),"The format 6 fixture has no lists of tags");
+        var six=PortableVault.parse(formatSix);
+        check(six.tasks().getFirst().tagIds().equals(List.of(original.tags().getFirst().id())),"A format 6 file's single tag is read as that task's one tag");
+        check(six.tasks().stream().map(Task::tagIds).toList().equals(original.tasks().stream().map(Task::tagIds).toList()),
+            "and every task reads back the one tag, or none, that it had");
 
         // An empty vault is a valid vault.
         var empty=State.empty();
@@ -198,7 +246,7 @@ public final class PortableVaultTest {
         var cutTask=new Task(UUID.randomUUID(),null,null,"Revise \uD83D","",null,TaskStatus.TODO,"notion",
             Instant.parse("2026-09-01T12:00:00Z"),0,null);
         var cut=new State(List.of(),List.of(),List.of(),List.of(),List.of(cutTask),List.of(),List.of(),
-            Settings.defaults(),Notes.empty(),Anki.off());
+            Settings.defaults(),Notes.empty(),Anki.off(),List.of());
         var exported=java.nio.file.Files.createTempFile("yoru-export-",".json");
         try{
             java.nio.file.Files.writeString(exported,PortableVault.export(cut,when));

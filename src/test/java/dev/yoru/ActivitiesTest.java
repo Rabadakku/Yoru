@@ -58,7 +58,7 @@ public final class ActivitiesTest {
     private static State rebuild(State state,List<Activity> activities,List<Session> sessions,
                                  List<ScheduleBlock> blocks,List<RecurringBlock> recurring,List<Task> tasks) {
         return new State(activities,sessions,blocks,recurring,tasks,state.habits(),state.tags(),
-            state.settings(),state.notes(),state.anki());
+            state.settings(),state.notes(),state.anki(),state.lists());
     }
 
     /** Three activities and one of everything that can point at them. */
@@ -84,7 +84,7 @@ public final class ActivitiesTest {
             new Task(UUID.nameUUIDFromBytes(new byte[]{53}),null,null,"Order textbook","",null,TaskStatus.DONE,"manual",NOW,2,null));
         var habits=List.of(new Habit(UUID.nameUUIDFromBytes(new byte[]{61}),"Daily reading",HabitKind.DAILY,"UTC",Set.of(LocalDate.of(2026,9,8)),List.of()));
         var tags=List.of(new Tag(TAG,"Class",0x3366CC));
-        return new State(activities,sessions,blocks,recurring,tasks,habits,tags,Settings.defaults(),Notes.empty(),Anki.off());
+        return new State(activities,sessions,blocks,recurring,tasks,habits,tags,Settings.defaults(),Notes.empty(),Anki.off(),List.of());
     }
 
     private static Tracker tracker(Memory repo)throws IOException {
@@ -175,8 +175,7 @@ public final class ActivitiesTest {
             .map(r->r.activityId().equals(CODING)?new RecurringBlock(r.id(),keep,r.dayOfWeek(),r.startTime(),r.endTime()):r).toList()),
             "every weekly repeat survives under the bucket");
         check(after.tasks().equals(before.tasks().stream()
-            .map(x->CODING.equals(x.activityId())?new Task(x.id(),keep,x.tagId(),x.title(),x.notes(),x.due(),
-                x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor()):x).toList()),
+            .map(x->CODING.equals(x.activityId())?x.withActivity(keep):x).toList()),
             "every task survives under the bucket");
         check(after.habits().equals(before.habits())&&after.tags().equals(before.tags())
             &&after.settings().equals(before.settings()),
@@ -213,8 +212,7 @@ public final class ActivitiesTest {
             .map(b->b.activityId().equals(CODING)?new ScheduleBlock(b.id(),keep,b.start(),b.end()):b).toList()),
             "deleting the time keeps the planned block");
         check(after.recurring().size()==before.recurring().size()&&after.tasks().equals(before.tasks().stream()
-            .map(x->CODING.equals(x.activityId())?new Task(x.id(),keep,x.tagId(),x.title(),x.notes(),x.due(),
-                x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor()):x).toList()),
+            .map(x->CODING.equals(x.activityId())?x.withActivity(keep):x).toList()),
             "and keeps the repeats and tasks");
 
         check(total(after)==beforeTotal-5400,"the deleted time is gone from the totals");

@@ -104,6 +104,94 @@ public final class TaskBoardTest {
         return tracker.state().tasks().stream().filter(t->t.id().equals(id)).findFirst().orElseThrow();
     }
 
+    /**
+     * Several tags a task, typed in and created on the spot (#66).
+     *
+     * Driven through the field's own keys, since the keyboard is the path the
+     * ticket asks for: type, Down, Enter, Backspace.
+     */
+    private static void tags(Tracker tracker,UUID taskId)throws Exception{
+        tracker.addTag("Seminar",0xA98BD4);
+        var before=tracker.state().tags().size();
+        var task=task(tracker,taskId);
+        var field=new TagField(tracker.state().tags(),task.tagIds());
+        var input=field.input();
+        check(field.tagIds().equals(task.tagIds()),"The field opens with the task's tags");
+        java.util.function.Consumer<String> key=stroke->{
+            var name=input.getInputMap().get(KeyStroke.getKeyStroke(stroke));
+            var action=input.getActionMap().get(name);
+            check(action!=null&&action.isEnabled(),stroke+" is bound and ready");
+            action.actionPerformed(new java.awt.event.ActionEvent(input,0,stroke));
+        };
+        // A name no tag has yet is offered as a new tag.
+        input.setText("Lab reports");
+        check(field.options().size()==1&&field.options().getFirst().create()!=null,
+            "A new name is offered as Create: "+field.options());
+        key.accept("ENTER");
+        check(field.tagIds().size()==2&&input.getText().isEmpty(),"Enter makes it and adds it as a pill");
+        check(field.newTags().size()==1&&field.newTags().getFirst().name().equals("Lab reports"),
+            "and hands it back to be saved with the task");
+        check(tracker.state().tags().size()==before,"Nothing is written until the task is saved");
+        // Typing part of an existing tag finds it; Down and Enter take it.
+        var reading=tracker.state().tags().stream().filter(t->!task.tagIds().contains(t.id())).findFirst().orElseThrow();
+        input.setText(reading.name().substring(0,3).toLowerCase(Locale.ROOT));
+        check(field.options().stream().anyMatch(o->reading.equals(o.tag())),"Typing finds an existing tag, whatever the case");
+        check(field.options().stream().noneMatch(o->o.tag()!=null&&task.tagIds().contains(o.tag().id())),
+            "and never offers one the task already has");
+        int at=0;
+        while(!reading.equals(field.options().get(at).tag()))at++;
+        for(int i=0;i<at;i++)key.accept("DOWN");
+        key.accept("ENTER");
+        check(field.tagIds().size()==3&&field.tagIds().getLast().equals(reading.id()),"Down and Enter take the tag highlighted");
+        input.setText(reading.name().toUpperCase(Locale.ROOT));
+        check(field.options().stream().noneMatch(o->o.create()!=null),"An existing name is never offered as a new tag");
+        input.setText("");
+        // Backspace in an empty field takes the last pill off, and only then.
+        key.accept("BACK_SPACE");
+        check(field.tagIds().size()==2&&!field.tagIds().contains(reading.id()),"Backspace in an empty field removes the last tag");
+        input.setText("x");
+        input.setCaretPosition(1);
+        input.getActionMap().get(input.getInputMap().get(KeyStroke.getKeyStroke("BACK_SPACE")))
+            .actionPerformed(new java.awt.event.ActionEvent(input,0,"BACK_SPACE"));
+        check(input.getText().isEmpty()&&field.tagIds().size()==2,"with text in the field Backspace deletes text, not a tag");
+        // Enter in an empty field is not the field's: it saves the dialog.
+        var enter=input.getActionMap().get(input.getInputMap().get(KeyStroke.getKeyStroke("ENTER")));
+        check(!enter.isEnabled(),"Enter in an empty field is left to the dialog's Save");
+        check(named(field,"tags.remove.Lab reports") instanceof JButton,"Each pill has its own remove button");
+        check(((JButton)named(field,"tags.remove.Lab reports")).getAccessibleContext().getAccessibleName()
+            .equals("Remove the tag Lab reports"),"which says which tag it removes");
+
+        tracker.saveTask(task.withTags(field.tagIds()),field.newTags());
+        var saved=task(tracker,taskId);
+        check(tracker.state().tags().size()==before+1,"Saving writes the new tag");
+        check(saved.tagIds().size()==2&&saved.tagIds().getFirst().equals(task.tagIds().getFirst()),
+            "and the task carries both tags, in the order they were given");
+        rejects(()->tracker.saveTask(saved,List.of(new Tag(UUID.randomUUID(),"lab REPORTS",0x123456))),
+            "A new tag with an existing name is refused");
+        check(tracker.state().tags().size()==before+1,"and the refusal writes nothing");
+
+        // The board shows every tag, and counts the ones it has no room for.
+        var board=new TasksPanel(tracker,()->{},()->false);
+        board.setSize(1280,900);
+        layout(board);
+        var cell=(TagChips.Cell)named(board,"task.tags."+taskId);
+        check(cell.tags().size()==2,"The row's cell holds both tags");
+        check(cell.getToolTipText().contains("Lab reports")&&cell.getToolTipText().contains(cell.tags().getFirst().name()),
+            "and its tooltip names them all");
+        cell.setSize(cell.getPreferredSize());
+        cell.paint(new BufferedImage(Math.max(1,cell.getWidth()),Math.max(1,cell.getHeight()),BufferedImage.TYPE_INT_RGB).getGraphics());
+        check(cell.shown()==2,"With room, every pill is drawn");
+        cell.setSize(cell.getPreferredSize().width/2,cell.getHeight());
+        cell.paint(new BufferedImage(Math.max(1,cell.getWidth()),Math.max(1,cell.getHeight()),BufferedImage.TYPE_INT_RGB).getGraphics());
+        check(cell.shown()==1,"Without it, the rest go into a +n count");
+        check(TagChips.more(1).equals("+1"),"which reads +1");
+
+        // Deleting one tag keeps the task's others.
+        var lab=tracker.state().tags().stream().filter(t->t.name().equals("Lab reports")).findFirst().orElseThrow();
+        tracker.deleteTag(lab.id());
+        check(task(tracker,taskId).tagIds().equals(task.tagIds()),"Deleting a tag takes only that tag off its tasks");
+    }
+
     public static void main(String[] args)throws Exception{
         try {
             SwingUtilities.invokeAndWait(()->{
@@ -184,13 +272,13 @@ public final class TaskBoardTest {
         check(!soon.contains(finished.toString()),"Next 5 days leaves finished work out");
         // The boundary, stated rather than left to the fixture's due dates: the
         // fifth day is inside the window and the sixth is not.
-        tracker.updateTask(TasksPanel.merged(task(tracker,later),task(tracker,later).activityId(),task(tracker,later).tagId(),task(tracker,later).title(),task(tracker,later).notes(),today.plusDays(5),task(tracker,later).status(),0));
+        tracker.updateTask(TasksPanel.merged(task(tracker,later),task(tracker,later).activityId(),task(tracker,later).tagIds(),task(tracker,later).title(),task(tracker,later).notes(),today.plusDays(5),task(tracker,later).status(),0));
         button(board,"view.soon").doClick();
         check(shown(board).contains(later.toString()),"The fifth day is inside the window");
-        tracker.updateTask(TasksPanel.merged(task(tracker,later),task(tracker,later).activityId(),task(tracker,later).tagId(),task(tracker,later).title(),task(tracker,later).notes(),today.plusDays(6),task(tracker,later).status(),0));
+        tracker.updateTask(TasksPanel.merged(task(tracker,later),task(tracker,later).activityId(),task(tracker,later).tagIds(),task(tracker,later).title(),task(tracker,later).notes(),today.plusDays(6),task(tracker,later).status(),0));
         button(board,"view.soon").doClick();
         check(!shown(board).contains(later.toString()),"The sixth day is outside it");
-        tracker.updateTask(TasksPanel.merged(task(tracker,later),task(tracker,later).activityId(),task(tracker,later).tagId(),task(tracker,later).title(),task(tracker,later).notes(),today.plusDays(9),task(tracker,later).status(),0));
+        tracker.updateTask(TasksPanel.merged(task(tracker,later),task(tracker,later).activityId(),task(tracker,later).tagIds(),task(tracker,later).title(),task(tracker,later).notes(),today.plusDays(9),task(tracker,later).status(),0));
         button(board,"view.done").doClick();
         check(shown(board).equals(List.of(finished.toString())),"Completed shows only finished work");
         button(board,"view.open").doClick();
@@ -244,7 +332,7 @@ public final class TaskBoardTest {
             "The dragged order reached storage");
         check(afterDrag.size()==beforeDrag.size(),"Dragging loses no rows");
         check(new HashSet<>(afterDrag).equals(new HashSet<>(beforeDrag)),"Dragging duplicates no rows");
-        check(jpn.id().equals(task(tracker,dueToday).tagId()),"Dragging keeps tags on the untouched rows");
+        check(task(tracker,dueToday).tagIds().equals(List.of(jpn.id())),"Dragging keeps tags on the untouched rows");
 
         // The insertion line must not change a row's height: it is drawn out of
         // the row's own padding, so the rows below it cannot jump by two pixels
@@ -288,7 +376,7 @@ public final class TaskBoardTest {
         check(task(tracker,dueToday).status()==TaskStatus.DONE,"DOING advances to DONE");
         button(board,"task.status."+dueToday).doClick();
         check(task(tracker,dueToday).status()==TaskStatus.TODO,"DONE wraps back to TODO");
-        check(jpn.id().equals(task(tracker,dueToday).tagId()),"Cycling status keeps the tag");
+        check(task(tracker,dueToday).tagIds().equals(List.of(jpn.id())),"Cycling status keeps the tag");
         check(task(tracker,dueToday).due().equals(today),"Cycling status keeps the due date");
 
         // Track is in every row's menu, and enabled only where it can actually clock in.
@@ -300,24 +388,24 @@ public final class TaskBoardTest {
 
         // An edit must not quietly drop the tag or reset the order.
         var before=task(tracker,overdue);
-        var edited=TasksPanel.merged(before,before.activityId(),before.tagId(),"Beta lab, revised",
+        var edited=TasksPanel.merged(before,before.activityId(),before.tagIds(),"Beta lab, revised",
             before.notes(),before.due(),before.status(),99);
         check(edited.id().equals(before.id()),"Editing keeps the identity");
-        check(cs.id().equals(edited.tagId()),"Editing keeps the tag");
+        check(edited.tagIds().equals(List.of(cs.id())),"Editing keeps the tag");
         check(edited.order()==before.order(),"Editing keeps the manual position");
         check(edited.createdAt().equals(before.createdAt()),"Editing keeps the creation time");
         check(edited.source().equals(before.source()),"Editing keeps the provenance");
-        var created=TasksPanel.merged(null,study,cs.id(),"Fresh","",null,TaskStatus.TODO,99);
+        var created=TasksPanel.merged(null,study,List.of(cs.id()),"Fresh","",null,TaskStatus.TODO,99);
         check(created.order()==99,"A new task lands where it was told to");
         check(created.source().isEmpty(),"A new task has no import provenance");
 
         // Deleting a tag keeps the work and untags it.
         tracker.deleteTag(cs.id());
         check(tracker.state().tags().size()==1,"The tag is gone");
-        check(task(tracker,overdue).tagId()==null,"Its tasks are untagged");
+        check(task(tracker,overdue).tagIds().isEmpty(),"Its tasks are untagged");
         check(task(tracker,overdue).title().equals("Beta lab"),"Its tasks are otherwise untouched");
         check(tracker.state().tasks().size()==5,"Deleting a tag deletes no work");
-        check(jpn.id().equals(task(tracker,dueToday).tagId()),"Other tags are unaffected");
+        check(task(tracker,dueToday).tagIds().equals(List.of(jpn.id())),"Other tags are unaffected");
 
         tracker.editTag(jpn.id(),"Language II",0x123456);
         check(tracker.state().tags().getFirst().name().equals("Language II"),"Tags rename");
@@ -351,7 +439,7 @@ public final class TaskBoardTest {
         check(header!=null,"The table has a header row");
         var headings=new ArrayList<String>();
         for(Component cell:header.getComponents())if(cell instanceof JLabel l&&!l.getText().isEmpty())headings.add(l.getText());
-        check(headings.equals(List.of("Status","Task","Tag","Due")),"The header names each column: "+headings);
+        check(headings.equals(List.of("Status","Task","Tags","Due")),"The header names each column: "+headings);
         check(button(fresh,"task.new")!=null,"New is the page's one primary action");
         check(button(fresh,"task.newRow")!=null,"and the table ends in a New task row");
         check(button(fresh,"task.up."+dueToday)==null&&button(fresh,"task.track."+dueToday)==null,
@@ -359,9 +447,14 @@ public final class TaskBoardTest {
         var importNames=Arrays.stream(fresh.importMenu().getComponents()).map(Component::getName).toList();
         check(importNames.contains("task.import.paste")&&importNames.contains("task.import.notion"),
             "Import groups paste and the Notion export in one menu");
-        check(named(fresh,"task.tag."+dueToday) instanceof JLabel pill&&pill.getText().equals("Language II"),
+        check(named(fresh,"task.tags."+dueToday) instanceof TagChips.Cell cell
+            &&cell.tags().stream().map(Tag::name).toList().equals(List.of("Language II")),
             "A tagged task shows its tag as a pill");
-        check(named(fresh,"task.tag."+overdue)==null,"An untagged task leaves the tag cell empty");
+        check(named(fresh,"task.tags."+overdue) instanceof TagChips.Cell empty&&empty.tags().isEmpty()
+            &&empty.getAccessibleContext().getAccessibleName().startsWith("No tags"),
+            "An untagged task's cell is empty, and still the way to add one");
+        check(((TagChips.Cell)named(fresh,"task.tags."+dueToday)).getAccessibleContext().getAccessibleName()
+            .contains("Language II"),"The tag cell says its tags to a screen reader");
         check(((JLabel)named(fresh,"task.due."+dueToday)).getText().equals("Today"),"Today's date says Today");
         check(((JLabel)named(fresh,"task.due."+later)).getText().equals(DateText.longDate(today.plusDays(9))),
             "A later date is written out in full");
@@ -374,6 +467,8 @@ public final class TaskBoardTest {
         check(((JCheckBox)named(fresh,"task.done."+undated)).isSelected(),"and the rebuilt row shows it ticked");
         ((JCheckBox)named(fresh,"task.done."+undated)).doClick();
         check(task(tracker,undated).status()==TaskStatus.TODO,"Clearing it reopens the task");
+
+        tags(tracker,dueToday);
 
         // Searching intersects the chosen view and never edits the manual order.
         var savedView=new TasksPanel.ViewState();

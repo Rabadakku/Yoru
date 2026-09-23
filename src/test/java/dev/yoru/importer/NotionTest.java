@@ -124,7 +124,7 @@ public final class NotionTest {
         check(repo.writes==before+1,"Tags and tasks commit in exactly one write");
         var chapter=tracker.state().tasks().getFirst();
         var biology=tracker.state().tags().stream().filter(t->t.name().equals("Biology")).findFirst().orElseThrow();
-        check(chapter.tagId()!=null&&chapter.tagId().equals(biology.id()),"Each task points at the tag its class created");
+        check(chapter.tagIds().equals(List.of(biology.id())),"Each task points at the tag its class created");
         check(tracker.state().tasks().get(2).status()==TaskStatus.DONE,"A completed row imports as completed");
 
         // Re-importing the same export must not double anything, in one write or none.
@@ -148,7 +148,7 @@ public final class NotionTest {
         tagged.addTag("biology",0x123456);
         var reuse=NotionImport.prepare(candidates,tagged.state(),"Study Tasks");
         check(reuse.newTags().stream().noneMatch(t->t.name().equalsIgnoreCase("Biology")),"An existing tag is reused whichever case it is written in");
-        check(reuse.tasks().getFirst().tagId().equals(tagged.state().tags().getFirst().id()),"Tasks point at the tag that already existed");
+        check(reuse.tasks().getFirst().tagIds().equals(List.of(tagged.state().tags().getFirst().id())),"Tasks point at the tag that already existed");
 
         // A tag an earlier import made keeps its id when the user renames it.
         // Importing again must reuse it, not mint that id a second time.
@@ -159,7 +159,7 @@ public final class NotionTest {
         renaming.editTag(bio.id(),"Bio 101",bio.colour());
         var more=NotionImport.read("Name,Class\nA new reading,Biology\n".getBytes(),"More.csv");
         var next=NotionImport.prepare(NotionImport.preview(more,new NotionImport.Mapping("Name",null,null,"Class")),renaming.state(),"More");
-        check(next.newTags().isEmpty()&&next.tasks().getFirst().tagId().equals(bio.id()),"A renamed imported tag is reused, not duplicated");
+        check(next.newTags().isEmpty()&&next.tasks().getFirst().tagIds().equals(List.of(bio.id())),"A renamed imported tag is reused, not duplicated");
         check(renaming.importTasks(next.newTags(),next.tasks())==1,"and the import that reuses it succeeds");
 
         // ---- nothing lands unless all of it does -----------------------------

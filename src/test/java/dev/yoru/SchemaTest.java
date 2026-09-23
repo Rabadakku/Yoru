@@ -61,7 +61,7 @@ public final class SchemaTest {
             check(loaded.settings().minSessionSeconds()==120,"minimum session persists");
             check(loaded.tags().getFirst().name().equals("Reading"),"tag persists");
             check(loaded.tasks().stream().anyMatch(x->x.status()==TaskStatus.DOING),"task status persists");
-            check(loaded.tasks().stream().anyMatch(x->tag.id().equals(x.tagId())),"task tag persists");
+            check(loaded.tasks().stream().anyMatch(x->x.tagIds().contains(tag.id())),"task tag persists");
             check(loaded.tasks().stream().anyMatch(x->x.order()==2),"task order persists");
         }
 
@@ -70,7 +70,7 @@ public final class SchemaTest {
         int before=reopened.state().tasks().size();
         reopened.deleteTag(tag.id());
         check(reopened.state().tasks().size()==before,"deleting a tag keeps its tasks");
-        check(reopened.state().tasks().stream().allMatch(x->x.tagId()==null),"deleting a tag untags its tasks");
+        check(reopened.state().tasks().stream().allMatch(x->x.tagIds().isEmpty()),"deleting a tag untags its tasks");
         check(reopened.state().tags().isEmpty(),"tag removed");
 
         // A reset of one section must not quietly clear the others.

@@ -145,6 +145,94 @@ public final class Model {
         @Override public String toString() { return name; }
     }
 
+    /**
+     * A list tasks are filed in: "Chores", "Personal", "School" (#56).
+     *
+     * A place rather than a label: every task is in exactly one list, or in
+     * none, which is the Inbox. Tags still cut across lists. The order is the
+     * owner's, as the sidebar shows it.
+     */
+    public record TaskList(UUID id, String name, int colour, int order) {
+        public TaskList {
+            Objects.requireNonNull(id);
+            name = requireName(name,40,"list name");
+            colour = requireColour(colour);
+            if (order < 0) throw new IllegalArgumentException("Invalid list order.");
+        }
+        public TaskList renamed(String next) { return new TaskList(id,next,colour,order); }
+        public TaskList recoloured(int next) { return new TaskList(id,name,next,order); }
+        public TaskList withOrder(int next) { return new TaskList(id,name,colour,next); }
+        @Override public String toString() { return name; }
+    }
+
+    /**
+     * How a task comes back (#57): every N days, weeks, months or years.
+     *
+     * Weekly, on the given weekdays. Monthly, on a day of the month — the 31st
+     * falls on the last day of a shorter month — or on the nth weekday, where
+     * -1 is the last. Yearly, on {@code start}'s month and day, the 29th of
+     * February falling on the 28th in other years. The weeks and months are
+     * counted from {@code start}, so "every 2 weeks" keeps its own fortnight.
+     *
+     * On a schedule the next date comes from the rule; {@code afterDone}, it
+     * comes from the day the task was last finished. It stops after
+     * {@code until}, or after {@code times} occurrences when that is not 0.
+     */
+    public record Repeat(RepeatUnit unit, int every, Set<DayOfWeek> days, int monthDay, int weekOfMonth,
+                         LocalDate start, boolean afterDone, LocalDate until, int times) {
+        public Repeat {
+            Objects.requireNonNull(unit);
+            Objects.requireNonNull(start);
+            days = days == null || days.isEmpty() ? Set.of() : Set.copyOf(EnumSet.copyOf(days));
+            if (every < 1 || every > 999) throw new IllegalArgumentException("Repeat every 1 to 999.");
+            if (unit == RepeatUnit.WEEK && days.isEmpty()) days = Set.of(start.getDayOfWeek());
+            if (unit != RepeatUnit.WEEK && !days.isEmpty() && !(unit == RepeatUnit.MONTH && weekOfMonth != 0 && days.size() == 1))
+                throw new IllegalArgumentException("Weekdays belong to a weekly repeat, or one to a monthly one on the nth weekday.");
+            if (unit == RepeatUnit.MONTH && weekOfMonth == 0 && (monthDay < 1 || monthDay > 31))
+                throw new IllegalArgumentException("Choose a day of the month from 1 to 31.");
+            if (weekOfMonth != 0 && (unit != RepeatUnit.MONTH || weekOfMonth < -1 || weekOfMonth > 4 || days.size() != 1))
+                throw new IllegalArgumentException("Choose the first to fourth, or the last, of one weekday.");
+            if (until != null && until.isBefore(start)) throw new IllegalArgumentException("A repeat cannot end before it starts.");
+            if (times < 0 || times > 10_000) throw new IllegalArgumentException("Repeat at most 10,000 times.");
+        }
+        /** Every {@code every} days from {@code start}. */
+        public static Repeat daily(int every, LocalDate start) {
+            return new Repeat(RepeatUnit.DAY, every, Set.of(), 0, 0, start, false, null, 0);
+        }
+        /** Every {@code every} weeks on {@code days}, counted from {@code start}'s week. */
+        public static Repeat weekly(int every, Set<DayOfWeek> days, LocalDate start) {
+            return new Repeat(RepeatUnit.WEEK, every, days, 0, 0, start, false, null, 0);
+        }
+        /** Every {@code every} months on {@code start}'s day of the month. */
+        public static Repeat monthly(int every, LocalDate start) {
+            return new Repeat(RepeatUnit.MONTH, every, Set.of(), start.getDayOfMonth(), 0, start, false, null, 0);
+        }
+        /** Every {@code every} months on the nth (or last, -1) {@code weekday}. */
+        public static Repeat monthlyOn(int every, int nth, DayOfWeek weekday, LocalDate start) {
+            return new Repeat(RepeatUnit.MONTH, every, Set.of(weekday), 0, nth, start, false, null, 0);
+        }
+        /** Every {@code every} years on {@code start}'s month and day. */
+        public static Repeat yearly(int every, LocalDate start) {
+            return new Repeat(RepeatUnit.YEAR, every, Set.of(), 0, 0, start, false, null, 0);
+        }
+        public Repeat afterDone(boolean next) { return new Repeat(unit, every, days, monthDay, weekOfMonth, start, next, until, times); }
+        public Repeat ending(LocalDate on, int count) { return new Repeat(unit, every, days, monthDay, weekOfMonth, start, afterDone, on, count); }
+    }
+
+    public enum RepeatUnit { DAY, WEEK, MONTH, YEAR }
+
+    /**
+     * One occurrence of a repeating task that is behind it: the day it was
+     * due, and when it was done or skipped (#57). The task keeps these rather
+     * than a copy of itself for every time it came round.
+     */
+    public record Occurrence(LocalDate due, Instant at, boolean skipped) {
+        public Occurrence {
+            Objects.requireNonNull(due);
+            requireTime(at);
+        }
+    }
+
     public record Session(UUID id, UUID activityId, Instant start, Instant end) {
         public Session {
             Objects.requireNonNull(id);
@@ -199,22 +287,40 @@ public final class Model {
      * day you plan to sit down with it. A deadline you cannot sort on, colour or
      * be warned about is not really recorded.
      */
-    public record Task(UUID id, UUID activityId, UUID tagId, String title, String notes,
+    public record Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
                        LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
-                       LocalDate plannedFor, List<UUID> pageIds) {
+                       LocalDate plannedFor, List<UUID> pageIds, UUID listId, Repeat repeat, List<Occurrence> history) {
+        /** The most occurrences a repeating task keeps behind it: years of a daily task. */
+        public static final int MAX_HISTORY = 10_000;
+        /** A task in the Inbox: every task before lists (#56), and every one made outside a list. */
+        public Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
+                    LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
+                    LocalDate plannedFor, List<UUID> pageIds) {
+            this(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,null);
+        }
+        /** A task that does not repeat: every task before #57, and most after it. */
+        public Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
+                    LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
+                    LocalDate plannedFor, List<UUID> pageIds, UUID listId) {
+            this(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,null,List.of());
+        }
         /** The most pages one task may link to. */
         public static final int MAX_PAGES = 100;
-        /** A task that links to no page: every task before Pages, and every new one. */
+        /** The most tags one task may carry: more than a row could ever show, fewer than a typo loop could add. */
+        public static final int MAX_TAGS = 20;
+        /** A task with at most one tag that links to no page: every task before Pages, and every new one. */
         public Task(UUID id, UUID activityId, UUID tagId, String title, String notes,
                     LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
                     LocalDate plannedFor) {
-            this(id,activityId,tagId,title,notes,due,status,source,createdAt,order,plannedFor,List.of());
+            this(id,activityId,one(tagId),title,notes,due,status,source,createdAt,order,plannedFor,List.of());
         }
         /** Predates the planned/deadline split; everything before it planned nothing. */
         public Task(UUID id, UUID activityId, UUID tagId, String title, String notes,
                     LocalDate due, TaskStatus status, String source, Instant createdAt, int order) {
             this(id,activityId,tagId,title,notes,due,status,source,createdAt,order,null);
         }
+        /** The tags of a task that had room for one (#66): none, or that one. */
+        public static List<UUID> one(UUID tagId) { return tagId == null ? List.of() : List.of(tagId); }
         /** Convenience for callers that predate status and tags. */
         public Task(UUID id, UUID activityId, String title, String notes, LocalDate due, boolean done, String source) {
             this(id,activityId,null,title,notes,due,done?TaskStatus.DONE:TaskStatus.TODO,source,Instant.now(),0);
@@ -229,8 +335,17 @@ public final class Model {
             if (notes.length() > 4000 || source.length() > 160)
                 throw new IllegalArgumentException("Task notes or source are too long.");
             if (order < 0) throw new IllegalArgumentException("Invalid task order.");
+            // The tags in the order they were given, once each (#66). Null is
+            // no tags, so a caller that passed "no tag" before tags were a list
+            // still means what it meant.
+            tagIds = tagIds == null ? List.of() : List.copyOf(new LinkedHashSet<>(tagIds));
+            if (tagIds.size() > MAX_TAGS) throw new IllegalArgumentException("A task can carry at most " + MAX_TAGS + " tags.");
             // The pages a task links to, in the order they were linked, once each.
             pageIds = List.copyOf(new LinkedHashSet<>(Objects.requireNonNull(pageIds)));
+            // A repeating task comes back on a date, so it has one (#57).
+            history = history == null ? List.of() : List.copyOf(history);
+            if (history.size() > MAX_HISTORY) throw new IllegalArgumentException("History limit reached.");
+            if (repeat != null && due == null) throw new IllegalArgumentException("A repeating task needs a due date.");
             if (pageIds.size() > MAX_PAGES) throw new IllegalArgumentException("A task can link to at most " + MAX_PAGES + " pages.");
         }
         public boolean done() { return status==TaskStatus.DONE; }
@@ -253,7 +368,7 @@ public final class Model {
          */
         public boolean sameImportEntryAs(Task other) {
             return sameEntryAs(other)
-                && (tagId == null || other.tagId() == null || tagId.equals(other.tagId()));
+                && (tagIds.isEmpty() || other.tagIds().isEmpty() || !Collections.disjoint(tagIds, other.tagIds()));
         }
         /** The day this wants attention: the plan if there is one, else the deadline. */
         public LocalDate workOn() { return plannedFor != null ? plannedFor : due; }
@@ -264,19 +379,38 @@ public final class Model {
         // rebuild of an existing task goes through these rather than a
         // constructor, which is where a forgotten field used to go missing.
         public Task withStatus(TaskStatus next) {
-            return new Task(id,activityId,tagId,title,notes,due,next,source,createdAt,order,plannedFor,pageIds);
+            return new Task(id,activityId,tagIds,title,notes,due,next,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
         }
         public Task withActivity(UUID next) {
-            return new Task(id,next,tagId,title,notes,due,status,source,createdAt,order,plannedFor,pageIds);
+            return new Task(id,next,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
         }
-        public Task withTag(UUID next) {
-            return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds);
+        public Task withTags(List<UUID> next) {
+            return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
+        }
+        /** The same task filed in another list, or in the Inbox for null (#56). */
+        public Task withList(UUID next) {
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,next,repeat,history);
+        }
+        /** The same task with another rule, or none (#57); its history stays. */
+        public Task withRepeat(Repeat next) {
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,next,history);
+        }
+        /** The same task moved on: the occurrence behind it recorded, the next one due. */
+        public Task advanced(Occurrence behind, LocalDate nextDue, TaskStatus nextStatus) {
+            var kept = new ArrayList<>(history);
+            kept.add(behind);
+            return new Task(id,activityId,tagIds,title,notes,nextDue,nextStatus,source,createdAt,order,null,pageIds,listId,repeat,kept);
+        }
+        public boolean repeats() { return repeat != null; }
+        /** The same task without one tag, which is what deleting a tag does to it. */
+        public Task withoutTag(UUID tag) {
+            return withTags(tagIds.stream().filter(t -> !t.equals(tag)).toList());
         }
         public Task withOrder(int next) {
-            return new Task(id,activityId,tagId,title,notes,due,status,source,createdAt,next,plannedFor,pageIds);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,next,plannedFor,pageIds,listId,repeat,history);
         }
         public Task withPages(List<UUID> next) {
-            return new Task(id,activityId,tagId,title,notes,due,status,source,createdAt,order,plannedFor,next);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,next,listId,repeat,history);
         }
     }
 
@@ -513,11 +647,11 @@ public final class Model {
      */
     public record State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks,
                         List<RecurringBlock> recurring, List<Task> tasks, List<Habit> habits, List<Tag> tags,
-                        Settings settings, Notes notes, Anki anki) {
+                        Settings settings, Notes notes, Anki anki, List<TaskList> lists) {
         /** The time-tracking core alone, with everything else empty. */
         public State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks) {
             this(activities, sessions, blocks, List.of(), List.of(), List.of(), List.of(), Settings.defaults(),
-                Notes.empty(), Anki.off());
+                Notes.empty(), Anki.off(), List.of());
         }
         public State {
             activities = List.copyOf(activities);
@@ -527,6 +661,7 @@ public final class Model {
             tasks = List.copyOf(tasks);
             habits = List.copyOf(habits);
             tags = List.copyOf(tags);
+            lists = List.copyOf(lists);
             Objects.requireNonNull(settings);
             Objects.requireNonNull(anki);
             Objects.requireNonNull(notes);
@@ -553,12 +688,23 @@ public final class Model {
                         LocalDate.EPOCH.atTime(r.endTime()).toInstant(java.time.ZoneOffset.UTC))).toList());
             validateIntervals(sessions.stream().map(x -> new Interval(x.id(),x.start(),x.end())).toList());
             validateIntervals(blocks.stream().map(x -> new Interval(x.id(),x.start(),x.end())).toList());
+            // Lists (#56): each once, each name once whatever its case, since
+            // "School" and "school" in one sidebar could only be a mistake.
+            if (lists.size() > 1_000) throw new IllegalArgumentException("Vault record limit reached.");
+            var listIds = new HashSet<UUID>();
+            var listNames = new HashSet<String>();
+            for (var l : lists) {
+                if (!listIds.add(l.id())) throw new IllegalArgumentException("Duplicate list.");
+                if (!listNames.add(l.name().toLowerCase(Locale.ROOT)))
+                    throw new IllegalArgumentException("Another list is already called \"" + l.name() + "\".");
+            }
             var tagIds = new HashSet<UUID>(); tags.forEach(t->tagIds.add(t.id()));
             Set<UUID> taskIds = new HashSet<>();
             for (var t : tasks) {
                 if (!taskIds.add(t.id())) throw new IllegalArgumentException("Duplicate task.");
                 if (t.activityId() != null && !ids.contains(t.activityId())) throw new IllegalArgumentException("Unknown task activity.");
-                if (t.tagId() != null && !tagIds.contains(t.tagId())) throw new IllegalArgumentException("Unknown task tag.");
+                for (var tag : t.tagIds()) if (!tagIds.contains(tag)) throw new IllegalArgumentException("Unknown task tag.");
+                if (t.listId() != null && !listIds.contains(t.listId())) throw new IllegalArgumentException("A task is in a list that does not exist.");
             }
             // A task may link to a page in the trash, so restoring the page
             // restores the link; it may not link to one that is gone for good.
@@ -621,19 +767,20 @@ public final class Model {
             var nextTasks = tasks.stream().map(t -> activityId.equals(t.activityId())
                 ? t.withActivity(replacement) : t).toList();
             return new State(kept, nextSessions, nextBlocks, nextRepeats, nextTasks, habits, tags,
-                settings, notes, anki);
+                settings, notes, anki, lists);
         }
 
         public State withCore(List<Activity> a, List<Session> s, List<ScheduleBlock> b) {
-            return new State(a,s,b,recurring,tasks,habits,tags,settings,notes,anki);
+            return new State(a,s,b,recurring,tasks,habits,tags,settings,notes,anki,lists);
         }
-        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,notes,anki); }
-        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,notes,anki); }
-        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,notes,anki); }
-        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,notes,anki); }
-        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,notes,anki); }
-        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,anki); }
-        public State withAnki(Anki next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,next); }
+        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,notes,anki,lists); }
+        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,notes,anki,lists); }
+        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,notes,anki,lists); }
+        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,notes,anki,lists); }
+        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,notes,anki,lists); }
+        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,anki,lists); }
+        public State withAnki(Anki next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,next,lists); }
+        public State withLists(List<TaskList> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,anki,next); }
         public static State empty() { return new State(List.of(), List.of(), List.of()); }
     }
 }

@@ -32,9 +32,10 @@ public final class TaskCalendarTest {
 
     /** Records what the calendar asked for, so a drag can be asserted exactly. */
     private static final class Recorder implements TaskCalendar.Edits {
-        UUID task; LocalDate date; int calls; LocalDate created; int creates;
+        UUID task; LocalDate date; int calls; LocalDate created; int creates; UUID opened;
         public void reschedule(UUID task,LocalDate date){this.task=task;this.date=date;calls++;}
         public void create(LocalDate date){created=date;creates++;}
+        public void open(UUID task){opened=task;}
     }
 
     private static void doubleClick(TaskCalendar calendar,Point at){
@@ -153,6 +154,7 @@ public final class TaskCalendarTest {
             "double-clicking an empty day asks for a task due that day");
         doubleClick(calendar,calendar.pointOn(dated));
         check(recorder.creates==1,"double-clicking a task's chip does not make another task");
+        check(dated.equals(recorder.opened),"it opens that task instead (#57)");
         doubleClick(calendar,calendar.centreOfTray());
         check(recorder.creates==1,"the undated strip is not a day");
         check(recorder.calls==before,"and making a task moves nothing");
@@ -193,7 +195,7 @@ public final class TaskCalendarTest {
             &&LocalDate.of(2026,9,24).equals(t.plannedFor())),"The new plan reached storage");
         check(LocalDate.of(2026,9,24).equals(task(tracker,dated).workOn()),
             "and the task now wants attention on the day it was dropped");
-        check(tag.id().equals(task(tracker,dated).tagId()),"Rescheduling keeps the tag");
+        check(task(tracker,dated).tagIds().equals(List.of(tag.id())),"Rescheduling keeps the tag");
         check(task(tracker,dated).order()==0,"Rescheduling keeps the manual position");
         check(task(tracker,dated).status()==TaskStatus.TODO,"Rescheduling keeps the status");
 
@@ -208,14 +210,14 @@ public final class TaskCalendarTest {
         var onlyDeadline=task(tracker,other);
         check(onlyDeadline.plannedFor()==null,"That task has no plan yet");
         check(onlyDeadline.workOn().equals(onlyDeadline.due()),"so it sits on its deadline");
-        tracker.updateTask(TasksPanel.merged(onlyDeadline,onlyDeadline.activityId(),onlyDeadline.tagId(),
+        tracker.updateTask(TasksPanel.merged(onlyDeadline,onlyDeadline.activityId(),onlyDeadline.tagIds(),
             onlyDeadline.title(),onlyDeadline.notes(),onlyDeadline.due(),onlyDeadline.status(),0,
             LocalDate.of(2026,9,15)));
         var planned=task(tracker,other);
         check(planned.workOn().equals(LocalDate.of(2026,9,15)),"Planning a day moves where it sits");
         check(planned.due().equals(onlyDeadline.due()),"and the deadline is untouched");
         check(!planned.scheduledLate(),"Planning before the deadline is not late");
-        tracker.updateTask(TasksPanel.merged(planned,planned.activityId(),planned.tagId(),
+        tracker.updateTask(TasksPanel.merged(planned,planned.activityId(),planned.tagIds(),
             planned.title(),planned.notes(),LocalDate.of(2026,9,10),planned.status(),0,
             LocalDate.of(2026,9,15)));
         check(task(tracker,other).scheduledLate(),"Planning to start after it is due is flagged");

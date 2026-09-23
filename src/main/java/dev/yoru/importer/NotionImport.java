@@ -131,8 +131,8 @@ public final class NotionImport {
      * are dropped here and again by the tracker, so re-importing the same export
      * adds nothing twice. The class is part of it: two classes can set an
      * assignment with the same name on the same day, and both are real work. Tags are reused by name; only the ones
-     * that do not exist yet are returned, and a task carries one tag because
-     * that is what a Yoru task has.
+     * that do not exist yet are returned, and a task carries every tag its row
+     * names.
      */
     public static Batch prepare(List<Candidate> chosen, State current, String source) throws IOException {
         Objects.requireNonNull(chosen, "Choose what to import.");
@@ -152,9 +152,11 @@ public final class NotionImport {
         int order = current.tasks().stream().mapToInt(Task::order).max().orElse(-1) + 1;
         var createdAt = Instant.now();
         for (var candidate : chosen) {
-            UUID tagId = null;
-            if (!candidate.tags().isEmpty()) {
-                String name = candidate.tags().getFirst();
+            // Every value of a multi-select column is a tag of its own (#66),
+            // in the order the column lists them.
+            var tagIds = new ArrayList<UUID>();
+            for (String name : candidate.tags()) {
+                if (tagIds.size() == Task.MAX_TAGS) break;
                 String key = name.toLowerCase(Locale.ROOT);
                 var tag = tags.get(key);
                 if (tag == null) tag = byId.get(tagId(name));
@@ -163,10 +165,10 @@ public final class NotionImport {
                     newTags.add(tag);
                 }
                 tags.put(key, tag);
-                tagId = tag.id();
+                tagIds.add(tag.id());
             }
-            var task = new Task(UUID.randomUUID(), null, tagId, candidate.title(), candidate.notes(),
-                candidate.due(), candidate.status(), label, createdAt, order++);
+            var task = new Task(UUID.randomUUID(), null, tagIds, candidate.title(), candidate.notes(),
+                candidate.due(), candidate.status(), label, createdAt, order++, null, List.of());
             if (known.stream().anyMatch(existing -> existing.sameImportEntryAs(task))) continue;
             known.add(task);
             accepted.add(task);

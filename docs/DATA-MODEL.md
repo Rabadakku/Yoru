@@ -231,3 +231,58 @@ refreshes never erase it. A cache-save failure is displayed and retains the
 previous saved summary. Automatic retries belong to the open vault and stop
 when disabled or closed, independent of the visible tab. No schema change in
 1.0.17.
+
+## Several tags a task (schema 18, #66)
+
+Schema 18 replaces a task's one optional tag (`tagId`) with a list of tags
+(`tagIds`), in the order they were given, once each, at most
+`Task.MAX_TAGS` (20). In the vault it is a count followed by that many UUIDs
+where schemas 5 to 17 wrote a present-flag and one UUID; an older vault reads
+each task's single tag as a list of one, and an untagged task as an empty
+list. `LegacyVaultTest` opens a schema 17 vault written by 1.0.19 and holds
+every task to the tag it had.
+
+The portable export is format 7: `"tagIds": [...]` where formats up to 6
+wrote `"tagId"`. Both are read. Deleting a tag takes only that tag off the
+tasks that carry it; a task keeps its others. A tag typed into the task form
+is created in the same write as the task (`Tracker.saveTask`), so a failed
+save cannot leave a tag behind for a task that was never kept. A Notion
+multi-select column gives a task every tag it lists.
+
+## Task lists (schema 19, #56)
+
+Schema 19 adds `TaskList(id, name, colour, order)` to the state, after the
+Anki integration, and `listId` to each task, after its page links: a
+present-flag and a UUID, with no list meaning the Inbox. List names are unique
+whatever their case, 1 to 40 characters; a task may only be in a list that
+exists. Older vaults arrive with no lists and every task in the Inbox.
+
+Deleting a list takes a backup, then either moves its tasks to the Inbox or
+deletes them with it, as the owner chooses. "Make list" on a tag makes a list
+with the tag's name and colour holding every task the tag is on; the tag stays.
+Resetting lists files every task in the Inbox. Manual order stays one total
+order over every task: reordering inside a list swaps its tasks among the
+places they already hold, so other lists never move.
+
+The portable export is format 8: `"lists"` at the top level and `"listId"` on
+each task. A file without them reads with every task in the Inbox.
+
+## Repeating tasks (schema 20, #57)
+
+Schema 20 adds two parts to each task, after its list: an optional `Repeat`
+rule and the `Occurrence`s behind it. A rule is a unit (day, week, month,
+year), an interval, the weekdays of a weekly rule (one bit each in the vault,
+names in the export), a day of the month or an nth weekday (-1 for the last),
+the start it counts from, whether the next date comes from the schedule or
+from the day it was finished, and an optional last day or number of times.
+An occurrence is the day it was due, when it was done or skipped, and which.
+
+The rule's dates are worked out, never stored (`application.Repeats`): the
+31st falls on a shorter month's last day, the 29th of February on the 28th in
+other years, weeks and fortnights break where the owner's week starts, and a
+task finished late is next due today at the earliest rather than on the days
+it missed. The task's due date is the occurrence now in front of it, which is
+what "edit this occurrence" edits; finishing or skipping records it and moves
+the due date on, and when the rule runs out the task is simply done. A
+repeating task always has a due date. Older vaults arrive with nothing
+repeating. The export is format 9.

@@ -406,7 +406,30 @@ public final class Tracker {
             // A row with no class matches whatever is stored; a row with one
             // matches an untagged task, or a task under that same class. A class
             // the vault has never seen matches nothing that is filed under one.
-            && (tagName == null || t.tagId() == null || (tagId != null && tagId.equals(t.tagId()))));
+            && (tagName == null || t.tagIds().isEmpty() || (tagId != null && t.tagIds().contains(tagId))));
+    }
+
+    /**
+     * A task from the editor, with the tags it made on the way, in one write (#66).
+     *
+     * A tag typed into the form is created with the task that carries it: made
+     * first and alone, a save that then failed would leave a tag for a task
+     * that was never kept. Adds the task when it is new, and replaces it when
+     * it is not.
+     */
+    public void saveTask(Task task, List<Tag> newTags) throws IOException {
+        var tags = new ArrayList<>(state.tags());
+        for (var tag : newTags) {
+            if (tags.stream().anyMatch(t -> t.name().equalsIgnoreCase(tag.name()) || t.id().equals(tag.id())))
+                throw new IllegalArgumentException("The tag \"" + tag.name() + "\" already exists.");
+            tags.add(tag);
+        }
+        if (task.activityId() != null) requireActivity(task.activityId());
+        var next = new ArrayList<>(state.tasks());
+        int index = -1;
+        for (int i = 0; i < next.size(); i++) if (next.get(i).id().equals(task.id())) index = i;
+        if (index < 0) next.add(task); else next.set(index, task);
+        commit(state.withTags(tags).withTasks(next));
     }
 
     public void updateTask(Task task) throws IOException {
@@ -562,6 +585,7 @@ public final class Tracker {
         SCHEDULE("Schedule blocks and weekly repeats"),
         TASKS("Tasks"),
         TAGS("Tags"),
+        LISTS("Task lists (their tasks move to the Inbox)"),
         DAILY_HABITS("Daily check-offs"),
         TIME_SINCE("Time-since trackers"),
         SETTINGS("Settings"),
@@ -586,7 +610,10 @@ public final class Tracker {
         // which the dialog never said and a new term never wanted: the classes
         // survive the assignments filed under them.
         boolean clearTags=parts.contains(ResetPart.TAGS);
-        if(clearTags)tasks=tasks.stream().map(x->x.withTag(null)).toList();
+        if(clearTags)tasks=tasks.stream().map(x->x.withTags(List.of())).toList();
+        // Clearing lists files their tasks in the Inbox; the tasks stay (#56).
+        boolean clearLists=parts.contains(ResetPart.LISTS);
+        if(clearLists)tasks=tasks.stream().map(x->x.withList(null)).toList();
         // Clearing pages unlinks the tasks that pointed at them; the tasks stay.
         boolean clearPages=parts.contains(ResetPart.PAGES);
         if(clearPages)tasks=tasks.stream().map(x->x.withPages(List.of())).toList();
@@ -600,7 +627,8 @@ public final class Tracker {
             clearTags?List.of():state.tags(),
             parts.contains(ResetPart.SETTINGS)?Settings.defaults():state.settings(),
             clearPages?Notes.empty():state.notes(),
-            parts.contains(ResetPart.ANKI)?Anki.off():state.anki());
+            parts.contains(ResetPart.ANKI)?Anki.off():state.anki(),
+            clearLists?List.of():state.lists());
         repository.backup();commit(next);
     }
 
@@ -633,18 +661,131 @@ public final class Tracker {
         commit(state.withTags(next));
     }
 
-    /** Tasks keep everything except the tag; deleting a tag never deletes work. */
+    /** Tasks keep everything except that tag, and any others they carry; deleting a tag never deletes work. */
     public void deleteTag(UUID id) throws IOException {
         if(state.tags().stream().noneMatch(t->t.id().equals(id)))throw new IllegalArgumentException("Tag no longer exists.");
-        var tasks=state.tasks().stream().map(t->id.equals(t.tagId())?t.withTag(null):t).toList();
+        var tasks=state.tasks().stream().map(t->t.tagIds().contains(id)?t.withoutTag(id):t).toList();
         repository.backup();
         // Untag first: removing a tag a task still points at would not validate.
         commit(state.withTasks(tasks)
             .withTags(state.tags().stream().filter(t->!t.id().equals(id)).toList()));
     }
 
+    // ---- lists (#56) ---------------------------------------------------------
+
+    /** A new list at the end of the sidebar. Names are unique, whatever their case. */
+    public TaskList addList(String name,int colour) throws IOException {
+        requireFreeListName(null,name);
+        int order=state.lists().stream().mapToInt(TaskList::order).max().orElse(-1)+1;
+        var list=new TaskList(UUID.randomUUID(),name,colour,order);
+        var next=new ArrayList<>(state.lists());
+        next.add(list);
+        commit(state.withLists(next));
+        return list;
+    }
+
+    /** A list's new name and colour; the tasks in it are untouched. */
+    public void editList(UUID id,String name,int colour) throws IOException {
+        var old=list(id);
+        requireFreeListName(id,name);
+        commit(state.withLists(state.lists().stream()
+            .map(l->l.id().equals(id)?old.renamed(name).recoloured(colour):l).toList()));
+    }
+
+    private void requireFreeListName(UUID except,String name) {
+        String wanted=Objects.requireNonNull(name).strip();
+        if(state.lists().stream().anyMatch(l->!l.id().equals(except)&&l.name().equalsIgnoreCase(wanted)))
+            throw new IllegalArgumentException("Another list is already called \""+wanted+"\".");
+    }
+
+    private TaskList list(UUID id) {
+        return state.lists().stream().filter(l->l.id().equals(id)).findFirst()
+            .orElseThrow(()->new IllegalArgumentException("That list no longer exists."));
+    }
+
+    /** The lists in the order given; the sidebar's order is the owner's. */
+    public void reorderLists(List<UUID> order) throws IOException {
+        if(order.size()!=state.lists().size()||!new HashSet<>(order).equals(
+                state.lists().stream().map(TaskList::id).collect(java.util.stream.Collectors.toSet())))
+            throw new IllegalArgumentException("The lists changed. Try again.");
+        var byId=new HashMap<UUID,TaskList>();
+        state.lists().forEach(l->byId.put(l.id(),l));
+        var next=new ArrayList<TaskList>();
+        for(int i=0;i<order.size();i++) next.add(byId.get(order.get(i)).withOrder(i));
+        commit(state.withLists(next));
+    }
+
+    /**
+     * Removes a list. Its tasks move to the Inbox, or go with it when
+     * {@code deleteTasks}; a backup is taken first either way, since either can
+     * move a great many tasks at once.
+     */
+    public void deleteList(UUID id,boolean deleteTasks) throws IOException {
+        list(id);
+        var tasks=deleteTasks
+            ?state.tasks().stream().filter(t->!id.equals(t.listId())).toList()
+            :state.tasks().stream().map(t->id.equals(t.listId())?t.withList(null):t).toList();
+        repository.backup();
+        // Out of the list first: removing a list a task is still in would not validate.
+        commit(state.withTasks(tasks).withLists(state.lists().stream().filter(l->!l.id().equals(id)).toList()));
+    }
+
+    /** Files one task in a list, or in the Inbox for null. */
+    public void moveTask(UUID taskId,UUID listId) throws IOException {
+        if(listId!=null) list(listId);
+        updateTask(task(taskId).withList(listId));
+    }
+
+    /**
+     * A tag as a list (#56): a list with the tag's name and colour, holding
+     * every task the tag was on. The tag stays, so nothing about the tasks is
+     * lost; it can be deleted afterwards if it is no longer wanted.
+     */
+    public TaskList tagToList(UUID tagId) throws IOException {
+        var tag=state.tags().stream().filter(t->t.id().equals(tagId)).findFirst()
+            .orElseThrow(()->new IllegalArgumentException("Tag no longer exists."));
+        requireFreeListName(null,tag.name());
+        int order=state.lists().stream().mapToInt(TaskList::order).max().orElse(-1)+1;
+        var list=new TaskList(UUID.randomUUID(),tag.name(),tag.colour(),order);
+        var lists=new ArrayList<>(state.lists());
+        lists.add(list);
+        commit(state.withLists(lists).withTasks(state.tasks().stream()
+            .map(t->t.tagIds().contains(tagId)?t.withList(list.id()):t).toList()));
+        return list;
+    }
+
     public void taskStatus(UUID id,TaskStatus status) throws IOException {
-        updateTask(task(id).withStatus(Objects.requireNonNull(status)));
+        taskStatus(id,status,ZoneId.systemDefault());
+    }
+
+    /**
+     * A task's new status, with "today" read in {@code zone}.
+     *
+     * Finishing a repeating task (#57) records the occurrence and moves the
+     * task on to its next date, back to To do: it stays one task with a
+     * history rather than a pile of copies. When the rule has run out, the task
+     * is simply done.
+     */
+    public void taskStatus(UUID id,TaskStatus status,ZoneId zone) throws IOException {
+        var task=task(id);
+        if(status==TaskStatus.DONE&&task.repeats()&&task.status()!=TaskStatus.DONE) { advance(task,false,zone); return; }
+        updateTask(task.withStatus(Objects.requireNonNull(status)));
+    }
+
+    /** Passes over this occurrence of a repeating task without doing it, and moves it to the next (#57). */
+    public void skipOccurrence(UUID id,ZoneId zone) throws IOException {
+        var task=task(id);
+        if(!task.repeats()) throw new IllegalArgumentException("Only a repeating task has an occurrence to skip.");
+        if(task.status()==TaskStatus.DONE) throw new IllegalArgumentException("This task has finished repeating.");
+        advance(task,true,zone);
+    }
+
+    private void advance(Task task,boolean skipped,ZoneId zone) throws IOException {
+        var now=clock.instant();
+        var today=LocalDate.ofInstant(now,zone);
+        var behind=new Occurrence(task.due(),now,skipped);
+        var next=Repeats.following(task.repeat(),task.due(),today,state.settings().weekStartsOn(),task.history().size()+1);
+        updateTask(next==null?task.advanced(behind,task.due(),TaskStatus.DONE):task.advanced(behind,next,TaskStatus.TODO));
     }
 
     public void deleteTask(UUID id) throws IOException {

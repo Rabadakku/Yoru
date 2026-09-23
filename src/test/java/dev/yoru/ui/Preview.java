@@ -196,10 +196,25 @@ public final class Preview {
             new Task(UUID.randomUUID(), study, null, "Ask about open lab hours", "", null, TaskStatus.TODO, "Manual entry", now, 4),
             new Task(UUID.randomUUID(), study, cs.id(), "HW 3.1 polynomials", "", today.plusDays(4), TaskStatus.TODO, "Manual entry", now, 5),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Kanji quiz", "", today.plusDays(6), TaskStatus.TODO, "Manual entry", now, 6),
-            new Task(UUID.randomUUID(), study, cs.id(), "Essay rough draft", "", today.plusDays(7), TaskStatus.TODO, "Manual entry", now, 7),
+            // Two tags, so the board draws a row with more than one (#66).
+            new Task(UUID.randomUUID(), study, java.util.List.of(cs.id(), jpn.id()), "Essay rough draft", "", today.plusDays(7), TaskStatus.TODO, "Manual entry", now, 7, null, java.util.List.of()),
             new Task(UUID.randomUUID(), null, null, "Return library books", "", null, TaskStatus.TODO, "Manual entry", now, 8),
             new Task(UUID.randomUUID(), study, cs.id(), "Practice quiz", "", today.plusDays(12), TaskStatus.TODO, "Manual entry", now, 9),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Grammar review", "", today.minusDays(4), TaskStatus.DONE, "Manual entry", now, 10)));
+
+        // A repeating task, so the board shows the mark and the calendar the
+        // dates it comes back on (#57).
+        for (var task : tracker.state().tasks())
+            if (task.title().equals("Kanji review deck"))
+                tracker.updateTask(task.withRepeat(Repeat.weekly(1, java.util.Set.of(task.due().getDayOfWeek()), task.due())));
+
+        // Two lists, with most tasks filed in one, so the rail has places in it (#56).
+        var classes = tracker.addList("Classes", 0x6E8FD6);
+        var home = tracker.addList("Home", 0x6FBF8B);
+        for (var task : tracker.state().tasks()) {
+            if (task.title().equals("Order textbook") || task.title().equals("Return library books")) tracker.moveTask(task.id(), home.id());
+            else if (!task.title().equals("Ask about open lab hours")) tracker.moveTask(task.id(), classes.id());
+        }
 
         var folder = tracker.pages().createFolder(null, "Notebook");
         var note = tracker.pages().createPage(folder.id(), "Study notes", """

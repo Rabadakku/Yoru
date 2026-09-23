@@ -67,7 +67,10 @@ final class TagEditor extends JPanel {
             var rename=button("Rename",()->rename(tag));rename.setName("tag.rename."+tag.id());
             var recolour=button("Colour",()->recolour(tag));recolour.setName("tag.colour."+tag.id());
             var delete=button("Delete",()->delete(tag));delete.setName("tag.delete."+tag.id());
-            actions.add(rename);actions.add(recolour);actions.add(delete);
+            // Some owners used tags as places; a list is the place (#56).
+            var toList=button("Make list",()->toList(tag));toList.setName("tag.toList."+tag.id());
+            toList.setToolTipText("Make a list called \""+tag.name()+"\" holding every task with this tag");
+            actions.add(rename);actions.add(recolour);actions.add(toList);actions.add(delete);
             line.add(actions,BorderLayout.EAST);
             add(line);gap(this,SPACE_SM);
         }
@@ -87,6 +90,15 @@ final class TagEditor extends JPanel {
             name.setText("");
             done();
         } catch(Exception e){Dialogs.error(this,e.getMessage());}
+    }
+
+    private void toList(Tag tag) {
+        long tagged=tracker.state().tasks().stream().filter(t->t.tagIds().contains(tag.id())).count();
+        if(!Dialogs.confirm(this,"Make a list called \""+tag.name()+"\" and file "+Theme.plural((int)tagged,"task")
+            +" with this tag in it? The tag stays on them; delete it afterwards if you no longer want it.",
+            "Make a list from a tag","Make list")) return;
+        try{tracker.tagToList(tag.id());done();}
+        catch(Exception e){Dialogs.error(this,e.getMessage());}
     }
 
     private void rename(Tag tag) {
@@ -163,7 +175,7 @@ final class TagEditor extends JPanel {
     }
 
     private void delete(Tag tag) {
-        long tagged=tracker.state().tasks().stream().filter(t->tag.id().equals(t.tagId())).count();
+        long tagged=tracker.state().tasks().stream().filter(t->t.tagIds().contains(tag.id())).count();
         var message=stack();
         message.add(label("Delete the tag \""+tag.name()+"\"?",TYPE_HEADING,TEXT));gap(message,SPACE_MD);
         message.add(bodyLabel(tagged==0?"No tasks use it."
@@ -174,7 +186,10 @@ final class TagEditor extends JPanel {
     }
 
     /** Walks a fixed palette so a new tag is legible without asking for a colour first. */
-    private int nextColour() { return PALETTE[tracker.state().tags().size()%PALETTE.length].colour(); }
+    private int nextColour() { return paletteColour(tracker.state().tags().size()); }
+
+    /** The palette's colours in turn, so each new tag or list starts on a different one. */
+    static int paletteColour(int n) { return PALETTE[Math.floorMod(n,PALETTE.length)].colour(); }
 
     /** One palette entry: the colour, and the name the tooltip and a screen reader read out. */
     private record Choice(String name,int colour) { }
