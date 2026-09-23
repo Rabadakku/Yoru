@@ -258,7 +258,8 @@ final class TaskCalendar extends JPanel {
     }
 
     private Color colourOf(Task task) {
-        var tag = task.tagId() == null ? null : tags.get(task.tagId());
+        // A chip has room for one colour: the first tag the task was given.
+        var tag = task.tagIds().isEmpty() ? null : tags.get(task.tagIds().getFirst());
         return tag == null ? Theme.LINE : new Color(tag.colour());
     }
 

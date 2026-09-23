@@ -147,7 +147,26 @@ public final class PortableVaultTest {
         check(restored.settings().theme()==ThemeId.SAKURA,"Settings survive");
         check(restored.settings().minSessionSeconds()==120,"A non-default session floor survives");
         check(!json.contains("waifu"),"The withdrawn companion choice is no longer written");
-        check(restored.tasks().getFirst().tagId().equals(original.tags().getFirst().id()),"Task tagging survives");
+        check(restored.tasks().getFirst().tagIds().equals(List.of(original.tags().getFirst().id())),"Task tagging survives");
+        check(json.contains("\"tagIds\": ["),"Format 7 writes a task's tags as a list");
+
+        // Several tags a task (#66), in the order they were given.
+        var seminar=new Tag(UUID.randomUUID(),"Seminar",0xA98BD4);
+        var withTwo=original.withTags(List.of(original.tags().getFirst(),seminar));
+        withTwo=withTwo.withTasks(withTwo.tasks().stream().map(t->t.tagIds().isEmpty()?t
+            :t.withTags(List.of(seminar.id(),original.tags().getFirst().id()))).toList());
+        var twoBack=PortableVault.parse(PortableVault.export(withTwo,when));
+        check(twoBack.equals(withTwo),"Two tags on a task survive the round trip");
+        check(twoBack.tasks().getFirst().tagIds().getFirst().equals(seminar.id()),"in the order they were given");
+        // A format 6 file names one tag per task, and still imports with it.
+        var formatSix=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 6")
+            .replaceAll("\"tagIds\": \\[\\s*(\"[^\"]+\")\\s*\\]","\"tagId\": $1")
+            .replaceAll("\"tagIds\": \\[\\s*\\]","\"tagId\": null");
+        check(!formatSix.contains("tagIds"),"The format 6 fixture has no lists of tags");
+        var six=PortableVault.parse(formatSix);
+        check(six.tasks().getFirst().tagIds().equals(List.of(original.tags().getFirst().id())),"A format 6 file's single tag is read as that task's one tag");
+        check(six.tasks().stream().map(Task::tagIds).toList().equals(original.tasks().stream().map(Task::tagIds).toList()),
+            "and every task reads back the one tag, or none, that it had");
 
         // An empty vault is a valid vault.
         var empty=State.empty();

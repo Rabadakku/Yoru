@@ -406,7 +406,30 @@ public final class Tracker {
             // A row with no class matches whatever is stored; a row with one
             // matches an untagged task, or a task under that same class. A class
             // the vault has never seen matches nothing that is filed under one.
-            && (tagName == null || t.tagId() == null || (tagId != null && tagId.equals(t.tagId()))));
+            && (tagName == null || t.tagIds().isEmpty() || (tagId != null && t.tagIds().contains(tagId))));
+    }
+
+    /**
+     * A task from the editor, with the tags it made on the way, in one write (#66).
+     *
+     * A tag typed into the form is created with the task that carries it: made
+     * first and alone, a save that then failed would leave a tag for a task
+     * that was never kept. Adds the task when it is new, and replaces it when
+     * it is not.
+     */
+    public void saveTask(Task task, List<Tag> newTags) throws IOException {
+        var tags = new ArrayList<>(state.tags());
+        for (var tag : newTags) {
+            if (tags.stream().anyMatch(t -> t.name().equalsIgnoreCase(tag.name()) || t.id().equals(tag.id())))
+                throw new IllegalArgumentException("The tag \"" + tag.name() + "\" already exists.");
+            tags.add(tag);
+        }
+        if (task.activityId() != null) requireActivity(task.activityId());
+        var next = new ArrayList<>(state.tasks());
+        int index = -1;
+        for (int i = 0; i < next.size(); i++) if (next.get(i).id().equals(task.id())) index = i;
+        if (index < 0) next.add(task); else next.set(index, task);
+        commit(state.withTags(tags).withTasks(next));
     }
 
     public void updateTask(Task task) throws IOException {
@@ -586,7 +609,7 @@ public final class Tracker {
         // which the dialog never said and a new term never wanted: the classes
         // survive the assignments filed under them.
         boolean clearTags=parts.contains(ResetPart.TAGS);
-        if(clearTags)tasks=tasks.stream().map(x->x.withTag(null)).toList();
+        if(clearTags)tasks=tasks.stream().map(x->x.withTags(List.of())).toList();
         // Clearing pages unlinks the tasks that pointed at them; the tasks stay.
         boolean clearPages=parts.contains(ResetPart.PAGES);
         if(clearPages)tasks=tasks.stream().map(x->x.withPages(List.of())).toList();
@@ -633,10 +656,10 @@ public final class Tracker {
         commit(state.withTags(next));
     }
 
-    /** Tasks keep everything except the tag; deleting a tag never deletes work. */
+    /** Tasks keep everything except that tag, and any others they carry; deleting a tag never deletes work. */
     public void deleteTag(UUID id) throws IOException {
         if(state.tags().stream().noneMatch(t->t.id().equals(id)))throw new IllegalArgumentException("Tag no longer exists.");
-        var tasks=state.tasks().stream().map(t->id.equals(t.tagId())?t.withTag(null):t).toList();
+        var tasks=state.tasks().stream().map(t->t.tagIds().contains(id)?t.withoutTag(id):t).toList();
         repository.backup();
         // Untag first: removing a tag a task still points at would not validate.
         commit(state.withTasks(tasks)

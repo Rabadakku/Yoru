@@ -199,22 +199,26 @@ public final class Model {
      * day you plan to sit down with it. A deadline you cannot sort on, colour or
      * be warned about is not really recorded.
      */
-    public record Task(UUID id, UUID activityId, UUID tagId, String title, String notes,
+    public record Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
                        LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
                        LocalDate plannedFor, List<UUID> pageIds) {
         /** The most pages one task may link to. */
         public static final int MAX_PAGES = 100;
-        /** A task that links to no page: every task before Pages, and every new one. */
+        /** The most tags one task may carry: more than a row could ever show, fewer than a typo loop could add. */
+        public static final int MAX_TAGS = 20;
+        /** A task with at most one tag that links to no page: every task before Pages, and every new one. */
         public Task(UUID id, UUID activityId, UUID tagId, String title, String notes,
                     LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
                     LocalDate plannedFor) {
-            this(id,activityId,tagId,title,notes,due,status,source,createdAt,order,plannedFor,List.of());
+            this(id,activityId,one(tagId),title,notes,due,status,source,createdAt,order,plannedFor,List.of());
         }
         /** Predates the planned/deadline split; everything before it planned nothing. */
         public Task(UUID id, UUID activityId, UUID tagId, String title, String notes,
                     LocalDate due, TaskStatus status, String source, Instant createdAt, int order) {
             this(id,activityId,tagId,title,notes,due,status,source,createdAt,order,null);
         }
+        /** The tags of a task that had room for one (#66): none, or that one. */
+        public static List<UUID> one(UUID tagId) { return tagId == null ? List.of() : List.of(tagId); }
         /** Convenience for callers that predate status and tags. */
         public Task(UUID id, UUID activityId, String title, String notes, LocalDate due, boolean done, String source) {
             this(id,activityId,null,title,notes,due,done?TaskStatus.DONE:TaskStatus.TODO,source,Instant.now(),0);
@@ -229,6 +233,11 @@ public final class Model {
             if (notes.length() > 4000 || source.length() > 160)
                 throw new IllegalArgumentException("Task notes or source are too long.");
             if (order < 0) throw new IllegalArgumentException("Invalid task order.");
+            // The tags in the order they were given, once each (#66). Null is
+            // no tags, so a caller that passed "no tag" before tags were a list
+            // still means what it meant.
+            tagIds = tagIds == null ? List.of() : List.copyOf(new LinkedHashSet<>(tagIds));
+            if (tagIds.size() > MAX_TAGS) throw new IllegalArgumentException("A task can carry at most " + MAX_TAGS + " tags.");
             // The pages a task links to, in the order they were linked, once each.
             pageIds = List.copyOf(new LinkedHashSet<>(Objects.requireNonNull(pageIds)));
             if (pageIds.size() > MAX_PAGES) throw new IllegalArgumentException("A task can link to at most " + MAX_PAGES + " pages.");
@@ -253,7 +262,7 @@ public final class Model {
          */
         public boolean sameImportEntryAs(Task other) {
             return sameEntryAs(other)
-                && (tagId == null || other.tagId() == null || tagId.equals(other.tagId()));
+                && (tagIds.isEmpty() || other.tagIds().isEmpty() || !Collections.disjoint(tagIds, other.tagIds()));
         }
         /** The day this wants attention: the plan if there is one, else the deadline. */
         public LocalDate workOn() { return plannedFor != null ? plannedFor : due; }
@@ -264,19 +273,23 @@ public final class Model {
         // rebuild of an existing task goes through these rather than a
         // constructor, which is where a forgotten field used to go missing.
         public Task withStatus(TaskStatus next) {
-            return new Task(id,activityId,tagId,title,notes,due,next,source,createdAt,order,plannedFor,pageIds);
+            return new Task(id,activityId,tagIds,title,notes,due,next,source,createdAt,order,plannedFor,pageIds);
         }
         public Task withActivity(UUID next) {
-            return new Task(id,next,tagId,title,notes,due,status,source,createdAt,order,plannedFor,pageIds);
+            return new Task(id,next,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds);
         }
-        public Task withTag(UUID next) {
+        public Task withTags(List<UUID> next) {
             return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds);
         }
+        /** The same task without one tag, which is what deleting a tag does to it. */
+        public Task withoutTag(UUID tag) {
+            return withTags(tagIds.stream().filter(t -> !t.equals(tag)).toList());
+        }
         public Task withOrder(int next) {
-            return new Task(id,activityId,tagId,title,notes,due,status,source,createdAt,next,plannedFor,pageIds);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,next,plannedFor,pageIds);
         }
         public Task withPages(List<UUID> next) {
-            return new Task(id,activityId,tagId,title,notes,due,status,source,createdAt,order,plannedFor,next);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,next);
         }
     }
 
@@ -558,7 +571,7 @@ public final class Model {
             for (var t : tasks) {
                 if (!taskIds.add(t.id())) throw new IllegalArgumentException("Duplicate task.");
                 if (t.activityId() != null && !ids.contains(t.activityId())) throw new IllegalArgumentException("Unknown task activity.");
-                if (t.tagId() != null && !tagIds.contains(t.tagId())) throw new IllegalArgumentException("Unknown task tag.");
+                for (var tag : t.tagIds()) if (!tagIds.contains(tag)) throw new IllegalArgumentException("Unknown task tag.");
             }
             // A task may link to a page in the trash, so restoring the page
             // restores the link; it may not link to one that is gone for good.

@@ -193,7 +193,7 @@ public final class TaskCalendarTest {
             &&LocalDate.of(2026,9,24).equals(t.plannedFor())),"The new plan reached storage");
         check(LocalDate.of(2026,9,24).equals(task(tracker,dated).workOn()),
             "and the task now wants attention on the day it was dropped");
-        check(tag.id().equals(task(tracker,dated).tagId()),"Rescheduling keeps the tag");
+        check(task(tracker,dated).tagIds().equals(List.of(tag.id())),"Rescheduling keeps the tag");
         check(task(tracker,dated).order()==0,"Rescheduling keeps the manual position");
         check(task(tracker,dated).status()==TaskStatus.TODO,"Rescheduling keeps the status");
 
@@ -208,14 +208,14 @@ public final class TaskCalendarTest {
         var onlyDeadline=task(tracker,other);
         check(onlyDeadline.plannedFor()==null,"That task has no plan yet");
         check(onlyDeadline.workOn().equals(onlyDeadline.due()),"so it sits on its deadline");
-        tracker.updateTask(TasksPanel.merged(onlyDeadline,onlyDeadline.activityId(),onlyDeadline.tagId(),
+        tracker.updateTask(TasksPanel.merged(onlyDeadline,onlyDeadline.activityId(),onlyDeadline.tagIds(),
             onlyDeadline.title(),onlyDeadline.notes(),onlyDeadline.due(),onlyDeadline.status(),0,
             LocalDate.of(2026,9,15)));
         var planned=task(tracker,other);
         check(planned.workOn().equals(LocalDate.of(2026,9,15)),"Planning a day moves where it sits");
         check(planned.due().equals(onlyDeadline.due()),"and the deadline is untouched");
         check(!planned.scheduledLate(),"Planning before the deadline is not late");
-        tracker.updateTask(TasksPanel.merged(planned,planned.activityId(),planned.tagId(),
+        tracker.updateTask(TasksPanel.merged(planned,planned.activityId(),planned.tagIds(),
             planned.title(),planned.notes(),LocalDate.of(2026,9,10),planned.status(),0,
             LocalDate.of(2026,9,15)));
         check(task(tracker,other).scheduledLate(),"Planning to start after it is due is flagged");

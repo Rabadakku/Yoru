@@ -28,9 +28,10 @@ public final class PortableVault {
      * it held for the game is read past. A build that reads only up to 3 refuses
      * a format 4 file rather than dropping what it does not understand. Format 5
      * added the Anki integration and the counts it last saw. Format 6 added the
-     * day a habit began.
+     * day a habit began. Format 7 gave a task a list of tags, "tagIds", where
+     * it had room for one "tagId".
      */
-    public static final int FORMAT = 6;
+    public static final int FORMAT = 7;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -136,7 +137,7 @@ public final class PortableVault {
         var m = new LinkedHashMap<String, Object>();
         m.put("id", t.id().toString());
         m.put("activityId", t.activityId() == null ? null : t.activityId().toString());
-        m.put("tagId", t.tagId() == null ? null : t.tagId().toString());
+        m.put("tagIds", t.tagIds().stream().map(UUID::toString).toList());
         m.put("title", t.title());
         m.put("notes", t.notes());
         m.put("due", t.due() == null ? null : t.due().toString());
@@ -269,7 +270,9 @@ public final class PortableVault {
     }
 
     private static Task readTask(Map<?, ?> m) {
-        return new Task(id(m, "id"), optionalId(m, "activityId"), optionalId(m, "tagId"),
+        // Format 7 lists every tag (#66); an older file names one, or none.
+        var tags = m.containsKey("tagIds") ? optionalIds(m, "tagIds") : Task.one(optionalId(m, "tagId"));
+        return new Task(id(m, "id"), optionalId(m, "activityId"), tags,
             text(m, "title"), text(m, "notes"), optionalDate(m, "due"),
             enumeration(TaskStatus.class, text(m, "status")), text(m, "source"),
             instant(m, "createdAt"), int32(m, "order"), optionalDate(m, "plannedFor"),

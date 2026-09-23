@@ -105,9 +105,10 @@ public final class TextFitTest {
         for (var tag : tracker.state().tags())
             tracker.editTag(tag.id(), longest(tag.name() + " for the second-year seminar", TAG_NAME), tag.colour());
         for (var task : tracker.state().tasks())
-            tracker.updateTask(new Task(task.id(), task.activityId(), task.tagId(),
+            tracker.updateTask(new Task(task.id(), task.activityId(), task.tagIds(),
                 longest(task.title() + ", with every exercise at the end of the section checked against the worked solutions", TASK_TITLE),
-                task.notes(), task.due(), task.status(), task.source(), task.createdAt(), task.order(), task.plannedFor()));
+                task.notes(), task.due(), task.status(), task.source(), task.createdAt(), task.order(), task.plannedFor(),
+                task.pageIds()));
         for (var habit : tracker.state().habits())
             tracker.renameHabit(habit.id(), longest(habit.name() + " before the end of every study day", HABIT_NAME));
     }

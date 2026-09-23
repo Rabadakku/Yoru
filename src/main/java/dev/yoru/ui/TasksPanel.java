@@ -39,8 +39,12 @@ final class TasksPanel extends JPanel implements Scrollable {
         @Override public String toString(){return label;}
     }
 
-    /** Column widths shared by the header and every row: done, status, title, tag, due, menu. The title's 0 takes the rest. */
-    private static final int[] COLUMNS={SPACE_XL,SPACE_XXL*2+SPACE_MD,0,SPACE_XXL*4,SPACE_XXL*5,SPACE_XXL};
+    /**
+     * Column widths shared by the header and every row: done, status, title,
+     * tags, due, menu. The title's 0 takes the rest. The tags column has room
+     * for two short tags side by side (#66); more than fit are counted in "+n".
+     */
+    private static final int[] COLUMNS={SPACE_XL,SPACE_XXL*2+SPACE_MD,0,SPACE_XXL*4+SPACE_LG,SPACE_XXL*5,SPACE_XXL};
     private static final int TITLE_COLUMN=2;
     /** Marks a label that is a pill, which keeps its own width instead of filling its column. */
     private static final String PILL="yoru.pill";
@@ -160,20 +164,6 @@ final class TasksPanel extends JPanel implements Scrollable {
         b.getAccessibleContext().setAccessibleDescription(chosen?"Selected view":null);
     }
 
-    /**
-     * A colour washed over the panel, for a pill whose text stays in the body ink.
-     *
-     * The body ink measured at least 6:1 on every status and palette tag wash on
-     * all four themes, where coloured text on a grey pill had needed a darker
-     * shade on each light theme just to reach 4.5:1.
-     */
-    private static Color wash(Color colour) {
-        double a=DARK?0.30:0.24;
-        return new Color((int)Math.round(colour.getRed()*a+PANEL.getRed()*(1-a)),
-            (int)Math.round(colour.getGreen()*a+PANEL.getGreen()*(1-a)),
-            (int)Math.round(colour.getBlue()*a+PANEL.getBlue()*(1-a)));
-    }
-
     private List<Task> visible() {
         var today=LocalDate.now();
         var filtered=tracker.state().tasks().stream().filter(t->switch(view) {
@@ -207,9 +197,8 @@ final class TasksPanel extends JPanel implements Scrollable {
      */
     private boolean matches(Task task,String query) {
         if(query.isEmpty())return true;
-        String tag=tracker.state().tags().stream().filter(t->t.id().equals(task.tagId()))
-            .map(Tag::name).findFirst().orElse("");
-        return (task.title()+"\n"+task.notes()+"\n"+tag).toLowerCase(Locale.ROOT).contains(query);
+        String tags=String.join("\n",tagsOf(task).stream().map(Tag::name).toList());
+        return (task.title()+"\n"+task.notes()+"\n"+tags).toLowerCase(Locale.ROOT).contains(query);
     }
 
     private boolean reorderable() { return sort==Sort.MANUAL&&view==View.ALL&&search.getText().isBlank(); }
@@ -276,7 +265,7 @@ final class TasksPanel extends JPanel implements Scrollable {
                 try {
                     // Dragging moves the *plan*. A deadline is not something you drag;
                     // it is changed deliberately, in the editor.
-                    tracker.updateTask(merged(task,task.activityId(),task.tagId(),task.title(),task.notes(),
+                    tracker.updateTask(merged(task,task.activityId(),task.tagIds(),task.title(),task.notes(),
                         task.due(),task.status(),0,date));
                     rebuildRows();
                 } catch(Exception e){error(e);}
@@ -368,7 +357,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         var header=tableRow();
         header.setName("task.header");
         header.setBorder(listRow());
-        for(String heading:new String[]{"","Status","Task","Tag","Due",""}) header.add(label(heading,TYPE_CAPTION,MUTED));
+        for(String heading:new String[]{"","Status","Task","Tags","Due",""}) header.add(label(heading,TYPE_CAPTION,MUTED));
         return header;
     }
 
@@ -390,7 +379,7 @@ final class TasksPanel extends JPanel implements Scrollable {
 
         var status=button(task.status().label,()->cycle(task));
         status.setName("task.status."+task.id());
-        status.setBackground(wash(switch(task.status()){case TODO->MUTED;case DOING->GOLD;case DONE->CYAN;}));
+        status.setBackground(TagChips.wash(switch(task.status()){case TODO->MUTED;case DOING->GOLD;case DONE->CYAN;}));
         status.setForeground(TEXT);
         status.setFont(captionFont());
         status.setBorder(new EmptyBorder(RING,SPACE_SM,RING,SPACE_SM));
@@ -418,7 +407,9 @@ final class TasksPanel extends JPanel implements Scrollable {
         });
         line.add(title);
 
-        line.add(tagPill(task));
+        var tags=new TagChips.Cell(tagsOf(task),()->editTags(task));
+        tags.setName("task.tags."+task.id());
+        line.add(tags);
         line.add(due(task));
 
         var more=button("⋯",()->{});
@@ -614,29 +605,28 @@ final class TasksPanel extends JPanel implements Scrollable {
         return l;
     }
 
-    /** Notion's select pill: the tag's name on a wash of its colour, or an empty cell for no tag. */
-    private JLabel tagPill(Task task) {
-        var tag=tracker.state().tags().stream().filter(t->t.id().equals(task.tagId())).findFirst().orElse(null);
-        if(tag==null) return label("",TYPE_CAPTION,MUTED);
-        var fill=wash(new Color(tag.colour()));
-        var pill=new JLabel(tag.name()) {
-            @Override protected void paintComponent(Graphics graphics) {
-                var g=(Graphics2D)graphics.create();
-                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-                g.setColor(fill);
-                g.fillRoundRect(0,0,getWidth(),getHeight(),RADIUS,RADIUS);
-                g.dispose();
-                super.paintComponent(graphics);
-            }
-        };
-        pill.putClientProperty("html.disable",true);
-        pill.putClientProperty(PILL,Boolean.TRUE);
-        pill.setName("task.tag."+task.id());
-        pill.setFont(captionFont());
-        pill.setForeground(TEXT);
-        pill.setBorder(new EmptyBorder(RING,SPACE_SM,RING,SPACE_SM));
-        pill.setToolTipText("Tag: "+tag.name());
-        return pill;
+    /** A task's tags, in the order it was given them. */
+    private List<Tag> tagsOf(Task task) {
+        var byId=new HashMap<UUID,Tag>();
+        tracker.state().tags().forEach(t->byId.put(t.id(),t));
+        return task.tagIds().stream().map(byId::get).filter(Objects::nonNull).toList();
+    }
+
+    /**
+     * The tags of one task, changed from its row (#66): the same field the
+     * editor has, without the rest of the form.
+     */
+    private void editTags(Task task) {
+        var field=new TagField(tracker.state().tags(),task.tagIds());
+        while(Dialogs.confirm(this,field,"Tags · "+task.title(),"Save")) {
+            try {
+                var current=tracker.state().tasks().stream().filter(t->t.id().equals(task.id())).findFirst()
+                    .orElseThrow(()->new IllegalArgumentException("Task no longer exists."));
+                tracker.saveTask(current.withTags(field.tagIds()),field.newTags());
+                rebuildRows();
+                return;
+            } catch(Exception e){error(e);}
+        }
     }
 
     /** The last line of the table, as in Notion: a quiet way to add a task right where the list ends. */
@@ -749,17 +739,17 @@ final class TasksPanel extends JPanel implements Scrollable {
      * the tag and resets order and createdAt, and an edit that quietly did that
      * would still look correct on screen until the board was re-sorted.
      */
-    static Task merged(Task existing,UUID activityId,UUID tagId,String title,String notes,
+    static Task merged(Task existing,UUID activityId,List<UUID> tagIds,String title,String notes,
                        LocalDate due,TaskStatus status,int orderForNew) {
-        return merged(existing,activityId,tagId,title,notes,due,status,orderForNew,
+        return merged(existing,activityId,tagIds,title,notes,due,status,orderForNew,
             existing==null?null:existing.plannedFor());
     }
 
-    static Task merged(Task existing,UUID activityId,UUID tagId,String title,String notes,
+    static Task merged(Task existing,UUID activityId,List<UUID> tagIds,String title,String notes,
                        LocalDate due,TaskStatus status,int orderForNew,LocalDate plannedFor) {
         return new Task(
             existing==null?UUID.randomUUID():existing.id(),
-            activityId,tagId,title,notes,due,status,
+            activityId,tagIds,title,notes,due,status,
             existing==null?"":existing.source(),
             existing==null?Instant.now():existing.createdAt(),
             existing==null?orderForNew:existing.order(),
@@ -800,23 +790,24 @@ final class TasksPanel extends JPanel implements Scrollable {
         if(existing!=null&&existing.activityId()!=null)for(int i=1;i<activity.getItemCount();i++)if(((Activity)activity.getItemAt(i)).id().equals(existing.activityId()))activity.setSelectedIndex(i);
         var status=plainCombo(new JComboBox<>(TaskStatus.values()));
         status.setSelectedItem(existing==null?TaskStatus.TODO:existing.status());
-        var tag=plainCombo(new JComboBox<Object>());tag.addItem("No tag");tracker.state().tags().forEach(tag::addItem);
-        if(existing!=null&&existing.tagId()!=null)for(int i=1;i<tag.getItemCount();i++)if(((Tag)tag.getItemAt(i)).id().equals(existing.tagId()))tag.setSelectedIndex(i);
+        // Tags are typed, and a new one is made right here (#66).
+        var tags=new TagField(tracker.state().tags(),existing==null?List.of():existing.tagIds());
         var planned=new DateField(existing==null?null:existing.plannedFor(),"Plan for",true);
         planned.setName("task.plannedFor");
         var form=stack();form.add(new JLabel("Title"));form.add(title);gap(form,SPACE_MD);form.add(new JLabel("Notes"));form.add(new JScrollPane(notes));gap(form,SPACE_MD);
         form.add(new JLabel("Due · the deadline"));form.add(due);gap(form,SPACE_MD);
         form.add(new JLabel("Plan for · the day you mean to do it · blank to use the deadline"));form.add(planned);gap(form,SPACE_MD);
-        form.add(new JLabel("Activity"));form.add(activity);gap(form,SPACE_MD);form.add(new JLabel("Status"));form.add(status);gap(form,SPACE_MD);form.add(new JLabel("Tag"));form.add(tag);
+        form.add(new JLabel("Activity"));form.add(activity);gap(form,SPACE_MD);form.add(new JLabel("Status"));form.add(status);gap(form,SPACE_MD);form.add(new JLabel("Tags · type to find or create"));form.add(tags);
         // Reopened on a refusal with everything as typed, rather than closed with it lost.
         while(Dialogs.confirm(this,form,existing==null?"New task":"Edit task","Save")) {
             try {
                 var task=merged(existing,
                     activity.getSelectedItem() instanceof Activity a?a.id():null,
-                    tag.getSelectedItem() instanceof Tag t?t.id():null,
+                    tags.tagIds(),
                     title.getText(),notes.getText(),due.value(),
                     (TaskStatus)status.getSelectedItem(),nextOrder(),planned.value());
-                if(existing==null)tracker.addTask(task);else tracker.updateTask(task);
+                // The task and the tags made for it are one write.
+                tracker.saveTask(task,tags.newTags());
                 rebuildRows();
                 return;
             }catch(Exception e){error(e);}

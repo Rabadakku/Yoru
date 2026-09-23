@@ -175,8 +175,7 @@ public final class ActivitiesTest {
             .map(r->r.activityId().equals(CODING)?new RecurringBlock(r.id(),keep,r.dayOfWeek(),r.startTime(),r.endTime()):r).toList()),
             "every weekly repeat survives under the bucket");
         check(after.tasks().equals(before.tasks().stream()
-            .map(x->CODING.equals(x.activityId())?new Task(x.id(),keep,x.tagId(),x.title(),x.notes(),x.due(),
-                x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor()):x).toList()),
+            .map(x->CODING.equals(x.activityId())?x.withActivity(keep):x).toList()),
             "every task survives under the bucket");
         check(after.habits().equals(before.habits())&&after.tags().equals(before.tags())
             &&after.settings().equals(before.settings()),
@@ -213,8 +212,7 @@ public final class ActivitiesTest {
             .map(b->b.activityId().equals(CODING)?new ScheduleBlock(b.id(),keep,b.start(),b.end()):b).toList()),
             "deleting the time keeps the planned block");
         check(after.recurring().size()==before.recurring().size()&&after.tasks().equals(before.tasks().stream()
-            .map(x->CODING.equals(x.activityId())?new Task(x.id(),keep,x.tagId(),x.title(),x.notes(),x.due(),
-                x.status(),x.source(),x.createdAt(),x.order(),x.plannedFor()):x).toList()),
+            .map(x->CODING.equals(x.activityId())?x.withActivity(keep):x).toList()),
             "and keeps the repeats and tasks");
 
         check(total(after)==beforeTotal-5400,"the deleted time is gone from the totals");

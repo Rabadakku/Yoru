@@ -126,7 +126,7 @@ public final class NotionImportTest {
         check(repo.writes==0,"Reviewing, remapping and previewing save nothing at all");
         check(tracker.importTasks(batch.newTags(),batch.tasks())==5,"The approved import adds every row");
         check(repo.writes==1,"Tags and tasks are one write");
-        check(tracker.state().tags().size()==4&&tracker.state().tasks().getFirst().tagId()!=null,"The classes became tags in that same write");
+        check(tracker.state().tags().size()==4&&!tracker.state().tasks().getFirst().tagIds().isEmpty(),"The classes became tags in that same write");
 
         form.load(NotionFixture.zip(),"Study Tasks.zip");
         check(rows.getRowCount()==5&&!Boolean.TRUE.equals(rows.getValueAt(0,0)),"A row already in Yoru opens unticked");

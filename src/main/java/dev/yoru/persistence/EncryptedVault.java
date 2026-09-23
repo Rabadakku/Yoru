@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=17, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=18, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -236,8 +236,9 @@ public final class EncryptedVault implements Repository {
                     out.writeBoolean(task.due() != null);
                     if (task.due() != null) out.writeLong(task.due().toEpochDay());
                     out.writeUTF(task.status().name()); out.writeUTF(task.source());
-                    out.writeBoolean(task.tagId() != null);
-                    if (task.tagId() != null) uuid(out, task.tagId());
+                    // Schema 18: every tag a task carries, where one had room for one (#66).
+                    out.writeInt(task.tagIds().size());
+                    for (var tag : task.tagIds()) uuid(out, tag);
                     instant(out, task.createdAt()); out.writeInt(task.order());
                     out.writeBoolean(task.plannedFor() != null);
                     if (task.plannedFor() != null) out.writeLong(task.plannedFor().toEpochDay());
@@ -401,7 +402,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 17.
+     * Reads any schema from 1 to 18.
      *
      * Every field older vaults lack arrives as a sensible empty, and everything
      * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
@@ -487,7 +488,10 @@ public final class EncryptedVault implements Repository {
                     var status=schema>=5?TaskStatus.valueOf(in.readUTF())
                         :in.readBoolean()?TaskStatus.DONE:TaskStatus.TODO;
                     var source=in.readUTF();
-                    var tag=schema>=5&&in.readBoolean()?uuid(in):null;
+                    // Schema 18 gave a task a list of tags; from 5 to 17 it had room for one.
+                    var tags=new ArrayList<UUID>();
+                    if(schema>=18) for(int t=count(in);t>0;t--) tags.add(uuid(in));
+                    else if(schema>=5&&in.readBoolean()) tags.add(uuid(in));
                     var created=schema>=5?instant(in):Instant.EPOCH.plusSeconds(86400);
                     int order=schema>=5?in.readInt():0;
                     // Schema 8 split the deadline from the day you plan to work on
@@ -496,7 +500,7 @@ public final class EncryptedVault implements Repository {
                     // Schema 14 linked tasks to pages; before it, none were.
                     var pages=new ArrayList<UUID>();
                     if(schema>=14) for(int p=count(in);p>0;p--) pages.add(uuid(in));
-                    tasks.add(new Task(id,activity,tag,title,notes,due,status,source,created,order,planned,pages));
+                    tasks.add(new Task(id,activity,tags,title,notes,due,status,source,created,order,planned,pages));
                 }
                 if (schema <= 10) skipLegacyCollection(in, schema);
             }

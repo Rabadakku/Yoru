@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
@@ -73,6 +74,24 @@ public final class LegacyVaultTest {
         "xid5bjHGlupeMsSf0behmZeXUUxiVR6fFqPprSFJY/xYdfTeZRESdGYF4l6iNl0U8EQPXVrRUdws8Mb6" +
         "0E6UmA==";
 
+    /**
+     * A vault written by 1.0.19 (schema 17), the last with room for one tag a
+     * task: two tagged tasks, one untagged, a daily habit, all invented.
+     * Opened now, each task keeps exactly the tag it had (#66).
+     */
+    private static final String ONE_TAG_VAULT =
+        "WU9SVQAAAAF7A/RW1OeICbBm376dD8Nwhxd8c6nl8ykCsOcqvUpOY/1ZM4Lm0PfNa1HFlaRT" +
+        "mUzNOduGhQqQ2nNqS4MR1X16BH0D6Y/j3BF6KqCD3ei7v2LrJkU5xxZt9JtPqhesHTXELbL3" +
+        "tcI9hijcSV0ukcOzJKy/TVxh5qUI9Us/DCxUcvlCDohZgKjbgkq8GVC1Vg4bIJJ1hOkYroQ1" +
+        "c+g9UwWrL9dshybsGQLfcYHcaN1rcgsVo61v/4Dyecoz4/L+mg0EvKtjMyQmUALEsaKAeUBh" +
+        "P7O+beixqbPsOsKUVUad2hPTtcs7Fyk8AkZz0A9H8Wu1jZroODWoU7pcSx2pxXPdg1zZg9uk" +
+        "eoFuauvbs+W/x1n8BFDfI7f0S/yDs2soCW5BxLHm9qF59b8pV+ARmJmcoG9RTGdhyuXqEmrq" +
+        "Z0L9MIySaOd8DqQhYwo7isq65yg3cqScep24poq2NO8aUDaDkxfsW/1tkzE59D6JylolDTaM" +
+        "H67tg2At/Z1p55x9itMbIsYgpWwQXt4uv10LPr+vmm3Vlbh4YOSMb0CekFd77z9vFCBe4SZl" +
+        "Y4TLycsxm3VGUECvtWARmLy2nmBA2F02VXQojbRgTIJNjr+jff7tNGEpw5VJQEieN+DMD7OC" +
+        "vgyH11gZldhTWCZJ6zpA4aX8KWonPkTgVqLk+umHPBOb93k0iqRzvXKXQAgfIC2EKb0wMp5m" +
+        "0R76+b/f3fzXxWH/1+4Ly3oUq5nQshQhPiIy1Hs6lHxPJxBTN67xuZJWnLQEzxE=";
+
     public static void main(String[] args)throws Exception{
         Path dir=Files.createTempDirectory("yoru-legacy-");
         try {
@@ -119,7 +138,7 @@ public final class LegacyVaultTest {
             // sensible empties rather than as a failure to load.
             check(loaded.recurring().isEmpty(),"The weekly template arrives empty");
             check(loaded.tags().isEmpty(),"Tags arrive empty");
-            check(task.tagId()==null,"The task is untagged");
+            check(task.tagIds().isEmpty(),"The task is untagged");
             check(loaded.settings().equals(Settings.defaults()),"Settings fall back to the defaults");
             // A theme that no longer exists reads as the nearest one that does,
             // rather than failing the whole vault on a name.
@@ -139,6 +158,7 @@ public final class LegacyVaultTest {
         }
         illustrated();
         beforePages();
+        oneTag();
         System.out.println("PASS: "+checks+" legacy vault checks (an older build's file still opens)");
     }
 
@@ -176,6 +196,42 @@ public final class LegacyVaultTest {
         }
     }
 
+    /** The 1.0.19 vault above: a tag each, becoming a list of tags each (#66). */
+    private static void oneTag() throws Exception {
+        Path dir=Files.createTempDirectory("yoru-one-tag-");
+        try {
+            Path file=dir.resolve("one-tag.vault");
+            Files.write(file,Base64.getDecoder().decode(ONE_TAG_VAULT));
+            java.util.function.Supplier<char[]> password=()->"fixture-password-17".toCharArray();
+            State loaded;
+            try(var vault=new EncryptedVault(file,password.get())){loaded=vault.load();}
+            var reading=UUID.fromString("00000000-0000-4000-8000-0000000000a1");
+            var errands=UUID.fromString("00000000-0000-4000-8000-0000000000a2");
+            check(loaded.tags().stream().map(Tag::id).toList().equals(List.of(reading,errands)),"A schema 17 vault keeps its tags");
+            var byTitle=new HashMap<String,Task>();
+            loaded.tasks().forEach(t->byTitle.put(t.title(),t));
+            check(byTitle.get("Read chapter 4").tagIds().equals(List.of(reading)),"A tagged task keeps its one tag");
+            check(byTitle.get("Buy stamps").tagIds().equals(List.of(errands)),"and so does the other");
+            check(byTitle.get("Water plants").tagIds().isEmpty(),"and an untagged task has none");
+            check(byTitle.get("Read chapter 4").plannedFor().equals(LocalDate.parse("2026-09-24"))
+                &&byTitle.get("Buy stamps").status()==TaskStatus.DOING,"Everything after the tag is read where it was");
+            check(loaded.habits().getFirst().since().equals(LocalDate.parse("2026-09-18")),"and the habit after the tasks too");
+
+            // A second tag now fits, and survives a save at the current schema.
+            var twoTags=loaded.withTasks(loaded.tasks().stream().map(t->t.title().equals("Read chapter 4")
+                ?t.withTags(List.of(reading,errands)):t).toList());
+            try(var vault=new EncryptedVault(file,password.get())){vault.save(twoTags);}
+            try(var vault=new EncryptedVault(file,password.get())){
+                check(vault.load().equals(twoTags),"Two tags on a task survive a save and reopen");
+            }
+            check(Files.exists(Path.of(file+".v17.bak")),"The schema 17 file is kept as a backup before the upgrade");
+        } finally {
+            try(var files=Files.walk(dir)){
+                for(var path:files.sorted(Comparator.reverseOrder()).toList())Files.delete(path);
+            }
+        }
+    }
+
     /** The 1.0.15 vault above: opened by a build with Pages, then carrying them. */
     private static void beforePages() throws Exception {
         Path dir=Files.createTempDirectory("yoru-before-pages-");
@@ -201,7 +257,7 @@ public final class LegacyVaultTest {
                 "and its task, status and order");
             check(task.plannedFor().equals(LocalDate.parse("2026-09-24"))&&task.due().equals(LocalDate.parse("2026-09-25")),
                 "and the task's plan and deadline");
-            check(task.tagId()!=null&&loaded.tags().getFirst().id().equals(task.tagId()),"and its tag");
+            check(task.tagIds().equals(List.of(loaded.tags().getFirst().id())),"and its tag");
             check(loaded.notes().folders().isEmpty()&&loaded.notes().pages().isEmpty(),"It arrives with no pages");
             check(task.pageIds().isEmpty(),"and its task links to none");
 

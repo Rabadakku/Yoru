@@ -196,7 +196,8 @@ public final class Preview {
             new Task(UUID.randomUUID(), study, null, "Ask about open lab hours", "", null, TaskStatus.TODO, "Manual entry", now, 4),
             new Task(UUID.randomUUID(), study, cs.id(), "HW 3.1 polynomials", "", today.plusDays(4), TaskStatus.TODO, "Manual entry", now, 5),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Kanji quiz", "", today.plusDays(6), TaskStatus.TODO, "Manual entry", now, 6),
-            new Task(UUID.randomUUID(), study, cs.id(), "Essay rough draft", "", today.plusDays(7), TaskStatus.TODO, "Manual entry", now, 7),
+            // Two tags, so the board draws a row with more than one (#66).
+            new Task(UUID.randomUUID(), study, java.util.List.of(cs.id(), jpn.id()), "Essay rough draft", "", today.plusDays(7), TaskStatus.TODO, "Manual entry", now, 7, null, java.util.List.of()),
             new Task(UUID.randomUUID(), null, null, "Return library books", "", null, TaskStatus.TODO, "Manual entry", now, 8),
             new Task(UUID.randomUUID(), study, cs.id(), "Practice quiz", "", today.plusDays(12), TaskStatus.TODO, "Manual entry", now, 9),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Grammar review", "", today.minusDays(4), TaskStatus.DONE, "Manual entry", now, 10)));

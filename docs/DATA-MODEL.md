@@ -231,3 +231,20 @@ refreshes never erase it. A cache-save failure is displayed and retains the
 previous saved summary. Automatic retries belong to the open vault and stop
 when disabled or closed, independent of the visible tab. No schema change in
 1.0.17.
+
+## Several tags a task (schema 18, #66)
+
+Schema 18 replaces a task's one optional tag (`tagId`) with a list of tags
+(`tagIds`), in the order they were given, once each, at most
+`Task.MAX_TAGS` (20). In the vault it is a count followed by that many UUIDs
+where schemas 5 to 17 wrote a present-flag and one UUID; an older vault reads
+each task's single tag as a list of one, and an untagged task as an empty
+list. `LegacyVaultTest` opens a schema 17 vault written by 1.0.19 and holds
+every task to the tag it had.
+
+The portable export is format 7: `"tagIds": [...]` where formats up to 6
+wrote `"tagId"`. Both are read. Deleting a tag takes only that tag off the
+tasks that carry it; a task keeps its others. A tag typed into the task form
+is created in the same write as the task (`Tracker.saveTask`), so a failed
+save cannot leave a tag behind for a task that was never kept. A Notion
+multi-select column gives a task every tag it lists.

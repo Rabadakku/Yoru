@@ -163,7 +163,7 @@ final class TagEditor extends JPanel {
     }
 
     private void delete(Tag tag) {
-        long tagged=tracker.state().tasks().stream().filter(t->tag.id().equals(t.tagId())).count();
+        long tagged=tracker.state().tasks().stream().filter(t->t.tagIds().contains(tag.id())).count();
         var message=stack();
         message.add(label("Delete the tag \""+tag.name()+"\"?",TYPE_HEADING,TEXT));gap(message,SPACE_MD);
         message.add(bodyLabel(tagged==0?"No tasks use it."
