@@ -144,6 +144,13 @@ Today shows the summary; Data shows the 30-day review chart. When Anki is closed
 Yoru displays the saved counts with their fetch time and retries automatically
 while the vault is open, including when Today is not visible.
 
+Habits automatically shows your Anki streak and best run. Any date with at least
+one imported review counts, whether or not it becomes tracked study time. An
+unfinished today keeps yesterday’s streak. Offline, the saved streak is dated
+as of its last sync; unknown days do not count as missed reviews. History beyond
+the 30-day chart is retained, and switching profiles replaces the history.
+An older vault fills in earlier review days on its next successful Anki sync.
+
 ### How study time is counted
 
 Answers less than ten minutes apart form a sitting. After ten minutes without

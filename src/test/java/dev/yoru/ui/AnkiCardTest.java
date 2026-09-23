@@ -76,6 +76,7 @@ public final class AnkiCardTest {
         var started = new CountDownLatch(1);
         var days = new TreeMap<LocalDate, Long>();
         days.put(LocalDate.now(), 24L); days.put(LocalDate.now().minusDays(1), 16L);
+        for(int i=2;i<100;i++) days.put(LocalDate.now().minusDays(i),1L);
         // A zone where it is about noon now, so a sitting forty minutes ago is
         // today's whatever time the suite runs.
         int utc = LocalTime.now(ZoneOffset.UTC).toSecondOfDay();
@@ -134,6 +135,7 @@ public final class AnkiCardTest {
         // The counts are kept in the vault, so the line survives Anki closing (#51).
         assert tracker.state().anki().last() != null && tracker.state().anki().last().today() == 24
             : "the counts reach the vault: " + tracker.state().anki().last();
+        assert tracker.state().anki().last().days().size()==100 : "The automatic refresh retains history beyond a month";
         settle();
         SwingUtilities.invokeAndWait(card::refresh);
         settle();
