@@ -83,6 +83,13 @@ final class Theme {
         ROUTE_SHADOW=new Color(0x78884D), ROUTE_TRUNK=new Color(0x77664B),
         ROUTE_NIGHT=new Color(0x182A53);
     private static final String MONO_FAMILY = findMono();
+    private static final String SANS_FAMILY = findSans();
+    private static String findSans() {
+        var fonts = java.util.Set.of(GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames());
+        for (String family : new String[]{"SF Pro Text", "Helvetica Neue", "Segoe UI", "Noto Sans", "DejaVu Sans"})
+            if (fonts.contains(family)) return family;
+        return Font.SANS_SERIF;
+    }
     private static String findMono() {
         var fonts = java.util.Set.of(GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames());
         for (String family : new String[]{"JetBrains Mono", "Iosevka", "SF Mono", "Menlo", "Cascadia Code", "DejaVu Sans Mono"})
@@ -113,7 +120,7 @@ final class Theme {
 
     /** Terminal blue with the heated-titanium heat ramp. */
     private static final Palette MIDNIGHT = new Palette(true,
-        new Color(0x12161E), new Color(0x191F29), new Color(0x303A4C), new Color(0xE0E7EF),
+        new Color(0x202020), new Color(0x262626), new Color(0x393939), new Color(0xEEEEEE),
         new Color(0x98A6BC), new Color(0x90D8DA), new Color(0x90D8DA), new Color(0xD8B074),
         new Color(0xD8B074), new Color(0xB49BDD), new Color(0xE08A8A), new Color(0xA5B6D0),
         new Color(0x232A36),
@@ -140,7 +147,7 @@ final class Theme {
 
     /** Warm neutral paper. Light ground, low chroma. */
     private static final Palette LINEN = new Palette(false,
-        new Color(0xF6F1E8), new Color(0xFFFCF6), new Color(0xDCD0BB), new Color(0x453D34),
+        new Color(0xFFFFFF), new Color(0xFAFAF9), new Color(0xE5E5E3), new Color(0x292929),
         new Color(0x7E7163), new Color(0x9A7B4F), new Color(0x7E6136), new Color(0xB08E52),
         new Color(0x82653F), new Color(0x8E7C99), new Color(0xB05B48), new Color(0x5E564B),
         new Color(0xFFFDF9),
@@ -169,16 +176,17 @@ final class Theme {
      */
     static String describe(ThemeId id) {
         return switch (id) {
-            case MIDNIGHT -> "Cool blue dark, after Catppuccin.";
+            case MIDNIGHT -> "Graphite surfaces with a soft blue accent.";
             case EMBER -> "Warm amber dark, after Gruvbox.";
             case SAKURA -> "Blossom pink light, after Rosé Pine Dawn.";
-            case LINEN -> "Warm paper light, low chroma, quiet.";
+            case LINEN -> "Clean white surfaces and quiet neutral details.";
             case MOONLIGHT -> "Violet nights and soft rose accents.";
         };
     }
 
     private static ThemeId currentId = ThemeId.MIDNIGHT;
     static ThemeId current() { return currentId; }
+    static SystemAppearance.Style systemStyle;
 
     // Reassigned by apply(). Read directly across the UI, which is why they are
     // not final and not a record accessor.
@@ -200,6 +208,9 @@ final class Theme {
     static void apply(ThemeId id) {
         currentId=id;
         load(palette(id));
+        if (systemStyle != null && SystemAppearance.enabled()) {
+            CYAN = systemStyle.colour(); ACCENT_TEXT = CYAN;
+        }
         install();
     }
 
@@ -211,7 +222,7 @@ final class Theme {
     static float textScale = 1f;
 
     static Font mono(int size) { return new Font(MONO_FAMILY, Font.PLAIN, scaled(size)); }
-    static Font sans(int size) { return new Font(Font.SANS_SERIF, Font.PLAIN, scaled(size)); }
+    static Font sans(int size) { return new Font(SANS_FAMILY, Font.PLAIN, scaled(size)); }
     private static int scaled(int size) { return Math.round(size * textScale); }
 
     /**
@@ -245,6 +256,8 @@ final class Theme {
         // After the look and feel, which brings its own input maps with it: the
         // platform's copy, paste and undo go on top of them (#49).
         TextInput.install();
+        if (DesktopChrome.mac() && !GraphicsEnvironment.isHeadless())
+            UIManager.put("MenuBarUI", "com.apple.laf.AquaMenuBarUI");
 
         put(BG, "Panel.background", "OptionPane.background", "Viewport.background",
             "ScrollPane.background", "ScrollBar.track", "TabbedPane.background");
@@ -1060,9 +1073,17 @@ final class Theme {
         return title;
     }
     /** One line under the title saying what the page is for. */
-    static JLabel subtitle(String text) { return label(text, TYPE_CAPTION, MUTED); }
+    static JLabel subtitle(String text) { return label(quietCase(text), TYPE_CAPTION, MUTED); }
     /** A card's signpost, uppercase at the call site. Small type, so the readable accent. */
-    static JLabel sectionHeader(String text) { return label(text, TYPE_SECTION, ACCENT_TEXT); }
+    static JLabel sectionHeader(String text) {
+        var label = label(quietCase(text), TYPE_LABEL, TEXT);
+        label.setFont(labelFont().deriveFont(Font.BOLD));
+        return label;
+    }
+    private static String quietCase(String text) {
+        return text.length() > 1 && text.equals(text.toUpperCase(java.util.Locale.ROOT))
+            ? text.substring(0,1) + text.substring(1).toLowerCase(java.util.Locale.ROOT) : text;
+    }
     /**
      * A card's signpost where the card is not the ordinary case (a caution, a promise).
      *
@@ -1073,7 +1094,7 @@ final class Theme {
      * header — {@link #GOLD} stays what it is: a fill for chips and sprites.
      */
     static JLabel sectionHeader(String text, Color colour) {
-        return label(text, TYPE_SECTION, GOLD.equals(colour) ? GOLD_TEXT : colour);
+        return label(quietCase(text), TYPE_SECTION, GOLD.equals(colour) ? GOLD_TEXT : colour);
     }
     /** Copy inside a card. */
     static JLabel bodyLabel(String text) { return wrapping(text, TYPE_BODY, MUTED); }
@@ -1444,8 +1465,7 @@ final class Theme {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
             g.setColor(getBackground());
             g.fillRoundRect(0,0,getWidth()-1,getHeight()-1,CARD_RADIUS*2,CARD_RADIUS*2);
-            g.setColor(LINE);
-            g.drawRoundRect(0,0,getWidth()-1,getHeight()-1,CARD_RADIUS*2,CARD_RADIUS*2);
+            // Content is grouped by spacing and a subtle surface, not boxed outlines.
             g.dispose();
             super.paintComponent(graphics);
         }
@@ -1530,7 +1550,7 @@ final class Theme {
     static JButton button(String text,Runnable fn) {
         var b=new FlatButton(text);
         b.setFont(labelFont());
-        b.setBackground(LINE);
+        b.setBackground(PANEL);
         b.setForeground(TEXT);
         b.setBorder(controlBorder(LINE));
         b.addActionListener(e->fn.run());
@@ -1548,7 +1568,7 @@ final class Theme {
      */
     static JButton ghost(JButton b) {
         b.setBackground(PANEL);
-        b.setBorder(controlBorder(LINE));
+        b.setBorder(controlBorder(PANEL));
         return b;
     }
 

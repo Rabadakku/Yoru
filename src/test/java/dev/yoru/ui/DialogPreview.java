@@ -110,7 +110,7 @@ public final class DialogPreview {
                 var tracker = new Tracker(memory, Clock.systemUTC());
                 tracker.addTag("Reading", 0x90D8DA);
                 tracker.addTag("Language", 0xE8B24C);
-                tracker.addTag("Reading", 0xA98BD4);
+                tracker.addTag("Writing", 0xA98BD4);
                 render(out, "tags", new TagEditor(tracker, () -> { }), new String[]{"Done"});
 
                 // The weekly template: the only dialog that groups by weekday.

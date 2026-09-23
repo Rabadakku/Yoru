@@ -234,7 +234,7 @@ final class TodayPage {
      * nearly the card it sits on. The Data page's chart draws this too.
      */
     static JPanel heatLegend(LocalDate day,int goalHours) {
-        var legend=row();
+        var legend=wrappingRow();
         legend.add(label("LESS",TYPE_CAPTION,MUTED));
         for(Color c:HEAT) legend.add(swatch(c));
         var rainbow=swatch(Heatmap.overGoal(day));
@@ -303,7 +303,8 @@ final class TodayPage {
     }
 
     private JPanel stat(String title,String value) {
-        var p=card();
+        var p=stack();
+        p.setBorder(new javax.swing.border.EmptyBorder(SPACE_SM,SPACE_XL,SPACE_SM,SPACE_XL));
         // The same signpost every other card carries: these are cards, and a
         // muted caption made the three of them read as a footnote to the page.
         p.add(sectionHeader(title));

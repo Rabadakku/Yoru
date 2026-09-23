@@ -342,7 +342,7 @@ public final class TaskBoardTest {
         check(header!=null,"The table has a header row");
         var headings=new ArrayList<String>();
         for(Component cell:header.getComponents())if(cell instanceof JLabel l&&!l.getText().isEmpty())headings.add(l.getText());
-        check(headings.equals(List.of("Status","Task name","Tag","Due")),"The header names each column: "+headings);
+        check(headings.equals(List.of("Status","Task","Tag","Due")),"The header names each column: "+headings);
         check(button(fresh,"task.new")!=null,"New is the page's one primary action");
         check(button(fresh,"task.newRow")!=null,"and the table ends in a New task row");
         check(button(fresh,"task.up."+dueToday)==null&&button(fresh,"task.track."+dueToday)==null,

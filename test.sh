@@ -31,6 +31,8 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.VisualSystemTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TextSizeTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TextFitTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.NavBarTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.DesktopChromeTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SystemAppearanceTest
 
 java -ea -cp build/classes dev.yoru.HabitsTest
 java -ea -cp build/classes dev.yoru.HabitStatsTest

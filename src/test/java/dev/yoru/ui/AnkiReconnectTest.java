@@ -86,7 +86,10 @@ public final class AnkiReconnectTest {
                 // Accelerate the real repeating timer; no manual refresh initiates recovery.
                 timer.setInitialDelay(10); timer.setDelay(10); timer.restart();
             });
-            await(() -> !card.refreshing() && text(card).contains("31 reviews"));
+            // Observe the saved result, not a tiny idle gap between accelerated retries.
+            // SwingWorker completion is batched; on a busy runner the next timer
+            // tick can start another refresh before the polling check sees idle.
+            await(() -> tracker.state().anki().last().today() == 31);
             SwingUtilities.invokeAndWait(() -> { timer.stop(); });
             await(() -> !card.refreshing());
             assert tracker.state().anki().last().today() == 31;

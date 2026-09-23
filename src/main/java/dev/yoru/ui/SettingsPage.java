@@ -42,6 +42,12 @@ final class SettingsPage {
         gap(appearance,SPACE_SM);
         appearance.add(bodyLabel("Themes are stored in your vault, so they travel with the workspace."));
         gap(appearance,SPACE_LG);
+        if (DesktopChrome.mac()) {
+            var automatic = new JCheckBox("Follow macOS appearance and accent",SystemAppearance.enabled());
+            automatic.setName("appearance.system"); automatic.setOpaque(false);
+            automatic.addActionListener(e -> shell.systemAppearance(automatic.isSelected()));
+            appearance.add(automatic); gap(appearance,SPACE_MD);
+        }
         // Three across: the five themes take two short rows rather than three tall ones (#9).
         var themes=new JPanel(new GridLayout(0,3,SPACE_MD,SPACE_MD));
         themes.setName("settings.themes");
@@ -199,7 +205,7 @@ final class SettingsPage {
 
     private JPanel themeCard(ThemeId id) {
         var palette=Theme.palette(id);
-        boolean chosen=shell.tracker().state().settings().theme()==id;
+        boolean chosen=!SystemAppearance.enabled() && shell.tracker().state().settings().theme()==id;
         var box=stack();
         box.setOpaque(true);
         box.setBackground(palette.panel());
@@ -239,7 +245,7 @@ final class SettingsPage {
         // disabled one, so the chosen theme is the most prominent thing here.
         var pick=chosen
             ?accentButton("Active",()->{})
-            :button("Use this",()->shell.applySettings(s->new Settings(id,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn())));
+            :button("Use this",()->shell.selectTheme(id));
         pick.setName("settings.theme."+id.name());
         if(chosen)pick.setToolTipText("This theme is already in use");
         box.add(pick);

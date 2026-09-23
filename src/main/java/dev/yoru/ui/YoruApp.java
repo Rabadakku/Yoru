@@ -53,6 +53,9 @@ public final class YoruApp extends JPanel implements Shell {
     private boolean closed;
     /** What the bar needs to show every tab whole; measured when the bar is built. */
     private final int navMinimumWidth;
+    private JPanel sidebar;
+    private long appearanceCheck;
+    private boolean appearanceBusy;
 
     /** The size the pages are reviewed at: the frame never opens smaller than this. */
     private static final int MIN_WINDOW_WIDTH=900, MIN_WINDOW_HEIGHT=640;
@@ -117,74 +120,41 @@ public final class YoruApp extends JPanel implements Shell {
         var root=new JPanel(new BorderLayout());
         root.setBackground(BG);
         add(root,BorderLayout.CENTER);
-        var bar = new JPanel(new BorderLayout());
-        Color barGround=shade(BG,DARK?-8:-14);
-        bar.setBackground(barGround);
-        // A hairline under the bar, so it reads as the window's frame rather
-        // than as the first band of the page.
-        bar.setBorder(new CompoundBorder(new MatteBorder(0,0,HAIRLINE,0,LINE),
-            new EmptyBorder(SPACE_MD, SPACE_XL, SPACE_MD, SPACE_XL)));
-        // The lockup sizes itself, so a border on it added no room: the wordmark
-        // ran straight into the first tab. The gap and a divider are their own
-        // components now, and the strip starts clearly after the brand.
-        var brand = new JPanel();
-        brand.setOpaque(false);
-        brand.setLayout(new BoxLayout(brand,BoxLayout.X_AXIS));
-        var lockup = Logo.lockup(TYPE_TITLE, CYAN);
-        lockup.setAlignmentY(0.5f);
-        brand.add(lockup);
-        brand.add(Box.createHorizontalStrut(SPACE_XL));
-        var divider = new JPanel();
-        divider.setBackground(LINE);
-        divider.setAlignmentY(0.5f);
-        int dividerHeight=Math.round(TYPE_TITLE*0.8f);
-        divider.setPreferredSize(new Dimension(HAIRLINE,dividerHeight));
-        divider.setMaximumSize(new Dimension(HAIRLINE,dividerHeight));
-        brand.add(divider);
-        brand.add(Box.createHorizontalStrut(SPACE_LG));
-        bar.add(brand, BorderLayout.WEST);
-        // Content-sized, not an even split: a GridLayout gave every tab the same
-        // slice and the longest label, "collection", was the one that ellipsized
-        // to "colle…" the moment the window opened at its minimum. The strip now
-        // takes exactly the width its labels need, and never wraps — a wrapped
-        // strip would be twice as tall.
-        var tabs = new JPanel(new GridBagLayout()); tabs.setOpaque(false);
-        var strip = new JPanel(new NavTab.Strip()); strip.setOpaque(false);
+        Color sidebarGround = shade(BG, DARK ? -6 : -7);
+        sidebar = new JPanel(new BorderLayout());
+        sidebar.setVisible(java.util.prefs.Preferences.userRoot().node("dev/yoru/desktop").getBoolean("sidebar.visible",true));
+        sidebar.setName("workspace.sidebar"); sidebar.setBackground(sidebarGround);
+        sidebar.setPreferredSize(new Dimension(grow(204), 1));
+        sidebar.setBorder(new CompoundBorder(new MatteBorder(0,0,0,1,LINE),
+            new EmptyBorder(SPACE_XL, SPACE_MD, SPACE_MD, SPACE_MD)));
+        var brand = new JPanel(new BorderLayout()); brand.setOpaque(false);
+        brand.setBorder(new EmptyBorder(SPACE_SM, SPACE_MD, SPACE_XXL, SPACE_MD));
+        var wordmark = label("Yoru", TYPE_HEADING, TEXT);
+        wordmark.setFont(headingFont().deriveFont(Font.BOLD));
+        brand.add(wordmark, BorderLayout.NORTH);
+        var workspace = label("Personal workspace", TYPE_CAPTION, MUTED);
+        brand.add(workspace, BorderLayout.SOUTH);
+        sidebar.add(brand, BorderLayout.NORTH);
+        var destinations = new JPanel(); destinations.setOpaque(false);
+        destinations.setLayout(new BoxLayout(destinations, BoxLayout.Y_AXIS));
         for (var entry : PAGES) {
-            var button = new NavTab(entry.nav(), barGround);
-            button.addActionListener(e -> showPage(entry.nav()));
-            button.setName(entry.nav());
+            if (entry.nav().equals("Settings")) destinations.add(Box.createVerticalStrut(SPACE_XL));
+            var button = new NavTab(entry.nav(), sidebarGround);
+            button.addActionListener(e -> showPage(entry.nav())); button.setName(entry.nav());
             button.getAccessibleContext().setAccessibleName(entry.nav());
-            navigation.put(entry.nav(), button);
-            strip.add(button);
+            navigation.put(entry.nav(), button); destinations.add(button);
+            destinations.add(Box.createVerticalStrut(SPACE_XS));
         }
-        // Centred vertically against the brand; the strip itself stays left.
-        var at = new GridBagConstraints();
-        at.anchor = GridBagConstraints.WEST;
-        at.fill = GridBagConstraints.HORIZONTAL;
-        at.weightx = 1;
-        tabs.add(strip, at);
-        bar.add(tabs, BorderLayout.CENTER);
-        var lock = ghost(button("Close vault", this::close));
-        lock.setBackground(barGround);
-        // The text, the tooltip and the accessible name all say the same thing;
-        // the tooltip carries the one fact the label has no room for.
+        destinations.add(Box.createVerticalGlue());
+        var navigationScroll = new JScrollPane(destinations);
+        navigationScroll.setBorder(null); navigationScroll.getViewport().setBackground(sidebarGround);
+        navigationScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        sidebar.add(navigationScroll, BorderLayout.CENTER);
+        var lock = ghost(button("Close vault", this::close)); lock.setName("Lock & close");
         lock.setToolTipText("Close vault (active timer keeps running)");
-        // Named for the tests that drive it; the visible label is above.
-        lock.setName("Lock & close");
-        bar.add(lock, BorderLayout.EAST);
-        // What the bar needs to show every tab whole: the brand, the strip at
-        // its narrowest, and the close button, plus the bar's own margins. The
-        // window's floor is this or the page size, whichever is larger.
-        //
-        // Measured from the strip itself rather than added up from the font's
-        // metrics: the estimate agreed with the layout on one computer's fonts
-        // and not on another's, so a ninth tab fitted here and ran off the end
-        // of the bar on the build machine (#46).
-        int stripFloor=strip.getMinimumSize().width;
-        navMinimumWidth=brand.getPreferredSize().width+stripFloor+lock.getPreferredSize().width
-            +2*SPACE_XL+SPACE_LG;
-        root.add(bar, BorderLayout.NORTH);
+        lock.setBackground(sidebarGround); sidebar.add(lock, BorderLayout.SOUTH);
+        root.add(sidebar, BorderLayout.WEST);
+        navMinimumWidth = grow(800);
         content.setBackground(BG);
         content.setBorder(new EmptyBorder(SPACE_XL,SPACE_XL,SPACE_XL,SPACE_XL));
         root.add(content,BorderLayout.CENTER);
@@ -195,6 +165,7 @@ public final class YoruApp extends JPanel implements Shell {
             var running=tracker.active();
             boolean animate=running!=null && !reducedMotion;
             todayPage.tick(animate,running,page.equals("Today"));
+            if (SystemAppearance.enabled() && System.currentTimeMillis()-appearanceCheck > 30_000) refreshAppearance();
             updateRecordingStatus();
             // Synced here rather than from the clock-in and clock-out buttons, so
             // a session recovered when the vault opens — which passes through
@@ -304,13 +275,19 @@ public final class YoruApp extends JPanel implements Shell {
         var date=label(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d",Locale.ENGLISH)),TYPE_CAPTION,MUTED);
         date.setToolTipText("Times shown in "+zone);
         heading.add(date,BorderLayout.EAST);
+        var leading = new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_MD,0)); leading.setOpaque(false);
+        var toggle = ghost(button("", this::toggleSidebar));
+        toggle.setIcon(Glyphs.of(Glyphs.Kind.SIDEBAR,MUTED)); toggle.setName("sidebar.toggle");
+        toggle.setToolTipText("Show or hide sidebar"); toggle.getAccessibleContext().setAccessibleName("Toggle sidebar");
+        leading.add(toggle);
         recordingStatus=button("",()->showPage("Today"));
         recordingStatus.setName("session.status");
         recordingStatus.setContentAreaFilled(false);
         recordingStatus.setForeground(ACCENT_TEXT);
         recordingStatus.setBorder(new EmptyBorder(0,0,0,SPACE_MD));
         recordingStatus.setToolTipText("Return to your timer to clock out or edit this session");
-        heading.add(recordingStatus,BorderLayout.WEST);
+        leading.add(recordingStatus);
+        heading.add(leading,BorderLayout.WEST);
         updateRecordingStatus();
         content.add(heading,BorderLayout.NORTH);
         JPanel view=switch(page) {
@@ -377,6 +354,16 @@ public final class YoruApp extends JPanel implements Shell {
      * minimum, where the even split starved the longest label. The page floor
      * wins when it is the larger of the two, since the pages are reviewed there.
      */
+    void newNote() { if (!pagesPage.flush()) return; showPage("Pages"); pagesPage.newPage(null); }
+    void closeVault() { close(); }
+    boolean closeRequested() { close(); return closed; }
+
+    void toggleSidebar() {
+        sidebar.setVisible(!sidebar.isVisible());
+        java.util.prefs.Preferences.userRoot().node("dev/yoru/desktop").putBoolean("sidebar.visible",sidebar.isVisible());
+        revalidate(); repaint();
+    }
+
     Dimension windowMinimum() {
         return new Dimension(Math.max(MIN_WINDOW_WIDTH,navMinimumWidth),MIN_WINDOW_HEIGHT);
     }
@@ -1317,9 +1304,42 @@ public final class YoruApp extends JPanel implements Shell {
             // The visible week was computed under the old preference; moving the
             // week start without realigning it leaves the grid straddling two.
             if(next.weekStartsOn()!=previous.weekStartsOn()) week=next.weekOf(LocalDate.now());
-            if(next.theme()!=Theme.current()) { Theme.apply(next.theme()); rebuild(); }
+            if (next.theme()!=previous.theme()) { SystemAppearance.choose(false); Theme.systemStyle=null; }
+            if(!SystemAppearance.enabled() && next.theme()!=Theme.current()) { Theme.apply(next.theme()); rebuild(); }
             else showPage(page);
         } catch(Exception e) { error(e); }
+    }
+
+    @Override public void selectTheme(ThemeId id) {
+        if (!pagesPage.flush()) return;
+        try {
+            var settings=tracker.state().settings();
+            tracker.settings(new Settings(id,settings.dailyGoalHours(),settings.minSessionSeconds(),settings.weekStartsOn()));
+            SystemAppearance.choose(false); Theme.systemStyle=null; Theme.apply(id); rebuild();
+        } catch (Exception e) { error(e); }
+    }
+    @Override public void systemAppearance(boolean on) {
+        if (!pagesPage.flush()) return;
+        SystemAppearance.choose(on);
+        if (on) { appearanceCheck=0; refreshAppearance(); }
+        else { Theme.systemStyle=null; Theme.apply(tracker.state().settings().theme()); rebuild(); }
+    }
+    private void refreshAppearance() {
+        if (appearanceBusy || closed) return;
+        appearanceBusy=true; appearanceCheck=System.currentTimeMillis();
+        new SwingWorker<SystemAppearance.Style,Void>() {
+            protected SystemAppearance.Style doInBackground() { return SystemAppearance.read(); }
+            protected void done() {
+                appearanceBusy=false;
+                if (closed || !SystemAppearance.enabled()) return;
+                try {
+                    var style=get();
+                    if (!style.equals(Theme.systemStyle) && pagesPage.flush()) {
+                        Theme.systemStyle=style; Theme.apply(style.theme()); rebuildTo(page);
+                    }
+                } catch (Exception e) { error(e); }
+            }
+        }.execute();
     }
 
     /**
@@ -1358,10 +1378,13 @@ public final class YoruApp extends JPanel implements Shell {
         Point keep=next.equals(page)&&pageScroll!=null?pageScroll.getViewport().getViewPosition():null;
         ticker.stop();
         music.close();
+        todayPage.close();
         pagesPage.stop();
         if(window instanceof JFrame frame) {
+            closed=true;
             var fresh=new YoruApp(tracker,vault,store,vaultName,secret);
             frame.setContentPane(fresh);
+            DesktopChrome.install(frame,fresh);
             // Rebuilt from the new bar: a palette swap can change the brand's
             // width, and the floor has to follow it.
             frame.setMinimumSize(fresh.windowMinimum());
@@ -1405,6 +1428,8 @@ public final class YoruApp extends JPanel implements Shell {
     }
 
     public static void main(String[] args) {
+        DesktopChrome.prepare();
+        if (SystemAppearance.enabled()) Theme.systemStyle=SystemAppearance.read();
         SwingUtilities.invokeLater(()-> {
             // Before anything is built, the vault launcher included: this
             // computer's text size reaches every window (#31).
@@ -1413,11 +1438,11 @@ public final class YoruApp extends JPanel implements Shell {
                 var opened=VaultLauncher.open();if(opened==null)return;
                 var tracker=new Tracker(opened.vault(),Clock.systemUTC());
                 // The launcher runs on the default palette; switch before building the app.
-                Theme.apply(tracker.state().settings().theme());
+                Theme.apply(SystemAppearance.enabled() && Theme.systemStyle != null ? Theme.systemStyle.theme() : tracker.state().settings().theme());
                 // The store, the name and the session's secret travel with the
                 // window: rename, switch and delete all happen from the Data page.
                 var app=new YoruApp(tracker,opened.vault(),opened.store(),opened.name(),opened.secret());
-                var frame=new JFrame("Yoru / 夜 — local study workspace");frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);frame.setContentPane(app);frame.pack();
+                var frame=new JFrame("Yoru / 夜 — local study workspace");frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);frame.setContentPane(app);DesktopChrome.install(frame,app);frame.pack();
                 // Without an explicit icon the platform substitutes stock Java artwork.
                 frame.setIconImages(Theme.appIcons());
                 if(Taskbar.isTaskbarSupported()) {

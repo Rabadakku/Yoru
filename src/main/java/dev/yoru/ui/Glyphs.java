@@ -13,7 +13,7 @@ import static dev.yoru.ui.Theme.*;
 final class Glyphs {
     private Glyphs() { }
 
-    enum Kind { PAGE, FOLDER, FOLDER_OPEN, PAGE_PLUS, FOLDER_PLUS, BACK, FORWARD, SORT, COLLAPSE, SEARCH, TRASH, FILES, SIDEBAR, CHEVRON_RIGHT, CHEVRON_DOWN, OUTLINE, LINK, TASK }
+    enum Kind { TODAY, HABIT, CALENDAR, CHART, SETTINGS, PAGE, FOLDER, FOLDER_OPEN, PAGE_PLUS, FOLDER_PLUS, BACK, FORWARD, SORT, COLLAPSE, SEARCH, TRASH, FILES, SIDEBAR, CHEVRON_RIGHT, CHEVRON_DOWN, OUTLINE, LINK, TASK }
 
     /** An icon of this kind, drawn in {@code ink} at the label font's size. */
     static Icon of(Kind kind, Color ink) { return new Line(kind, ink, grow(16)); }
@@ -32,6 +32,28 @@ final class Glyphs {
             g.setColor(c != null && !c.isEnabled() ? DISABLED_TEXT : ink);
             g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             switch (kind) {
+                case TODAY -> {
+                    g.draw(new Ellipse2D.Float(3,3,10,10));
+                    g.draw(new Line2D.Float(8,0,8,1)); g.draw(new Line2D.Float(8,15,8,16));
+                    g.draw(new Line2D.Float(0,8,1,8)); g.draw(new Line2D.Float(15,8,16,8));
+                }
+                case HABIT -> {
+                    g.draw(new Arc2D.Float(2,2,12,12,40,280,Arc2D.OPEN));
+                    g.draw(new Line2D.Float(5,8,7,10)); g.draw(new Line2D.Float(7,10,11,6));
+                }
+                case CALENDAR -> {
+                    g.draw(new RoundRectangle2D.Float(2,3,12,11,2,2));
+                    g.draw(new Line2D.Float(2,6,14,6)); g.draw(new Line2D.Float(5,1,5,4)); g.draw(new Line2D.Float(11,1,11,4));
+                }
+                case CHART -> {
+                    g.draw(new Line2D.Float(3,13,3,8)); g.draw(new Line2D.Float(8,13,8,3)); g.draw(new Line2D.Float(13,13,13,6));
+                }
+                case SETTINGS -> {
+                    g.draw(new Line2D.Float(2,4,14,4)); g.draw(new Line2D.Float(2,12,14,12));
+                    g.setColor(c.getBackground()); g.fill(new Ellipse2D.Float(4,2,4,4)); g.fill(new Ellipse2D.Float(9,10,4,4));
+                    g.setColor(ink); g.draw(new Ellipse2D.Float(4,2,4,4)); g.draw(new Ellipse2D.Float(9,10,4,4));
+                }
+
                 case PAGE -> page(g);
                 case PAGE_PLUS -> { page(g); plus(g, 11, 11); }
                 case FOLDER -> folder(g, false);
