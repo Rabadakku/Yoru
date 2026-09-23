@@ -23,7 +23,11 @@ import java.util.*;
  */
 final class TaskCalendar extends JPanel {
     /** date is null when a task is dropped back onto the undated strip. */
-    interface Edits { void reschedule(UUID taskId, LocalDate date); }
+    interface Edits {
+        void reschedule(UUID taskId, LocalDate date);
+        /** A day was double-clicked where no task sits: a new task for that day (#67). */
+        default void create(LocalDate date) { }
+    }
 
     private static final int HEADER = 22, CHIP = 16, CHIP_GAP = 2, DAY_LABEL = 15, TRAY = 58;
     /** Where a chip's label starts, and the clear edge it may not run into. */
@@ -243,9 +247,12 @@ final class TaskCalendar extends JPanel {
 
     private void install(Edits edits) {
         var handler = new MouseAdapter() {
+            /** The day the picked-up chip was drawn on, or null for the undated strip. */
+            private LocalDate from;
             @Override public void mousePressed(MouseEvent e) {
                 relayout();
                 dragging = taskAt(e.getPoint());
+                from = dateAt(e.getPoint());
                 cursor = e.getPoint();
                 repaint();
             }
@@ -265,8 +272,19 @@ final class TaskCalendar extends JPanel {
                 repaint();
                 // A drop that lands nowhere is a no-op, not a task with no date:
                 // releasing outside the component has to be a way to change your mind.
-                if (target != null) edits.reschedule(task, target);
-                else if (tray) edits.reschedule(task, null);
+                // Put back where it was picked up is not a move either: a click on
+                // a chip would otherwise plan a task for the day it was only due.
+                if (target != null && !target.equals(from)) edits.reschedule(task, target);
+                else if (tray && from != null) edits.reschedule(task, null);
+            }
+            @Override public void mouseClicked(MouseEvent e) {
+                // A day is where a task made from the calendar belongs: the
+                // form opens due that day rather than today (#67).
+                if (e.getClickCount() != 2 || !SwingUtilities.isLeftMouseButton(e)) return;
+                relayout();
+                if (taskAt(e.getPoint()) != null) return;
+                var date = dateAt(e.getPoint());
+                if (date != null) edits.create(date);
             }
         };
         addMouseListener(handler);
@@ -279,7 +297,7 @@ final class TaskCalendar extends JPanel {
         if (task != null) return tasks.stream().filter(t -> t.id().equals(task)).findFirst()
             .map(t -> t.title() + (t.due() == null ? "  ·  no due date" : "  ·  due " + t.due())).orElse(null);
         var date = dateAt(event.getPoint());
-        return date == null ? null : date.toString() + "  ·  drop a task here to move it";
+        return date == null ? null : date.toString() + "  ·  double-click to add a task, or drop one here to move it";
     }
 
     // ------------------------------------------------------------------ paint
