@@ -27,6 +27,12 @@
 - Clicking a task in the calendar without dragging it no longer quietly plans it
   for the day it was already due.
 
+## Today fits the window (#86)
+
+- At 1280×900 the whole day is on screen without scrolling. Anki's one line
+  now stands beside the page title rather than at the foot of the page, where
+  it had been pushed below the window.
+
 ## Anki (#85)
 
 - **Test connection** says which of its failures happened, in words that say
