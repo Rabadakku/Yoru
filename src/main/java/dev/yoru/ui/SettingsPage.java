@@ -196,7 +196,8 @@ final class SettingsPage {
         // sit on the Data page. Updates are about the app rather than the
         // workspace, so they come last.
         var anki=AnkiSettings.card(shell,new dev.yoru.anki.AnkiConnect()::read);
-        for(var section:new JComponent[]{appearance,tracking,audio,anki,shell.vaultCard(),reset,updates}) {
+        var pomodoro=PomodoroSettings.card(shell);
+        for(var section:new JComponent[]{appearance,tracking,pomodoro,audio,anki,shell.vaultCard(),reset,updates}) {
             p.add(section);
             gap(p,SPACE_XL);
         }

@@ -61,7 +61,7 @@ final class TodayPage {
     void leave() {
         shown=false;
         dailyGoal=null;
-        timerLabel=null;statusLabel=null;
+        timerLabel=null;statusLabel=null;phaseBar=null;
     }
 
     void close() { ankiCard.disconnect(); leave(); }
@@ -134,8 +134,21 @@ final class TodayPage {
     private JPanel focusCard() {
         var tracker=tracker();
         var focus=card();
-        focus.add(sectionHeader("FOCUS SESSION"));
-        gap(focus,SPACE_LG);
+        phaseBar=null;
+        var clock=shell.pomodoro();
+        boolean pomodoro=clock!=null&&PomodoroClock.shown();
+        // The open-ended timer or the pomodoro (#61), chosen where the clock is.
+        if(clock!=null) {
+            var mode=new Segmented("today.mode",pomodoro?1:0,"Timer","Pomodoro").compact();
+            mode.onChange(i->{PomodoroClock.shown(i==1);shell.show("Today");});
+            focus.add(cardHead(sectionHeader("FOCUS SESSION"),mode));
+            // The head is a control's height rather than a caption's, so the
+            // gap under it gives back what it took.
+            gap(focus,SPACE_SM);
+        } else {
+            focus.add(sectionHeader("FOCUS SESSION"));
+            gap(focus,SPACE_LG);
+        }
         var activities=tracker.state().activities();
         var active=tracker.active();
         if(activities.isEmpty()) {
@@ -156,6 +169,7 @@ final class TodayPage {
         choose.setEnabled(active==null);
         focus.add(choose);
         gap(focus,SPACE_LG);
+        if(pomodoro) return pomodoroBody(focus,clock,choose);
         timerLabel=figure("00:00:00",TYPE_TIMER,TEXT);
         timerLabel.setName("today.timer");
         focus.add(timerLabel);
@@ -179,6 +193,72 @@ final class TodayPage {
         dailyGoal=new DailyGoal(tracker,zone());
         focus.add(dailyGoal);
         gap(focus,SPACE_LG);
+        return focus;
+    }
+
+    /** The pomodoro in the focus card: the time left, the phase, its controls and the day's count (#61). */
+    private JPanel pomodoroBody(JPanel focus,PomodoroClock clock,JComboBox<Activity> choose) {
+        var tracker=tracker();
+        var running=tracker.active();
+        if(running==null&&clock.activity()!=null)
+            for(int i=0;i<choose.getItemCount();i++)if(choose.getItemAt(i).id().equals(clock.activity()))choose.setSelectedIndex(i);
+        if(clock.activity()==null&&choose.getSelectedItem() instanceof Activity a) clock.activity(a.id());
+        choose.addActionListener(e->{if(choose.getSelectedItem() instanceof Activity a) clock.activity(a.id());});
+        timerLabel=figure("25:00",TYPE_TIMER,TEXT);
+        timerLabel.setName("today.pomodoro.left");
+        focus.add(timerLabel);
+        gap(focus,SPACE_SM);
+        statusLabel=bodyLabel("");
+        statusLabel.setName("today.pomodoro.phase");
+        focus.add(statusLabel);
+        gap(focus,SPACE_LG);
+        var controls=wrappingRow();
+        boolean fresh=clock.left().equals(clock.engine().plan().length(clock.phase()));
+        var go=accentButton(clock.running()?"❚❚  Pause":fresh?"▶  Start":"▶  Resume",
+            ()->shell.perform(()->{if(clock.running())clock.pause();else clock.start();}));
+        go.setName("today.pomodoro.go");
+        controls.add(go);
+        var skip=button("Skip",()->shell.perform(clock::skip));
+        skip.setName("today.pomodoro.skip");
+        skip.setToolTipText(clock.phase()==dev.yoru.application.Pomodoro.Phase.WORK
+            ?"End this work interval now; the time so far is kept":"End this break now");
+        controls.add(skip);
+        var more=button("+5 min",()->shell.perform(clock::extend));
+        more.setName("today.pomodoro.extend");
+        more.setToolTipText("Five more minutes on this interval");
+        controls.add(more);
+        var reset=ghost(button("Reset",()->shell.perform(clock::reset)));
+        reset.setName("today.pomodoro.reset");
+        reset.setToolTipText("Back to the first work interval");
+        controls.add(reset);
+        controls.setName("today.timer.controls");
+        focus.add(controls);
+        gap(focus,SPACE_LG);
+        phaseBar=new JProgressBar(0,1000);
+        phaseBar.setName("today.pomodoro.progress");
+        phaseBar.setUI(new javax.swing.plaf.basic.BasicProgressBarUI());
+        phaseBar.setBorderPainted(false);
+        phaseBar.setBackground(LINE);
+        phaseBar.setForeground(clock.phase()==dev.yoru.application.Pomodoro.Phase.WORK?ACCENT_TEXT:GOLD_TEXT);
+        phaseBar.setAlignmentX(0);
+        phaseBar.setPreferredSize(new Dimension(SPACE_XXL,SPACE_XS));
+        phaseBar.setMaximumSize(new Dimension(Integer.MAX_VALUE,SPACE_XS));
+        phaseBar.getAccessibleContext().setAccessibleName("Time through this interval");
+        int count=clock.today();
+        var tally=label(count==0?"No pomodoros yet today":plural(count,"pomodoro")+" today",TYPE_CAPTION,MUTED);
+        tally.setName("today.pomodoro.count");
+        focus.add(tally);
+        gap(focus,SPACE_SM);
+        focus.add(phaseBar);
+        var notice=clock.notice();
+        if(notice!=null) {
+            gap(focus,SPACE_SM);
+            var said=wrapping(notice,TYPE_LABEL,ACCENT_TEXT);
+            said.setName("today.pomodoro.notice");
+            focus.add(said);
+        }
+        gap(focus,SPACE_LG);
+        updateTimer();
         return focus;
     }
 
@@ -382,10 +462,23 @@ final class TodayPage {
     }
 
     private void updateTimer() {
+        var clock=shell.pomodoro();
+        if(clock!=null&&PomodoroClock.shown()&&phaseBar!=null) {
+            long seconds=Math.max(0,clock.left().toSeconds());
+            timerLabel.setText(String.format("%02d:%02d",seconds/60,seconds%60));
+            statusLabel.setText(clock.phaseName()+(clock.running()?"":" · "+(clock.left().equals(clock.engine().plan()
+                .length(clock.phase()))?"ready":"paused")));
+            phaseBar.setValue((int)Math.round(clock.progress()*1000));
+            phaseBar.getAccessibleContext().setAccessibleDescription(statusLabel.getText()+", "+timerLabel.getText()+" left");
+            return;
+        }
         var a=tracker().active();
         timerLabel.setText(a==null?"00:00:00":Analytics.duration(Math.max(0,Duration.between(a.start(),tracker().now()).getSeconds())));
         statusLabel.setText(a==null?"OPEN-ENDED · ready when you are":"● CLOCKED IN · "+shell.activityName(a.activityId()));
     }
+    /** How far through the pomodoro's interval, while it is on screen. */
+    private JProgressBar phaseBar;
+
     private void clockOut() {
         var tracker=tracker();
         var end=new DateTimeField(Instant.now(),zone(),"End");var form=stack();

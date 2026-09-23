@@ -67,6 +67,7 @@ java -ea -cp build/classes dev.yoru.PomodoroTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskBoardTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskListsTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.RepeatUiTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PomodoroClockTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ScheduleUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskCalendarTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.FocusMixTest

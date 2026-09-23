@@ -34,6 +34,16 @@ final class Segmented extends JPanel {
         choose(initial);
     }
 
+    /** A smaller choice, for a card's head, where it sits on a caption's line rather than a control's. */
+    Segmented compact() {
+        for (var option : options) {
+            option.setFont(captionFont());
+            option.putClientProperty("yoru.compact", Boolean.TRUE);
+        }
+        choose(chosen);
+        return this;
+    }
+
     int chosen() { return chosen; }
 
     void onChange(IntConsumer listener) { listeners.add(listener); }
@@ -42,6 +52,8 @@ final class Segmented extends JPanel {
         chosen = index;
         for (int i = 0; i < options.size(); i++) {
             var option = selected(options.get(i), i == index);
+            if (Boolean.TRUE.equals(option.getClientProperty("yoru.compact")))
+                option.setBorder(new Theme.ControlBorder(i == index ? ACCENT_TEXT : LINE, SPACE_XS, SPACE_SM));
             option.getAccessibleContext().setAccessibleDescription(i == index ? "Selected" : null);
         }
         listeners.forEach(l -> l.accept(index));
