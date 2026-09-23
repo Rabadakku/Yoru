@@ -21,6 +21,8 @@ import static dev.yoru.ui.Theme.*;
 final class TaskLists {
     private TaskLists() { }
 
+    static final String INBOX_HELP = "Tasks without a list. Use “Move to” to organize them.";
+
     static final String ALL = "all", INBOX = "inbox", HABITS = "habits", REPEATING = "repeating";
 
     /** Marks a rail entry with the place it stands for, so a dragged task can be dropped on it. */
@@ -100,9 +102,10 @@ final class TaskLists {
         entry.add(dot, BorderLayout.WEST);
         entry.add(text, BorderLayout.CENTER);
         entry.add(count, BorderLayout.EAST);
-        entry.setToolTipText(name + (open == 0 ? "" : " · " + plural(open, "open task")));
+        entry.setToolTipText((key.equals(INBOX) ? INBOX_HELP : name) + (open == 0 ? "" : " · " + plural(open, "open task")));
         entry.getAccessibleContext().setAccessibleName(name + ", " + (open == 0 ? "nothing open" : plural(open, "open task"))
             + (chosen ? ", selected" : ""));
+        if (key.equals(INBOX)) entry.getAccessibleContext().setAccessibleDescription(INBOX_HELP);
         entry.addActionListener(e -> pick.run());
         // Its own height, so a vertical rail does not stretch its entries.
         entry.setAlignmentX(0);

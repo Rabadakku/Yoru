@@ -159,10 +159,16 @@ public final class TaskListsTest {
         ((JButton) named(board, "tasks.place." + TaskLists.INBOX)).doClick();
         check(shown(board).equals(List.of(d.toString())), "The Inbox shows the tasks filed nowhere");
 
+        check(named(board, "tasks.inbox.help").isVisible(), "Inbox explains where unfiled tasks live");
+        var explainedInbox = (JButton) named(board, "tasks.place." + TaskLists.INBOX);
+        check(explainedInbox.getToolTipText().contains("Tasks without a list"), "Inbox explains itself before it is opened");
+        check(explainedInbox.getAccessibleContext().getAccessibleDescription().contains("Move to"), "The Inbox explanation reaches screen readers");
+
         // Each place keeps its own view.
         ((JButton) named(board, "tasks.place." + chores.id())).doClick();
         ((JButton) named(board, "view.done")).doClick();
         check(shown(board).isEmpty(), "Completed in Chores is empty");
+        check(!named(board, "tasks.inbox.help").isVisible(), "Named lists do not show Inbox guidance");
         ((JButton) named(board, "tasks.place." + TaskLists.ALL)).doClick();
         check(shown(board).size() == 4, "All tasks is still on its own view");
         ((JButton) named(board, "tasks.place." + chores.id())).doClick();
