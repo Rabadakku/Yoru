@@ -1,6 +1,6 @@
 # Yoru roadmap
 
-## In progress — automatic Anki streak (#100)
+## In review — automatic Anki streak (#100)
 
 `codex/anki-streak` adds a read-only Anki streak to Habits without creating a
 manual habit. Any date with reviews counts, independent of imported timed
@@ -8,6 +8,11 @@ sessions. Daily aggregate history is retained beyond the chart’s month, so
 longer runs survive offline and encrypted/portable roundtrips. Offline streaks
 are explicitly dated as of the last sync; switching profiles replaces history.
 Existing short caches fill in at the next successful refresh. No schema change.
+
+Validation: full isolated suite passed in a clean checkout, including 15
+streak/persistence and 10 UI checks. Automatic refresh retains 100 review days;
+400-day summaries survive encrypted and portable roundtrips. Reviewed all five
+themes and enlarged text. No live personal Anki profile was opened.
 
 ## In review — bulk task actions (#59, PR #101)
 
