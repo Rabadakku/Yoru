@@ -22,7 +22,15 @@ public final class AnkiConnect {
     private final int timeoutMillis;
     /** Safe messages produced locally, never raw Anki responses or credentials. */
     public static final class Failure extends IOException {
-        Failure(String message) { super(message); }
+        /**
+         * Which of the ways a read can fail this was, so Settings can say what
+         * to do about it (#85). Anki that is closed and Anki without the add-on
+         * look the same from here: nothing answers on the port.
+         */
+        public enum Kind { NOT_ANSWERING, KEY_REJECTED, NO_PROFILE, TOO_SLOW, NOT_ACCEPTED, UNREADABLE, PROFILE_CHANGED }
+        private final Kind kind;
+        public Failure(Kind kind, String message) { super(message); this.kind = kind; }
+        public Kind kind() { return kind; }
     }
     public AnkiConnect() { this(URI.create("http://127.0.0.1:8765")); }
     public AnkiConnect(URI endpoint) { this(endpoint, 5000); }
@@ -77,7 +85,7 @@ public final class AnkiConnect {
         } catch (java.time.DateTimeException e) { throw invalid(); }
         var reviews = reviews(key, days + 1, complete);
         if (!profile.equals(profile(call("getActiveProfile", key))))
-            throw new Failure("The Anki profile changed during refresh. Refresh again to read the selected profile.");
+            throw new Failure(Failure.Kind.PROFILE_CHANGED, "The Anki profile changed during refresh. Refresh again to read the selected profile.");
         return new Snapshot(profile, today, dates, reviews, complete, Instant.now());
     }
     /**
@@ -115,7 +123,7 @@ public final class AnkiConnect {
     }
     private static String profile(Object value) throws IOException {
         if (!(value instanceof String name) || name.isBlank() || name.length() > 256)
-            throw new Failure("Open an Anki profile, then refresh again.");
+            throw new Failure(Failure.Kind.NO_PROFILE, "Open an Anki profile, then refresh again.");
         return name;
     }
     private static long positive(Object value) throws IOException {
@@ -144,7 +152,7 @@ public final class AnkiConnect {
             byte[] body = Json.write(request).getBytes(StandardCharsets.UTF_8);
             connection.setFixedLengthStreamingMode(body.length);
             try (var out = connection.getOutputStream()) { out.write(body); }
-            if (connection.getResponseCode() != 200) throw new Failure("AnkiConnect did not accept the request. Check its settings.");
+            if (connection.getResponseCode() != 200) throw new Failure(Failure.Kind.NOT_ACCEPTED, "AnkiConnect did not accept the request. Check its settings.");
             byte[] bytes;
             long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
             try (var in = connection.getInputStream(); var data = new java.io.ByteArrayOutputStream()) {
@@ -165,13 +173,13 @@ public final class AnkiConnect {
             try { parsed = Json.read(new String(bytes, StandardCharsets.UTF_8)); }
             catch (IllegalArgumentException e) { throw invalid(); }
             if (!(parsed instanceof Map<?, ?> result) || !result.containsKey("error") || !result.containsKey("result")) throw invalid();
-            if (result.get("error") != null) throw new Failure("AnkiConnect rejected the request. Check the API key and update the add-on. Disconnect to change the key.");
+            if (result.get("error") != null) throw new Failure(Failure.Kind.KEY_REJECTED, "AnkiConnect rejected the request. Check the API key in Settings and update the add-on.");
             return result.get("result");
         } catch (java.net.SocketTimeoutException e) {
-            throw new Failure("Anki took too long to respond. Wait for Anki to finish its current operation, then refresh.");
+            throw new Failure(Failure.Kind.TOO_SLOW, "Anki took too long to respond. Wait for Anki to finish its current operation, then refresh.");
         } catch (java.net.ConnectException e) {
-            throw new Failure("Open Anki with AnkiConnect enabled on port 8765, then refresh.");
+            throw new Failure(Failure.Kind.NOT_ANSWERING, "Open Anki with AnkiConnect enabled on port 8765, then refresh.");
         } finally { connection.disconnect(); }
     }
-    private static IOException invalid() { return new Failure("AnkiConnect returned invalid review data. Update the add-on and try again."); }
+    private static IOException invalid() { return new Failure(Failure.Kind.UNREADABLE, "AnkiConnect returned invalid review data. Update the add-on and try again."); }
 }

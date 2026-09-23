@@ -56,6 +56,7 @@ final class AnkiSettings {
         gap(card, SPACE_SM);
 
         var result = wrapping(status(anki), TYPE_CAPTION, MUTED);
+        result.setName("anki.result");
         var actions = new JPanel(new WrapFlowLayout(FlowLayout.LEFT, SPACE_SM, SPACE_XS));
         actions.setOpaque(false);
         actions.setAlignmentX(0);
@@ -88,8 +89,7 @@ final class AnkiSettings {
                         result.setForeground(ACCENT_TEXT);
                     } catch (Exception failure) {
                         var cause = failure instanceof java.util.concurrent.ExecutionException ? failure.getCause() : failure;
-                        result.setText(cause instanceof AnkiConnect.Failure ? cause.getMessage()
-                            : "Anki did not answer. Open it, check the add-on is installed, then try again.");
+                        result.setText(explain(cause));
                         result.setForeground(GOLD_TEXT);
                     }
                 }
@@ -137,6 +137,29 @@ final class AnkiSettings {
         card.add(wrapping("Only counts and times are kept in your vault — never a card, a question or an answer. "
             + "The key is stored in the vault, which is encrypted, and nowhere else.", TYPE_CAPTION, MUTED));
         return card;
+    }
+
+    /**
+     * What a failed test means, and what to do about it here (#85): each way it
+     * can fail says something different, so the owner is not left to guess
+     * whether the fault is Anki, the add-on or the key.
+     */
+    static String explain(Throwable cause) {
+        if (!(cause instanceof AnkiConnect.Failure failure))
+            return "Anki did not answer. Open it, check the add-on is installed, then test again.";
+        return switch (failure.kind()) {
+            case NOT_ANSWERING -> "Anki isn't answering. Open Anki, and check the AnkiConnect add-on is installed "
+                + "(Tools → Add-ons) and Anki was restarted after installing it.";
+            case KEY_REJECTED -> "AnkiConnect refused the key. Enter the key set in the add-on's config, "
+                + "or clear it if the add-on does not ask for one.";
+            case NO_PROFILE -> "Anki is open, but no profile is. Open the profile you want to track, then test again.";
+            case TOO_SLOW -> "Anki took too long to answer. Let it finish what it is doing, then test again.";
+            case NOT_ACCEPTED -> "AnkiConnect did not accept the request. Check the add-on's settings, "
+                + "then test again.";
+            case UNREADABLE -> "AnkiConnect answered with something Yoru could not read. Update the add-on, "
+                + "then test again.";
+            case PROFILE_CHANGED -> "The Anki profile changed while Yoru was reading it. Test again.";
+        };
     }
 
     private static String status(Anki anki) {

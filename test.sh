@@ -25,6 +25,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PageEditorTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PagesUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiCardTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiReconnectTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiSettingsTest
 java -ea -cp build/classes dev.yoru.CoreTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.UiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.VisualSystemTest
