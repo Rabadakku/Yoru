@@ -38,6 +38,8 @@ public final class YoruApp extends JPanel implements Shell {
     private LocalDate displayDate=LocalDate.now();
     private LocalDate week;
     private final MusicPlayer music=new MusicPlayer();
+    /** The pomodoro keeps its time whichever page is open (#61). */
+    private PomodoroClock pomodoro;
     private final DateTimeFormatter dateTime=DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     /** The activity the heat map is filtered to, or null for all of them. */
     private UUID heatActivity;
@@ -158,13 +160,16 @@ public final class YoruApp extends JPanel implements Shell {
         content.setBackground(BG);
         content.setBorder(new EmptyBorder(SPACE_XL,SPACE_XL,SPACE_XL,SPACE_XL));
         root.add(content,BorderLayout.CENTER);
+        pomodoro=new PomodoroClock(()->this.tracker,java.time.Clock.systemUTC(),()->{ if(page.equals("Today")) showPage("Today"); });
         showPage("Today");
         // 70ms: the Emerald walk cycle reads about right at this rate; 120 dragged.
         ticker=new javax.swing.Timer(70,e-> {
             if(!displayDate.equals(LocalDate.now())){displayDate=LocalDate.now();showPage(page);}
             var running=tracker.active();
             boolean animate=running!=null && !reducedMotion;
-            todayPage.tick(animate,running,page.equals("Today"));
+            try { pomodoro.tick(); }
+            catch(Exception failure) { pomodoroFailed(failure); }
+            todayPage.tick(animate,tracker.active(),page.equals("Today"));
             if (SystemAppearance.enabled() && System.currentTimeMillis()-appearanceCheck > 30_000) refreshAppearance();
             updateRecordingStatus();
             // Synced here rather than from the clock-in and clock-out buttons, so
@@ -175,6 +180,16 @@ public final class YoruApp extends JPanel implements Shell {
         );
         ticker.start();
     }
+    @Override public PomodoroClock pomodoro() { return pomodoro; }
+
+    /** A pomodoro that could not record its work says so once, rather than every tick. */
+    private String pomodoroFailure;
+    private void pomodoroFailed(Exception failure) {
+        if(java.util.Objects.equals(failure.getMessage(),pomodoroFailure)) return;
+        pomodoroFailure=failure.getMessage();
+        error(failure);
+    }
+
     /** Quits: everything unsaved is written, then the vault is locked. */
     private void close() {
         if(closed || !pagesPage.flush())return;

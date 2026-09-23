@@ -9,30 +9,29 @@ notes in one encrypted vault on your own machine. No account, no cloud sync.
 [Features](#features) · [Install](#install) · [Connect Anki](#connect-anki) ·
 [Build from source](#build-from-source)
 
-![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.20/yoru-today-light.png)
+![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/yoru-today-light.png)
 
-*Screenshots use invented sample data. The interface shown is from version 1.0.20.*
+*Screenshots use invented sample data. The interface shown is from version 1.0.21.*
 
-## What's new in 1.0.20
+## What's new in 1.0.21
 
-Habits are a line each, so a page of them fits on one screen: the last seven
-days, the streak and 30-day consistency for a daily habit, and the time to the
-minute for a time-since tracker. Tick today's habits off from the keyboard,
-double-click a day in the task calendar to make a task due that day, and see
-exactly why an Anki connection test failed. The heat map, task calendar and
-week grid now follow the text size setting.
+File tasks in lists (Chores, Personal, School) from a rail beside the board,
+give a task several tags and create new ones as you type, and make a task
+repeat — every weekday, on the last Friday, three days after you last did it.
+Today's timer can now be a pomodoro, with gentle sounds of its own at the end
+of each interval.
 
-See the [release notes](docs/RELEASE-1.0.20.md) or
-[all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.20/Yoru-1.0.20-previews.zip).
+See the [release notes](docs/RELEASE-1.0.21.md) or
+[all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/Yoru-1.0.21-previews.zip).
 Further interface refinements are tracked in the [roadmap](docs/ROADMAP.md).
 
 ## Features
 
 ### Focus and time
 
-Clock in when you start and clock out when you stop. There is no forced
-pomodoro. A running timer survives closing the app, and you can correct recorded
-sessions afterwards. Track multiple activities, set a daily goal and play your
+Clock in when you start and clock out when you stop, or switch Today's timer to
+a pomodoro with its own gentle sounds. A running timer survives closing the
+app, and you can correct recorded sessions afterwards. Track multiple activities, set a daily goal and play your
 own WAV, AIFF or AU music while the timer runs.
 
 **Today** brings together the timer, today's schedule, tasks, habits and Anki
@@ -46,16 +45,18 @@ move or resize a plan, add weekly repeats and choose which day starts the week.
 
 ### Tasks and habits
 
-Tasks have due dates, **To do → Doing → Done** status, colour tags, search,
-manual ordering and a month calendar. Paste a task list or import a Notion
-export, then review it before adding anything. Link tasks to Markdown pages.
+Tasks have due dates, **To do → Doing → Done** status, several colour tags each,
+search, manual ordering and a month calendar. File them in your own lists,
+make them repeat, and drag them between lists. Paste a task list or import a
+Notion export, then review it before adding anything. Link tasks to Markdown
+pages.
 
 Daily habits show their last seven days, streak and 30-day consistency on one
 line, with the full history a click away. Time-since trackers show how long
 they have run, to the minute, and keep every previous period. Tick today's
 habits off beside your tasks, from the mouse or the keyboard.
 
-![Yoru Habits in the dark theme, with daily habits and time-since trackers](https://github.com/Rabadakku/Yoru/releases/download/v1.0.20/yoru-habits-dark.png)
+![Yoru Habits in the dark theme, with daily habits and time-since trackers](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/yoru-habits-dark.png)
 
 ### Linked Markdown pages
 
@@ -67,7 +68,7 @@ Pages currently provides a source editor and a separate reading view. Live
 preview, attachment storage and several larger workspace features remain on
 the roadmap. See [the Pages guide](docs/PAGES.md) for shortcuts and current limits.
 
-![The Pages editor preserves writing space in a narrow window](https://github.com/Rabadakku/Yoru/releases/download/v1.0.20/yoru-pages-narrow.png)
+![The Pages editor preserves writing space in a narrow window](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/yoru-pages-narrow.png)
 
 ### Anki integration
 
