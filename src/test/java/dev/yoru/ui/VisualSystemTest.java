@@ -45,7 +45,8 @@ public final class VisualSystemTest {
         edt(VisualSystemTest::pages);
         edt(VisualSystemTest::dailyGoal);
         edt(VisualSystemTest::wrappingRowsAskAgain);
-        System.out.println("PASS: " + checks + " visual system checks (titles, cards, breadcrumb, Today order, Settings sections, scroll)");
+        edt(VisualSystemTest::todayAtAGlance);
+        System.out.println("PASS: " + checks + " visual system checks (titles, cards, breadcrumb, Today order, Settings sections, scroll, Today without scrolling)");
         // The windows built here leave Swing's threads running.
         System.exit(0);
     }
@@ -114,6 +115,43 @@ public final class VisualSystemTest {
         row.setBounds(0, 0, 200, row.getHeight());
         int wrapped = card.getLayout().preferredLayoutSize(card).height;
         check(wrapped > onOneLine, "a row given less width asks for more height: " + wrapped + " against " + onOneLine);
+    }
+
+    /**
+     * Today is a glance (#86): at 1280×900 the whole day is on screen without
+     * scrolling, Anki's line included when it is switched on (#85).
+     */
+    private static void todayAtAGlance() throws Exception {
+        for (boolean anki : new boolean[]{false, true}) {
+            Theme.apply(ThemeId.MIDNIGHT);
+            var app = Preview.trackerApp(ThemeId.MIDNIGHT, 1280, 900, tracker -> {
+                if (anki) tracker.anki(tracker.state().anki().enabled(true).withSnapshot(new dev.yoru.domain.Model.AnkiSnapshot("Synthetic", 24,
+                    new java.util.TreeMap<>(), java.time.Instant.now())));
+            });
+            Preview.button(app, "Today").doClick();
+            Preview.layout(app);
+            JViewport page = null;
+            for (var viewport : viewports(app)) if (page == null || viewport.getWidth() > page.getWidth()) page = viewport;
+            check(page != null, "Today scrolls in a viewport of its own");
+            int wants = page.getView().getPreferredSize().height, has = page.getExtentSize().height;
+            check(wants <= has, "Today fits 1280×900 without scrolling" + (anki ? " with Anki's line" : "")
+                + ": it wants " + wants + " px of " + has);
+            if (anki) {
+                var line = named(app, "today.anki.status");
+                check(line != null && line.isVisible() && line.getWidth() > 0, "and Anki's line is drawn");
+                var at = SwingUtilities.convertPoint(line, 0, line.getHeight(), page);
+                check(at.y <= page.getExtentSize().height, "inside the window rather than below it");
+            }
+        }
+    }
+
+    private static java.util.List<JViewport> viewports(Container root) {
+        var out = new java.util.ArrayList<JViewport>();
+        for (var child : root.getComponents()) {
+            if (child instanceof JViewport v && v.getView() != null) out.add(v);
+            if (child instanceof Container nested) out.addAll(viewports(nested));
+        }
+        return out;
     }
 
     private static void pages() throws Exception {
