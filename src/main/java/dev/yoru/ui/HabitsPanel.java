@@ -82,7 +82,8 @@ final class HabitsPanel {
     private static JPanel dailyRow(Tracker tracker,Runnable refresh,Habit habit,boolean last) {
         var today=HabitStats.today(habit);
         var month=HabitStats.lastDays(habit,today,30);
-        var line=listLine(last);
+        // The seven days are never squeezed: under that, the figures move down.
+        var line=listLine(last,7*grow(SPACE_XL)+6*SPACE_XS);
         line.setName("habit.row."+habit.id());
 
         var left=stack();
@@ -97,7 +98,7 @@ final class HabitsPanel {
         left.add(name);
         gap(left,SPACE_XS);
         left.add(weekStrip(tracker,refresh,habit,today));
-        line.add(left,BorderLayout.CENTER);
+        line.add(left);
 
         String summary=summary(tracker,habit,today);
         int streak=habit.streak(today);
@@ -115,7 +116,7 @@ final class HabitsPanel {
         more.setToolTipText("History, rename or delete");
         more.getAccessibleContext().setAccessibleName("Actions for "+habit.name());
         more.addActionListener(e->dailyMenu(tracker,refresh,line,habit).show(more,0,more.getHeight()));
-        line.add(trailing(run,kept,more),BorderLayout.EAST);
+        line.add(trailing(run,kept,more));
         return line;
     }
 
@@ -158,15 +159,98 @@ final class HabitsPanel {
         Dialogs.info(owner,habit.name(),historyGrid(tracker,refresh,habit));
     }
 
-    /** A row of the list: what it is in the middle, its figures and controls at the end. */
-    private static JPanel listLine(boolean last) {
-        var line=new JPanel(new BorderLayout(SPACE_MD,0)) {
+    /**
+     * A row of the list: what it is first, its figures and controls at the end,
+     * beside it or under it. Add the subject, then the end.
+     */
+    private static JPanel listLine(boolean last,int floor) {
+        var line=new JPanel(new EndOrUnder(floor)) {
             @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE,getPreferredSize().height); }
         };
         line.setOpaque(false);
         line.setAlignmentX(0);
         line.setBorder(last?listEnd():listRow());
         return line;
+    }
+
+    /**
+     * The end of a row beside its subject when both fit, and under it when they
+     * do not.
+     *
+     * At the larger text sizes (#31) the figures and controls at a row's end
+     * grow as fast as the column they are in, and kept beside the subject they
+     * squeezed a habit's seven days into slivers and cut its name to a letter.
+     * The subject keeps at least {@code floor} pixels beside the end, or the
+     * end moves onto a line of its own.
+     */
+    static final class EndOrUnder implements LayoutManager {
+        private final int floor;
+        /** How the row was last measured, so a layout that disagrees can ask again. */
+        private Boolean measuredBeside;
+        EndOrUnder(int floor) { this.floor=floor; }
+
+        @Override public void addLayoutComponent(String name,Component c) { }
+        @Override public void removeLayoutComponent(Component c) { }
+
+        /** The room inside the row, or inside what holds it when the row has no width yet. */
+        private static int room(Container row) {
+            int width=row.getWidth();
+            for(Container holder=row.getParent();width==0&&holder!=null;holder=holder.getParent()) {
+                var padding=holder.getInsets();
+                width=Math.max(0,holder.getWidth()-padding.left-padding.right);
+            }
+            var insets=row.getInsets();
+            return width==0?Integer.MAX_VALUE:width-insets.left-insets.right;
+        }
+
+        boolean beside(Container row) {
+            if(row.getComponentCount()<2) return true;
+            return room(row)>=floor+SPACE_MD+row.getComponent(1).getPreferredSize().width;
+        }
+
+        @Override public Dimension preferredLayoutSize(Container row) {
+            var insets=row.getInsets();
+            var subject=row.getComponent(0).getPreferredSize();
+            var end=row.getComponentCount()>1?row.getComponent(1).getPreferredSize():new Dimension();
+            boolean side=beside(row);
+            measuredBeside=side;
+            var inner=side?new Dimension(subject.width+SPACE_MD+end.width,Math.max(subject.height,end.height))
+                :new Dimension(Math.max(subject.width,end.width),subject.height+SPACE_XS+end.height);
+            return new Dimension(inner.width+insets.left+insets.right,inner.height+insets.top+insets.bottom);
+        }
+
+        @Override public Dimension minimumLayoutSize(Container row) {
+            return new Dimension(0,preferredLayoutSize(row).height);
+        }
+
+        @Override public void layoutContainer(Container row) {
+            var insets=row.getInsets();
+            int x=insets.left,y=insets.top;
+            int width=row.getWidth()-insets.left-insets.right,height=row.getHeight()-insets.top-insets.bottom;
+            var subject=row.getComponent(0);
+            var end=row.getComponentCount()>1?row.getComponent(1):null;
+            boolean side=beside(row);
+            if(end==null) { subject.setBounds(x,y,width,height); return; }
+            var endSize=end.getPreferredSize();
+            if(side) {
+                int subjectWidth=Math.max(0,width-endSize.width-SPACE_MD);
+                subject.setBounds(x,y,subjectWidth,height);
+                end.setBounds(x+width-endSize.width,y+Math.max(0,(height-endSize.height)/2),endSize.width,Math.min(height,endSize.height));
+            } else {
+                int subjectHeight=subject.getPreferredSize().height;
+                subject.setBounds(x,y,width,subjectHeight);
+                end.setBounds(x,y+subjectHeight+SPACE_XS,Math.min(width,endSize.width),endSize.height);
+            }
+            // Measured for the other arrangement, before the row had its width:
+            // what holds it set aside the wrong height, and a box layout keeps
+            // what it measured until it is told otherwise.
+            if(measuredBeside!=null&&measuredBeside!=side) {
+                measuredBeside=side;
+                for(Container holder=row.getParent();holder!=null;holder=holder.getParent())
+                    if(holder.getLayout() instanceof LayoutManager2 cached) cached.invalidateLayout(holder);
+                if(row instanceof JComponent component) component.revalidate();
+            }
+        }
     }
 
     /** The end of a row, centred on its height, with the controls last. */
@@ -233,7 +317,8 @@ final class HabitsPanel {
      * the ⋯ menu.
      */
     private static JPanel sinceRow(Tracker tracker,Runnable refresh,Habit habit,boolean last) {
-        var line=listLine(last);
+        // A name needs room for a couple of words beside the time it has run.
+        var line=listLine(last,grow(NAME_FLOOR*2));
         line.setName("habit.row."+habit.id());
         var zone=ZoneId.of(habit.zone());
         var left=stack();
@@ -241,7 +326,7 @@ final class HabitsPanel {
         // Gives way to the figures beside it like the name above it does, with
         // the whole of it in the tooltip.
         left.add(shortenable("since "+began(habit.starts().getLast(),zone),TYPE_CAPTION,MUTED));
-        line.add(left,BorderLayout.CENTER);
+        line.add(left);
 
         var elapsed=label("",TYPE_HEADING,TEXT);
         elapsed.setName("habit.elapsed."+habit.id());
@@ -262,7 +347,7 @@ final class HabitsPanel {
         more.setToolTipText("Edit the start, see the history, rename or delete");
         more.getAccessibleContext().setAccessibleName("Actions for "+habit.name());
         more.addActionListener(e->sinceMenu(tracker,refresh,line,habit,zone).show(more,0,more.getHeight()));
-        line.add(trailing(elapsed,again,more),BorderLayout.EAST);
+        line.add(trailing(elapsed,again,more));
         return line;
     }
 
