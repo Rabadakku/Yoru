@@ -1,3 +1,8 @@
+# v1.0.19 — Interface detail polish
+
+Quieter tabs, rounded scrollbars, consistent hover feedback and accurate Edit
+menu states. See [release details](docs/RELEASE-1.0.19.md). No vault migration.
+
 # v1.0.18 — A quieter workspace
 
 Collapsible sidebar, system typography, native Mac menus and optional system

@@ -118,6 +118,17 @@ public final class PagesUiTest {
         Preview.button(app, "pages.tab.close." + host.id()).doClick();
         assert find(app, "pages.tab." + host.id()) == null : "a closed page has no tab";
         assert find(app, "pages.tab." + one.id()) != null : "the others stay open";
+        String longTitle = "A deliberately long page title that must not push its close button outside the writing workspace";
+        var longPage = tracker.pages().createPage(null, longTitle, "Draft");
+        app.openNote(longPage.id()); Preview.layout(app);
+        var longTab = Preview.button(app, "pages.tab." + longPage.id());
+        assert longTab.getWidth() <= Theme.grow(200);
+        assert longTab.getToolTipText().equals(longTitle);
+        var closeLong = Preview.button(app, "pages.tab.close." + longPage.id());
+        assert closeLong.getX() + closeLong.getWidth() <= closeLong.getParent().getWidth();
+        closeLong.doClick();
+        assert find(app, "pages.tab." + longPage.id()) == null;
+
     }
 
     static String editorText(YoruApp app) { return editor(app).getText(); }

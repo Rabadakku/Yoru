@@ -9,19 +9,19 @@ notes in one encrypted vault on your own machine. No account, no cloud sync.
 [Features](#features) · [Install](#install) · [Connect Anki](#connect-anki) ·
 [Build from source](#build-from-source)
 
-![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.18/yoru-today-light.png)
+![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.19/yoru-today-light.png)
 
-*Screenshots use invented sample data. The interface shown is from version 1.0.18.*
+*Screenshots use invented sample data. The interface shown is from version 1.0.19.*
 
-## What's new in 1.0.18
+## What's new in 1.0.19
 
-A collapsible sidebar, system typography, quieter surfaces and cleaner lists.
-On macOS, Yoru has a native menu bar and unified title bar, with an optional
-setting to follow the system's light/dark appearance and accent. Pages keeps
-room for writing in narrow windows by showing one side panel at a time.
+Quieter page tabs, rounded scrollbars, consistent hover feedback and Edit menus
+that reflect your selection and undo history. These refinements build on the
+collapsible sidebar, native Mac menus and optional system appearance introduced
+in 1.0.18.
 
-See the [release notes](docs/RELEASE-1.0.18.md) or
-[all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.18/Yoru-1.0.18-previews.zip).
+See the [release notes](docs/RELEASE-1.0.19.md) or
+[all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.19/Yoru-1.0.19-previews.zip).
 Further interface refinements are tracked in the [roadmap](docs/ROADMAP.md).
 
 ## Features
@@ -52,7 +52,7 @@ Daily habits show streaks, consistency, recent check-offs and editable history.
 Time-since trackers record elapsed time and previous periods. Daily check-offs
 are also available alongside tasks.
 
-![Yoru Habits in the dark theme, with daily habits and time-since trackers](https://github.com/Rabadakku/Yoru/releases/download/v1.0.18/yoru-habits-dark.png)
+![Yoru Habits in the dark theme, with daily habits and time-since trackers](https://github.com/Rabadakku/Yoru/releases/download/v1.0.19/yoru-habits-dark.png)
 
 ### Linked Markdown pages
 
@@ -64,7 +64,7 @@ Pages currently provides a source editor and a separate reading view. Live
 preview, attachment storage and several larger workspace features remain on
 the roadmap. See [the Pages guide](docs/PAGES.md) for shortcuts and current limits.
 
-![The Pages editor preserves writing space in a narrow window](https://github.com/Rabadakku/Yoru/releases/download/v1.0.18/yoru-pages-narrow.png)
+![The Pages editor preserves writing space in a narrow window](https://github.com/Rabadakku/Yoru/releases/download/v1.0.19/yoru-pages-narrow.png)
 
 ### Anki integration
 

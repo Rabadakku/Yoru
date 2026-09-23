@@ -1,5 +1,13 @@
 # Yoru roadmap
 
+## Release 1.0.19 — interface detail polish (#63)
+
+Quieter page tabs keep long-title close controls visible. Rounded scrollbars
+and consistent button hover feedback refine the shared controls. Edit menus
+reflect selection and actual undo/redo history, and sidebar selection is exposed
+to accessibility tools. The README now reflects the released workspace and
+Anki setup. See [release details](RELEASE-1.0.19.md). #63 remains open.
+
 ## Release 1.0.18 — minimal workspace foundation (#63)
 
 A collapsible line-icon sidebar replaces the top tabs across the workspace.

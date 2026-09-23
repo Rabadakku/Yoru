@@ -45,13 +45,22 @@ final class DesktopChrome {
         file.add(item("Close vault", KeyStroke.getKeyStroke(KeyEvent.VK_W,key|InputEvent.SHIFT_DOWN_MASK), app::closeVault));
         bar.add(file);
         var edit = new JMenu("Edit");
-        edit.add(textItem("Undo", "yoru.undo", KeyEvent.VK_Z, key, true, false));
-        edit.add(textItem("Redo", "yoru.redo", KeyEvent.VK_Z, key|InputEvent.SHIFT_DOWN_MASK, true, false));
+        edit.add(textItem("Undo", "yoru.undo", KeyEvent.VK_Z, key));
+        edit.add(textItem("Redo", "yoru.redo", KeyEvent.VK_Z, key|InputEvent.SHIFT_DOWN_MASK));
         edit.addSeparator();
-        edit.add(textItem("Cut", DefaultEditorKit.cutAction, KeyEvent.VK_X, key, true, true));
-        edit.add(textItem("Copy", DefaultEditorKit.copyAction, KeyEvent.VK_C, key, false, true));
-        edit.add(textItem("Paste", DefaultEditorKit.pasteAction, KeyEvent.VK_V, key, true, false));
-        edit.add(textItem("Select All", DefaultEditorKit.selectAllAction, KeyEvent.VK_A, key, false, false));
+        edit.add(textItem("Cut", DefaultEditorKit.cutAction, KeyEvent.VK_X, key));
+        edit.add(textItem("Copy", DefaultEditorKit.copyAction, KeyEvent.VK_C, key));
+        edit.add(textItem("Paste", DefaultEditorKit.pasteAction, KeyEvent.VK_V, key));
+        edit.add(textItem("Select All", DefaultEditorKit.selectAllAction, KeyEvent.VK_A, key));
+        edit.addMenuListener(new MenuListener() {
+            public void menuSelected(MenuEvent e) {
+                var focus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getPermanentFocusOwner();
+                updateEditMenu(edit, focus instanceof JTextComponent field ? field : null);
+            }
+            public void menuDeselected(MenuEvent e) { }
+            public void menuCanceled(MenuEvent e) { }
+        });
+        updateEditMenu(edit, null);
         bar.add(edit);
         var view = new JMenu("View");
         view.add(item("Toggle sidebar", KeyStroke.getKeyStroke(KeyEvent.VK_S,key|InputEvent.SHIFT_DOWN_MASK), app::toggleSidebar));
@@ -73,15 +82,22 @@ final class DesktopChrome {
         var item = new JMenuItem(text); item.setAccelerator(shortcut);
         item.addActionListener(e -> action.run()); return item;
     }
-    private static JMenuItem textItem(String text, String action, int code, int mask, boolean writes, boolean exports) {
+    private static JMenuItem textItem(String text, String action, int code, int mask) {
         var item = item(text, KeyStroke.getKeyStroke(code,mask), () -> {
             var focus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getPermanentFocusOwner();
-            if (!(focus instanceof JTextComponent field) || !field.isEnabled() || writes && !field.isEditable()
-                || exports && field instanceof JPasswordField) return;
+            if (!(focus instanceof JTextComponent field) || !TextInput.available(field, action)) return;
             TextInput.support(field);
             var command = field.getActionMap().get(action);
             if (command != null) command.actionPerformed(new ActionEvent(field,ActionEvent.ACTION_PERFORMED,action));
         });
+        item.putClientProperty("text.action", action);
         return item;
+    }
+    static void updateEditMenu(JMenu menu, JTextComponent field) {
+        for (int i = 0; i < menu.getItemCount(); i++) {
+            var item = menu.getItem(i);
+            if (item != null && item.getClientProperty("text.action") instanceof String action)
+                item.setEnabled(TextInput.available(field, action));
+        }
     }
 }

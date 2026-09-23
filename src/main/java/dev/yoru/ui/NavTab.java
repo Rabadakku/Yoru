@@ -2,6 +2,7 @@ package dev.yoru.ui;
 
 import java.awt.*;
 import javax.swing.*;
+import javax.accessibility.*;
 import javax.swing.border.EmptyBorder;
 import static dev.yoru.ui.Theme.*;
 
@@ -28,7 +29,25 @@ final class NavTab extends JButton {
         setRolloverEnabled(true); getModel().addChangeListener(e -> repaint());
         setForeground(TEXT); setAlignmentX(0);
     }
-    void setCurrent(boolean next) { current = next; repaint(); }
+    void setCurrent(boolean next) {
+        boolean previous = current;
+        current = next;
+        if (previous != next && accessibleContext != null)
+            accessibleContext.firePropertyChange(AccessibleContext.ACCESSIBLE_STATE_PROPERTY,
+                previous ? AccessibleState.SELECTED : null, next ? AccessibleState.SELECTED : null);
+        repaint();
+    }
+    @Override public AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) accessibleContext = new AccessibleJButton() {
+            @Override public AccessibleRole getAccessibleRole() { return AccessibleRole.PAGE_TAB; }
+            @Override public AccessibleStateSet getAccessibleStateSet() {
+                var states = super.getAccessibleStateSet();
+                if (current) states.add(AccessibleState.SELECTED);
+                return states;
+            }
+        };
+        return accessibleContext;
+    }
     boolean isCurrent() { return current; }
     @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE, getPreferredSize().height); }
     @Override protected void paintComponent(Graphics graphics) {
