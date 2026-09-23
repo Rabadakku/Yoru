@@ -307,6 +307,8 @@ final class PageEditor extends JPanel {
     // ---------------------------------------------------------------- keys
 
     private void keys() {
+        pane.putClientProperty("yoru.canUndo", (java.util.function.BooleanSupplier) () -> !history.undos.isEmpty());
+        pane.putClientProperty("yoru.canRedo", (java.util.function.BooleanSupplier) () -> !history.redos.isEmpty());
         int menu = TextInput.menuKey();
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menu), "yoru.undo", history::undo);
         bind(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menu | InputEvent.SHIFT_DOWN_MASK), "yoru.redo", history::redo);

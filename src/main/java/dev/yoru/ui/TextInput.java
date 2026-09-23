@@ -128,6 +128,10 @@ final class TextInput {
             group[0].addEdit(edit);
             last[0] = now;
         });
+        field.putClientProperty("yoru.canUndo", (java.util.function.BooleanSupplier) () -> {
+            close.run(); return undo.canUndo();
+        });
+        field.putClientProperty("yoru.canRedo", (java.util.function.BooleanSupplier) undo::canRedo);
         field.getActionMap().put(UNDO, action(() -> { close.run(); if (undo.canUndo()) undo.undo(); else beep(); }));
         field.getActionMap().put(REDO, action(() -> { close.run(); if (undo.canRedo()) undo.redo(); else beep(); }));
         field.getActionMap().put("yoru.deleteLineStart", action(() -> {
@@ -137,6 +141,24 @@ final class TextInput {
                 if (caret > line) field.getDocument().remove(line, caret - line);
             } catch (BadLocationException ignored) { }
         }));
+    }
+
+    /** Availability shared by the native Edit menu and each field's context menu. */
+    static boolean available(JTextComponent field, String action) {
+        if (field == null || !field.isEnabled()) return false;
+        support(field);
+        boolean selected = field.getSelectionStart() != field.getSelectionEnd();
+        return switch (action) {
+            case UNDO, REDO -> {
+                Object check = field.getClientProperty(action.equals(UNDO) ? "yoru.canUndo" : "yoru.canRedo");
+                yield field.isEditable() && check instanceof java.util.function.BooleanSupplier ready && ready.getAsBoolean();
+            }
+            case DefaultEditorKit.cutAction -> field.isEditable() && selected && !(field instanceof JPasswordField);
+            case DefaultEditorKit.copyAction -> selected && !(field instanceof JPasswordField);
+            case DefaultEditorKit.pasteAction -> field.isEditable();
+            case DefaultEditorKit.selectAllAction -> field.getDocument().getLength() > 0;
+            default -> false;
+        };
     }
 
     private static void beep() { Toolkit.getDefaultToolkit().beep(); }
@@ -159,8 +181,8 @@ final class TextInput {
         boolean selection = field.getSelectionStart() != field.getSelectionEnd();
         boolean any = field.getDocument().getLength() > 0;
         var menu = Menus.popup();
-        menu.add(Menus.item("Undo", "text.undo", editable, () -> fire(field, UNDO), "Nothing to undo here"));
-        menu.add(Menus.item("Redo", "text.redo", editable, () -> fire(field, REDO), "Nothing to redo here"));
+        menu.add(Menus.item("Undo", "text.undo", available(field, UNDO), () -> fire(field, UNDO), "Nothing to undo here"));
+        menu.add(Menus.item("Redo", "text.redo", available(field, REDO), () -> fire(field, REDO), "Nothing to redo here"));
         menu.addSeparator();
         menu.add(Menus.item("Cut", "text.cut", editable && selection && !secret, field::cut,
             secret ? "A password is not copied out" : "Select some text first"));

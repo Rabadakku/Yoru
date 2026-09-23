@@ -81,6 +81,11 @@ public final class TextInputTest {
         var own = editor.pane().getActionMap().get("yoru.undo");
         TextInput.support(editor.pane());
         check(editor.pane().getActionMap().get("yoru.undo") == own, "the page editor keeps the undo it built for itself");
+        check(!TextInput.available(editor.pane(), "yoru.undo"), "a fresh page has no undo command");
+        editor.pane().setText("A draft");
+        check(TextInput.available(editor.pane(), "yoru.undo"), "the native menu sees page editor history");
+        own.actionPerformed(null);
+        check(TextInput.available(editor.pane(), "yoru.redo"), "the native menu sees page editor redo");
         editor.stop();
 
         // The right-click menu offers what the keyboard can do, and a password

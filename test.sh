@@ -92,6 +92,7 @@ public final class ModuleUiCheck {
         SwingUtilities.invokeAndWait(() -> {
             Theme.install();
             if (new JComboBox<>().getUI() == null) throw new RuntimeException("ComboBoxUI is null in the module build");
+            if (!(new JScrollBar().getUI() instanceof Theme.QuietScrollBarUI)) throw new RuntimeException("ScrollBarUI is unavailable in the module build");
             if (new JCheckBox("x").getUI() == null) throw new RuntimeException("CheckBoxUI is null in the module build");
         });
         System.out.println("PASS: module UI delegates load reflectively (dev.yoru.ui is reachable)");

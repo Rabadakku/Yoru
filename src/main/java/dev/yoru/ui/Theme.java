@@ -315,7 +315,7 @@ final class Theme {
         // Metal's combo, scrollbar and button delegates paint their own chrome and
         // ignore the colours above. The Basic delegates are flat and honour them.
         UIManager.put("ComboBoxUI", FlatComboBoxUI.class.getName());
-        UIManager.put("ScrollBarUI", javax.swing.plaf.basic.BasicScrollBarUI.class.getName());
+        UIManager.put("ScrollBarUI", QuietScrollBarUI.class.getName());
         UIManager.put("ButtonUI", javax.swing.plaf.basic.BasicButtonUI.class.getName());
         UIManager.put("SliderUI", FlatSliderUI.class.getName());
         UIManager.put("Button.gradient", null);
@@ -1488,6 +1488,7 @@ final class Theme {
             // Stops the UI delegate painting a background; text is still drawn by super.
             super.setContentAreaFilled(false);
             setFocusPainted(false);
+            setRolloverEnabled(true);
             setOpaque(false);
             getModel().addChangeListener(e -> repaint());
         }
@@ -1546,6 +1547,37 @@ final class Theme {
         return new Color(clamp(base.getRed()+delta),clamp(base.getGreen()+delta),clamp(base.getBlue()+delta));
     }
     private static int clamp(int channel) { return Math.max(0,Math.min(255,channel)); }
+
+    /** A small rounded thumb, with no decorative arrow buttons or track bevels. */
+    public static final class QuietScrollBarUI extends javax.swing.plaf.basic.BasicScrollBarUI {
+        public static javax.swing.plaf.ComponentUI createUI(JComponent c) { return new QuietScrollBarUI(); }
+        @Override protected JButton createDecreaseButton(int orientation) { return arrow(); }
+        @Override protected JButton createIncreaseButton(int orientation) { return arrow(); }
+        private JButton arrow() {
+            var button = new JButton();
+            button.setPreferredSize(new Dimension(0, 0));
+            button.setMinimumSize(new Dimension(0, 0));
+            button.setMaximumSize(new Dimension(0, 0));
+            button.setFocusable(false);
+            return button;
+        }
+        @Override protected void paintTrack(Graphics g, JComponent c, Rectangle bounds) { }
+        @Override protected void paintThumb(Graphics graphics, JComponent c, Rectangle bounds) {
+            if (!c.isEnabled() || bounds.isEmpty()) return;
+            var g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(isDragging || isThumbRollover() ? MUTED : shade(LINE, DARK ? 18 : -18));
+            int inset = 2;
+            if (scrollbar.getOrientation() == Adjustable.VERTICAL)
+                g.fillRoundRect(bounds.x + inset, bounds.y, Math.max(2, bounds.width - inset * 2), bounds.height, 8, 8);
+            else g.fillRoundRect(bounds.x, bounds.y + inset, bounds.width, Math.max(2, bounds.height - inset * 2), 8, 8);
+            g.dispose();
+        }
+        @Override protected void setThumbRollover(boolean active) {
+            super.setThumbRollover(active);
+            if (scrollbar != null) scrollbar.repaint();
+        }
+    }
 
     static JButton button(String text,Runnable fn) {
         var b=new FlatButton(text);

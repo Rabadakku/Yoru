@@ -406,23 +406,41 @@ final class PagesPage {
         for (var tab : open.values()) {
             var page = notes().page(tab.id).orElse(null);
             if (page == null) continue;
-            var row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            boolean active = tab.id.equals(selected);
+            Color ground = active ? shade(PANEL, DARK ? 14 : -9) : PANEL;
+            var row = new JPanel(new BorderLayout()) {
+                @Override protected void paintComponent(Graphics graphics) {
+                    var g = (Graphics2D) graphics.create();
+                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g.setColor(ground);
+                    g.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                    g.dispose();
+                }
+            };
             row.setOpaque(false);
             var pill = button(page.title(), () -> { if (flush()) open(tab.id); });
             pill.setName("pages.tab." + tab.id);
             pill.setFont(labelFont());
             pill.setToolTipText(page.title());
-            pill.setBorder(new EmptyBorder(SPACE_XS, SPACE_SM, SPACE_XS, SPACE_XS));
-            selected(pill, tab.id.equals(selected));
+            pill.setForeground(active ? TEXT : MUTED);
+            pill.setBorder(new EmptyBorder(SPACE_SM, SPACE_MD, SPACE_SM, SPACE_SM));
+            pill.setContentAreaFilled(false);
+            // Keep the full title in the tooltip and accessible name while Swing
+            // elides the visible caption, leaving the close control reachable.
+            pill.getAccessibleContext().setAccessibleName(page.title());
+            Dimension natural = pill.getPreferredSize();
+            pill.setPreferredSize(new Dimension(Math.min(grow(200), natural.width), natural.height));
             var close = button("×", () -> { if (flush()) { selectQuietly(tab.id); closeTab(); } });
             close.setName("pages.tab.close." + tab.id);
             close.setFont(labelFont());
             close.setToolTipText("Close " + page.title());
             close.getAccessibleContext().setAccessibleName("Close " + page.title());
-            close.setBorder(new EmptyBorder(SPACE_XS, 0, SPACE_XS, SPACE_SM));
-            selected(close, tab.id.equals(selected));
-            row.add(pill);
-            row.add(close);
+            close.setBackground(ground);
+            close.setForeground(MUTED);
+            close.setBorder(new EmptyBorder(SPACE_SM, SPACE_SM, SPACE_SM, SPACE_SM));
+            close.setPreferredSize(new Dimension(grow(28), natural.height));
+            row.add(pill, BorderLayout.CENTER);
+            row.add(close, BorderLayout.EAST);
             tabStrip.add(row);
         }
         tabStrip.setVisible(!open.isEmpty());
