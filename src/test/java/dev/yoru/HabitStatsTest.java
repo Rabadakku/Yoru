@@ -79,6 +79,22 @@ public final class HabitStatsTest {
         var all = HabitStats.sinceTheStart(month, TODAY);
         check(all.done() == 26 && all.of() == 40, "since the start counts every day since, got " + all);
 
-        System.out.println("PASS: " + checks + " habit consistency checks (windows, an unfinished today, week starts, best run)");
+        // Across a month's end: the window is days, not calendar months.
+        var march = LocalDate.parse("2026-03-10");
+        var overFebruary = daily(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-02-27"), LocalDate.parse("2026-02-28"),
+            LocalDate.parse("2026-03-01"), LocalDate.parse("2026-03-02"));
+        var february = HabitStats.lastDays(overFebruary, march, 14);
+        check(february.of() == 14 && february.done() == 4,
+            "fourteen days back from the 10th of March cross February's end and count its last days, got " + february);
+
+        // Across the night the clocks change: still one day each, in the habit's own zone.
+        var springForward = new Habit(UUID.randomUUID(), "Stretch", HabitKind.DAILY, "America/New_York",
+            new HashSet<>(Set.of(LocalDate.parse("2026-03-07"), LocalDate.parse("2026-03-08"), LocalDate.parse("2026-03-09"))),
+            List.of(), LocalDate.parse("2026-03-01"));
+        var dst = HabitStats.lastDays(springForward, LocalDate.parse("2026-03-10"), 30);
+        check(dst.of() == 9 && dst.done() == 3, "the day the clocks go forward is one day like any other, got " + dst);
+        check(springForward.streak(LocalDate.parse("2026-03-09")) == 3, "and a streak runs straight through it");
+
+        System.out.println("PASS: " + checks + " habit consistency checks (windows, an unfinished today, week starts, best run, month ends, daylight saving)");
     }
 }

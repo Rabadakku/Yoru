@@ -191,6 +191,11 @@ public final class LegacyVaultTest {
                 "A schema 13 vault keeps its activity");
             check(loaded.sessions().size()==1&&loaded.sessions().getFirst().seconds(null)==3600,"and its session");
             check(loaded.habits().size()==1,"and its habit");
+            // Before schema 17 a habit had no beginning: it takes its first
+            // check-off, since it cannot have been kept before that (#55).
+            var habit=loaded.habits().getFirst();
+            var first=habit.checkIns().stream().min(LocalDate::compareTo);
+            check(first.map(habit.since()::equals).orElse(true),"and the habit begins on its first check-off: "+habit.since()+" for "+first);
             var task=loaded.tasks().getFirst();
             check(task.title().equals("Read chapter 4")&&task.status()==TaskStatus.DOING&&task.order()==2,
                 "and its task, status and order");
