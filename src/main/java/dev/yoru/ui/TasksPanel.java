@@ -92,6 +92,7 @@ final class TasksPanel extends JPanel implements Scrollable {
     private final JPanel rail=new JPanel();
     private JButton dropOn;
     private JComponent tabsRow, toolsRow;
+    private final JLabel inboxHelp = wrapping(TaskLists.INBOX_HELP, TYPE_CAPTION, MUTED);
     private JComboBox<Sort> order;
     /** Set while the page puts a place's saved search back, so the field's own listener does not rebuild twice. */
     private boolean restoring;
@@ -174,6 +175,8 @@ final class TasksPanel extends JPanel implements Scrollable {
         // Today's daily habits are checked off here too, as a place of their
         // own on the rail, rather than on the page that shows how they are
         // going (#54, #56).
+        inboxHelp.setName("tasks.inbox.help");
+        board.add(inboxHelp);
         board.add(rows);gap(board,SPACE_MD);
         rail.setName("tasks.rail");
         p.add(new TaskLists.Rail(rail,board));
@@ -252,6 +255,7 @@ final class TasksPanel extends JPanel implements Scrollable {
 
     private void rebuildRows() {
         String place=place();
+        inboxHelp.setVisible(TaskLists.INBOX.equals(place));
         state.view=view; state.sort=sort; state.month=month; state.query=search.getText();
         clearSearch.setEnabled(!search.getText().isEmpty());
         rows.removeAll();

@@ -1,5 +1,22 @@
 # Yoru roadmap
 
+## In review — text shortcuts and Inbox guidance
+
+On `codex/task-details`, from 1.0.21. For #49, Pages now receives the shared
+Command-Delete action without replacing its own undo history. Shared deletion,
+undo and redo obey read-only and disabled fields; deletion respects a selection.
+`TextInputTest` reproduces the missing Pages action before the fix and covers
+all six component types with simulated Mac clipboard bindings. It now passes
+95 checks. Inbox explains that it contains tasks without a list, both in the
+selected view and through its tooltip and accessibility description.
+
+Validation: full isolated suite and named-module check pass; Inbox renders
+reviewed in all five themes at 100% and 200% text. No vault schema changes.
+The real Mac keyboard/clipboard acceptance for #49 remains open: desktop input
+automation did not deliver input to the synthetic Java window, so no native
+shortcut pass is claimed. `DesktopTextInputCheck` supplies an opt-in synthetic
+window for that remaining check; it never opens a vault.
+
 ## Release 1.0.21 — lists, tags, repeating tasks and a pomodoro
 
 Built on `claude/task-tags` and `claude/pomodoro` from 1.0.20 (PRs #97, #98).

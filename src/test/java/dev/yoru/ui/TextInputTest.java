@@ -46,6 +46,15 @@ public final class TextInputTest {
 
         // The Mac's own navigation, asked for as if this were a Mac.
         TextInput.shortcuts(InputEvent.META_DOWN_MASK);
+        for (String kind : new String[]{"TextField", "PasswordField", "FormattedTextField", "TextArea", "TextPane", "EditorPane"}) {
+            var macMap = (InputMap) UIManager.get(kind + ".focusInputMap");
+            int[] keys = {KeyEvent.VK_C, KeyEvent.VK_V, KeyEvent.VK_X, KeyEvent.VK_A, KeyEvent.VK_Z};
+            String[] actions = {DefaultEditorKit.copyAction, DefaultEditorKit.pasteAction,
+                DefaultEditorKit.cutAction, DefaultEditorKit.selectAllAction, "yoru.undo"};
+            for (int i = 0; i < keys.length; i++)
+                check(actions[i].equals(macMap.get(KeyStroke.getKeyStroke(keys[i], InputEvent.META_DOWN_MASK))),
+                    kind + " has the Mac shortcut for " + actions[i]);
+        }
         var field = (InputMap) UIManager.get("TextField.focusInputMap");
         check(DefaultEditorKit.beginLineAction.equals(field.get(
             KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, InputEvent.META_DOWN_MASK))), "Cmd-left goes to the start of the line");
@@ -86,7 +95,39 @@ public final class TextInputTest {
         check(TextInput.available(editor.pane(), "yoru.undo"), "the native menu sees page editor history");
         own.actionPerformed(null);
         check(TextInput.available(editor.pane(), "yoru.redo"), "the native menu sees page editor redo");
+        editor.load("First line\nSecond line");
+        editor.pane().setCaretPosition(editor.pane().getDocument().getLength());
+        var deleteLine = editor.pane().getActionMap().get("yoru.deleteLineStart");
+        check(deleteLine != null, "Pages has the shared Cmd-delete action as well as its own undo");
+        deleteLine.actionPerformed(null);
+        check(editor.pane().getText().equals("First line\n"), "Cmd-delete removes only the current line in Pages");
+        own.actionPerformed(null);
+        check(editor.pane().getText().equals("First line\nSecond line"), "Pages can undo line deletion with its own history");
         editor.stop();
+
+        // Keyboard actions must obey the same editability rules as the menus.
+        var protectedText = new JTextArea("Keep this text");
+        TextInput.support(protectedText);
+        protectedText.setCaretPosition(protectedText.getDocument().getLength());
+        protectedText.setEditable(false);
+        protectedText.getActionMap().get("yoru.deleteLineStart").actionPerformed(null);
+        check(protectedText.getText().equals("Keep this text"), "Cmd-delete cannot change read-only text");
+        protectedText.setEditable(true);
+        protectedText.setEnabled(false);
+        protectedText.getActionMap().get("yoru.deleteLineStart").actionPerformed(null);
+        check(protectedText.getText().equals("Keep this text"), "Cmd-delete cannot change disabled text");
+        protectedText.setEnabled(true);
+        protectedText.select(5, 9);
+        protectedText.getActionMap().get("yoru.deleteLineStart").actionPerformed(null);
+        check(protectedText.getText().equals("Keep  text"), "Cmd-delete replaces an active selection");
+        protectedText.setEditable(false);
+        protectedText.getActionMap().get("yoru.undo").actionPerformed(null);
+        check(protectedText.getText().equals("Keep  text"), "Undo cannot change a read-only field");
+        protectedText.setEditable(true);
+        protectedText.getActionMap().get("yoru.undo").actionPerformed(null);
+        protectedText.setEditable(false);
+        protectedText.getActionMap().get("yoru.redo").actionPerformed(null);
+        check(protectedText.getText().equals("Keep this text"), "Redo cannot change a read-only field");
 
         // The right-click menu offers what the keyboard can do, and a password
         // field lends its text to nobody.

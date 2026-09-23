@@ -104,6 +104,23 @@ final class TextInput {
     static void support(JTextComponent field) {
         if (field.getClientProperty(READY) != null) return;
         field.putClientProperty(READY, Boolean.TRUE);
+        // Navigation actions belong to every editor, including Pages, which
+        // supplies its own undo history below.
+        field.getActionMap().put("yoru.deleteLineStart", action(() -> {
+            if (!field.isEditable() || !field.isEnabled()) return;
+            if (field.getSelectionStart() != field.getSelectionEnd()) {
+                field.replaceSelection("");
+                return;
+            }
+            try {
+                int caret = field.getCaretPosition();
+                int line = field.getText(0, caret).lastIndexOf('\n') + 1;
+                if (caret > line) field.getDocument().remove(line, caret - line);
+            } catch (BadLocationException staleCaret) {
+                // No edit was made if the caret no longer belongs to the document.
+                beep();
+            }
+        }));
         // A component that keeps its own history — the page editor, whose
         // restyling makes the document's own edits unsafe — keeps it.
         if (field.getActionMap().get(UNDO) != null) return;
@@ -132,14 +149,15 @@ final class TextInput {
             close.run(); return undo.canUndo();
         });
         field.putClientProperty("yoru.canRedo", (java.util.function.BooleanSupplier) undo::canRedo);
-        field.getActionMap().put(UNDO, action(() -> { close.run(); if (undo.canUndo()) undo.undo(); else beep(); }));
-        field.getActionMap().put(REDO, action(() -> { close.run(); if (undo.canRedo()) undo.redo(); else beep(); }));
-        field.getActionMap().put("yoru.deleteLineStart", action(() -> {
-            try {
-                int caret = field.getCaretPosition();
-                int line = field.getText(0, caret).lastIndexOf('\n') + 1;
-                if (caret > line) field.getDocument().remove(line, caret - line);
-            } catch (BadLocationException ignored) { }
+        field.getActionMap().put(UNDO, action(() -> {
+            if (!field.isEditable() || !field.isEnabled()) return;
+            close.run();
+            if (undo.canUndo()) undo.undo(); else beep();
+        }));
+        field.getActionMap().put(REDO, action(() -> {
+            if (!field.isEditable() || !field.isEnabled()) return;
+            close.run();
+            if (undo.canRedo()) undo.redo(); else beep();
         }));
     }
 

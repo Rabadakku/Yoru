@@ -65,6 +65,20 @@ find src/test/java -name '*.java' > build/tests.txt
 javac --release 21 -encoding UTF-8 -cp build/classes -d build/classes @build/tests.txt
 ```
 
+For a native keyboard and clipboard check on a desktop, after compiling tests:
+
+```bash
+java -Djava.util.prefs.PreferencesFactory=dev.yoru.ui.TestPreferencesFactory \
+  -cp build/classes dev.yoru.ui.DesktopTextInputCheck
+```
+
+This opt-in window provides synthetic task, habit, search, password, date,
+spinner, combo, notes, Pages and dialog inputs. Verify the platform's select-all,
+copy, cut, paste, undo and redo shortcuts and the right-click menu in each field.
+Passwords must accept paste and refuse copy/cut. In Pages, also check
+Command-Delete and undo. It never opens a vault and restores the clipboard when
+the window closes. The ordinary test suite stays headless.
+
 **Look at the PNGs.** A contrast regression shipped once because the preview
 only covered pages and not dialogs, and `JOptionPane` builds its own buttons
 that bypass the theme helpers entirely.
