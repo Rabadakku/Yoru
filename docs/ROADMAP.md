@@ -1,5 +1,26 @@
 # Yoru roadmap
 
+## Release 1.0.21 — lists, tags, repeating tasks and a pomodoro
+
+Built on `claude/task-tags` and `claude/pomodoro` from 1.0.20 (PRs #97, #98).
+See [release details](RELEASE-1.0.21.md).
+
+- **#66 tags:** `Task.tagIds`, schema 18, export format 7. `TagField` in the
+  form and on the row; a new tag is saved with its task (`Tracker.saveTask`).
+- **#56 lists:** `TaskList` and `Task.listId`, schema 19, format 8. The rail
+  (`TaskLists`), per-list view state, Move to and drag onto a list, and reorders
+  confined to their own list. Not done: #56's optional Notion column-to-list
+  mapping; Today and Upcoming are the Due today and Next 5 days views in each
+  list rather than rail entries.
+- **#57 repeats:** `Repeat` and `Occurrence`, schema 20, format 9. Dates are
+  worked out in `application.Repeats` and never stored; the task's due date is
+  the occurrence in front of it.
+- **#61 pomodoro:** `application.Pomodoro` for the timing, `PomodoroClock` for
+  the window, `Cues` for sounds made from tones. Settings are per computer. Not
+  done: a system notification (the Dock bounces instead; #77's menu bar extra
+  is the place for one) and the ring, which waits on #62's design.
+- #62 needs the owner to choose among timer concepts before it is built.
+
 ## Release 1.0.20 — habits at a glance, and open tickets closed out
 
 On `claude/close-tickets`, from 1.0.19. Tickets whose work had reached main

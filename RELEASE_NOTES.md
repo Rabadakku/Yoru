@@ -1,3 +1,10 @@
+# v1.0.21 — Lists, tags, repeating tasks and a pomodoro
+
+Task lists with a rail beside the board, several tags a task made as you type,
+repeating tasks that stay one task with a history, and a pomodoro on Today with
+its own sounds. See [release details](docs/RELEASE-1.0.21.md). The vault moves
+to schema 20; older vaults open with nothing lost.
+
 # v1.0.20 — Habits at a glance
 
 Each habit is one line, so a page of them fits on the screen; habits tick off
