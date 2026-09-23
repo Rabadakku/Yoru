@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=18, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=19, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -244,6 +244,9 @@ public final class EncryptedVault implements Repository {
                     if (task.plannedFor() != null) out.writeLong(task.plannedFor().toEpochDay());
                     out.writeInt(task.pageIds().size());
                     for (var page : task.pageIds()) uuid(out, page);
+                    // Schema 19: the list the task is filed in, or none for the Inbox (#56).
+                    out.writeBoolean(task.listId() != null);
+                    if (task.listId() != null) uuid(out, task.listId());
                 }
                 out.writeInt(state.habits().size());
                 for(var h:state.habits()) {
@@ -299,6 +302,11 @@ public final class EncryptedVault implements Repository {
                         out.writeLong(day.getValue());
                     }
                     instant(out, anki.last().fetchedAt());
+                }
+                // Schema 19: the task lists, after everything older schemas held (#56).
+                out.writeInt(state.lists().size());
+                for (var list : state.lists()) {
+                    uuid(out, list.id()); out.writeUTF(list.name()); out.writeInt(list.colour()); out.writeInt(list.order());
                 }
             }
             if(bytes.size()>31_000_000)throw new IOException("Vault is too large.");
@@ -402,7 +410,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 18.
+     * Reads any schema from 1 to 19.
      *
      * Every field older vaults lack arrives as a sensible empty, and everything
      * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
@@ -500,7 +508,9 @@ public final class EncryptedVault implements Repository {
                     // Schema 14 linked tasks to pages; before it, none were.
                     var pages=new ArrayList<UUID>();
                     if(schema>=14) for(int p=count(in);p>0;p--) pages.add(uuid(in));
-                    tasks.add(new Task(id,activity,tags,title,notes,due,status,source,created,order,planned,pages));
+                    // Schema 19 filed tasks in lists; before it every task was in the Inbox.
+                    var list=schema>=19&&in.readBoolean()?uuid(in):null;
+                    tasks.add(new Task(id,activity,tags,title,notes,due,status,source,created,order,planned,pages,list));
                 }
                 if (schema <= 10) skipLegacyCollection(in, schema);
             }
@@ -583,8 +593,11 @@ public final class EncryptedVault implements Repository {
                 }
                 anki=new Anki(on,key,addsTime,refresh,last);
             }
+            // Schema 19: the task lists (#56).
+            var lists=new ArrayList<TaskList>();
+            if(schema>=19) for(int n=count(in);n>0;n--) lists.add(new TaskList(uuid(in),in.readUTF(),in.readInt(),in.readInt()));
             if(in.available()!=0)throw new IOException("Unexpected vault content.");
-            return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,new Notes(folders,pages),anki);
+            return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,new Notes(folders,pages),anki,lists);
         }
         catch(RuntimeException e) {
             throw new IOException("Invalid vault data.",e);

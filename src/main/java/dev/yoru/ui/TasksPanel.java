@@ -56,11 +56,27 @@ final class TasksPanel extends JPanel implements Scrollable {
     private final JPanel rows=stack();
     private final JLabel summary=label("",TYPE_CAPTION,MUTED);
     private final Map<View,JButton> viewButtons=new EnumMap<>(View.class);
+    /**
+     * What the page is showing, kept while the page is rebuilt: the place on
+     * the rail, and for each place the view, sort, month and search it was
+     * left with (#56), so a list keeps its own board or calendar.
+     */
     static final class ViewState {
+        String scope=TaskLists.ALL;
         View view=View.ALL;
         Sort sort=Sort.MANUAL;
         YearMonth month=YearMonth.now();
         String query="";
+        private final Map<String,Saved> saved=new HashMap<>();
+        private record Saved(View view,Sort sort,YearMonth month,String query) { }
+        /** Keeps the current place's filters, then takes up another place's, or a fresh board. */
+        void enter(String next) {
+            saved.put(scope,new Saved(view,sort,month,query));
+            scope=next;
+            var back=saved.get(next);
+            view=back==null?View.ALL:back.view(); sort=back==null?Sort.MANUAL:back.sort();
+            month=back==null?YearMonth.now():back.month(); query=back==null?"":back.query();
+        }
     }
     private final ViewState state;
     private final JTextField search=styleInput(new JTextField(24));
@@ -71,6 +87,14 @@ final class TasksPanel extends JPanel implements Scrollable {
     private final JPanel sortControls=new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_SM,0));
     private final List<JPanel> rowPanels=new ArrayList<>();
     private int dragFrom=-1, dragTo=-1;
+    /** The rail's entries a dragged task can be dropped on, and the one it is over. */
+    private final List<JButton> railEntries=new ArrayList<>();
+    private final JPanel rail=new JPanel();
+    private JButton dropOn;
+    private JComponent tabsRow, toolsRow;
+    private JComboBox<Sort> order;
+    /** Set while the page puts a place's saved search back, so the field's own listener does not rebuild twice. */
+    private boolean restoring;
 
     TasksPanel(Tracker tracker, Runnable refresh, BooleanSupplier closed) {
         this(tracker,refresh,closed,new ViewState());
@@ -82,6 +106,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         this.state=state;
         view=state.view; sort=state.sort; month=state.month;
         var p=stack();
+        var board=stack();
         // The one thing this page makes sits on its title's line; the views and
         // the tools that refine them follow, two rows where there were three.
         var create=accentButton("New task",()->edit(null));
@@ -98,14 +123,15 @@ final class TasksPanel extends JPanel implements Scrollable {
         }
         // What the list is showing belongs beside the views that decide it, and
         // folds under them at the window's minimum rather than running off it.
-        p.add(splitRow(tabs,summary));gap(p,SPACE_MD);
+        tabsRow=splitRow(tabs,summary);
+        board.add(tabsRow);gap(board,SPACE_MD);
 
-        var order=plainCombo(new JComboBox<>(Sort.values()));
+        order=plainCombo(new JComboBox<>(Sort.values()));
         order.setName("task.sort");
         // One control height for the app; the width is this control's own.
         order.setPreferredSize(new Dimension(grow(SPACE_XXL*4),controlHeight()));
         order.setSelectedItem(sort);
-        order.addActionListener(e->{sort=(Sort)order.getSelectedItem();rebuildRows();});
+        order.addActionListener(e->{if(restoring)return;sort=(Sort)order.getSelectedItem();rebuildRows();});
         sortControls.setOpaque(false);
         sortControls.add(label("Sort",TYPE_CAPTION,MUTED));
         sortControls.add(order);
@@ -139,18 +165,18 @@ final class TasksPanel extends JPanel implements Scrollable {
             public void actionPerformed(java.awt.event.ActionEvent e) { search.setText(""); }
         });
         search.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { rebuildRows(); }
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { if(!restoring)rebuildRows(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { if(!restoring)rebuildRows(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { if(!restoring)rebuildRows(); }
         });
-        p.add(tools);gap(p,SPACE_MD);
-        p.add(rows);gap(p,SPACE_MD);
-        // Today's daily habits are checked off here, with the tasks, rather than
-        // on the page that shows how they are going (#54).
-        if(tracker.state().habits().stream().anyMatch(h->h.kind()==HabitKind.DAILY)) {
-            p.add(HabitChecklist.card(tracker,refresh,this::error));
-            gap(p,SPACE_MD);
-        }
+        toolsRow=tools;
+        board.add(tools);gap(board,SPACE_MD);
+        // Today's daily habits are checked off here too, as a place of their
+        // own on the rail, rather than on the page that shows how they are
+        // going (#54, #56).
+        board.add(rows);gap(board,SPACE_MD);
+        rail.setName("tasks.rail");
+        p.add(new TaskLists.Rail(rail,board));
         add(p,BorderLayout.NORTH);
         rebuildRows();
     }
@@ -166,7 +192,8 @@ final class TasksPanel extends JPanel implements Scrollable {
 
     private List<Task> visible() {
         var today=LocalDate.now();
-        var filtered=tracker.state().tasks().stream().filter(t->switch(view) {
+        String place=state.scope;
+        var filtered=tracker.state().tasks().stream().filter(t->TaskLists.holds(place,t)).filter(t->switch(view) {
             case ALL->true;
             // Filtered on the day you mean to work on it, not the deadline. That
             // is the question these views answer: what am I doing today.
@@ -203,18 +230,48 @@ final class TasksPanel extends JPanel implements Scrollable {
 
     private boolean reorderable() { return sort==Sort.MANUAL&&view==View.ALL&&search.getText().isBlank(); }
 
+    /** The place on the rail the page is showing, or All when a list has been deleted from under it. */
+    private String place() {
+        if(!TaskLists.exists(tracker.state(),state.scope)) state.scope=TaskLists.ALL;
+        return state.scope;
+    }
+
+    /** Shows another place on the rail, with the view and search it was last left with. */
+    void showPlace(String place) {
+        state.view=view; state.sort=sort; state.month=month; state.query=search.getText();
+        state.enter(place);
+        view=state.view; sort=state.sort; month=state.month;
+        restoring=true;
+        try { search.setText(state.query); order.setSelectedItem(sort); }
+        finally { restoring=false; }
+        rebuildRows();
+    }
+
+    /** The list a new task is filed in: the one on screen, or none for the Inbox. */
+    private UUID newTaskList() { return TaskLists.listOf(place()); }
+
     private void rebuildRows() {
+        String place=place();
         state.view=view; state.sort=sort; state.month=month; state.query=search.getText();
         clearSearch.setEnabled(!search.getText().isEmpty());
         rows.removeAll();
         rowPanels.clear();
+        TaskLists.fill(rail,tracker,place,this::showPlace,this::rebuildRows,railEntries);
+        boolean habits=place.equals(TaskLists.HABITS);
+        tabsRow.setVisible(!habits);
+        toolsRow.setVisible(!habits);
+        if(habits) {
+            rows.add(HabitChecklist.card(tracker,()->{refresh.run();},this::error));
+            rows.revalidate();rows.repaint();revalidate();repaint();
+            return;
+        }
         viewButtons.forEach((value,b)->tab(b,value==view));
         // The calendar is ordered by date. Offering a sort there would be a
         // control that silently does nothing.
         sortControls.setVisible(view!=View.CALENDAR);
         var tasks=visible();
         int open=(int)tracker.state().tasks().stream().filter(t->t.status()!=TaskStatus.DONE).count();
-        summary.setText(tasks.size()+" shown · "+open+" open · "+tracker.state().tasks().size()+" total"
+        summary.setText(TaskLists.name(tracker.state(),place)+" · "+tasks.size()+" shown · "+open+" open · "+tracker.state().tasks().size()+" total"
             +(view==View.CALENDAR?" · drag a task onto a day to move it"
                 :reorderable()?"":" · reorder in All with search cleared"));
         if(view==View.CALENDAR) { buildCalendar(); return; }
@@ -431,7 +488,7 @@ final class TasksPanel extends JPanel implements Scrollable {
                 if(menu!=null) menu.show(e.getComponent(),e.getX(),e.getY());
             }
         });
-        if(reorderable()) installDrag(line,tasks,index);
+        installDrag(line,tasks,index);
         return line;
     }
 
@@ -518,6 +575,9 @@ final class TasksPanel extends JPanel implements Scrollable {
     /**
      * Pointer drag to reorder (#23), alongside Move up and Move down rather than
      * instead of them: the menu is keyboard reachable and is what a headless test drives.
+     * Dropped on a list on the rail, the task is filed there instead (#56), the
+     * way Move to in its menu does it; that works in any view, while
+     * reordering needs the unfiltered board in My order.
      *
      * Listeners go on the row and on its non-interactive children, because Swing
      * delivers to the deepest component under the cursor and does not walk up —
@@ -525,14 +585,18 @@ final class TasksPanel extends JPanel implements Scrollable {
      * checkbox consume their own presses, so pressing one does not start a drag.
      */
     private void installDrag(JPanel line,List<Task> tasks,int index) {
+        boolean reorder=reorderable();
         install(line,new MouseAdapter() {
             @Override public void mousePressed(MouseEvent e) {
                 dragFrom=index; dragTo=index;
             }
             @Override public void mouseDragged(MouseEvent e) {
                 if(dragFrom<0) return;
-                var inTable=SwingUtilities.convertPoint((Component)e.getSource(),e.getPoint(),line.getParent());
-                dragTo=slotAt(inTable.y);
+                var source=(Component)e.getSource();
+                aim(railEntryAt(source,e.getPoint()));
+                if(!reorder) return;
+                var inTable=SwingUtilities.convertPoint(source,e.getPoint(),line.getParent());
+                dragTo=dropOn!=null?dragFrom:slotAt(inTable.y);
                 for(int i=0;i<rowPanels.size();i++)
                     rowPanels.get(i).setBorder(i==dragTo&&dragTo!=dragFrom?insertionBorder():restingBorder());
                 line.getParent().repaint();
@@ -541,10 +605,37 @@ final class TasksPanel extends JPanel implements Scrollable {
                 if(dragFrom<0) return;
                 int from=dragFrom, to=dragTo;
                 dragFrom=-1; dragTo=-1;
-                if(to<0||to==from) { rowPanels.forEach(row->row.setBorder(restingBorder())); return; }
+                var target=railEntryAt((Component)e.getSource(),e.getPoint());
+                aim(null);
+                if(target!=null) {
+                    String key=(String)target.getClientProperty(TaskLists.TARGET);
+                    var task=tasks.get(from);
+                    var list=TaskLists.listOf(key);
+                    if(!Objects.equals(list,task.listId())) { moveToList(task,list); return; }
+                }
+                if(!reorder||to<0||to==from) { rowPanels.forEach(row->row.setBorder(restingBorder())); return; }
                 moveTo(tasks,from,to);
             }
         });
+    }
+
+    /** The rail entry a task dragged to {@code at} would be filed in, or null; All is not a place to file a task. */
+    private JButton railEntryAt(Component source,Point at) {
+        for(var entry:railEntries) {
+            if(!entry.isShowing()&&entry.getWidth()==0) continue;
+            if(TaskLists.ALL.equals(entry.getClientProperty(TaskLists.TARGET))) continue;
+            var inside=SwingUtilities.convertPoint(source,at,entry);
+            if(entry.contains(inside)) return entry;
+        }
+        return null;
+    }
+
+    /** Rings the entry a task would be dropped on, and only that one. */
+    private void aim(JButton entry) {
+        if(entry==dropOn) return;
+        if(dropOn!=null) { dropOn.putClientProperty(TaskLists.DROP,null); dropOn.repaint(); }
+        dropOn=entry;
+        if(entry!=null) { entry.putClientProperty(TaskLists.DROP,Boolean.TRUE); entry.repaint(); }
     }
 
     private static void install(Component component,MouseAdapter handler) {
@@ -570,7 +661,23 @@ final class TasksPanel extends JPanel implements Scrollable {
         var ids=new ArrayList<>(tasks.stream().map(Task::id).toList());
         var moved=ids.remove(from);
         ids.add(Math.max(0,Math.min(ids.size(),to)),moved);
-        try{tracker.reorderTasks(ids);rebuildRows();}catch(Exception e){error(e);}
+        try{tracker.reorderTasks(everywhere(ids));rebuildRows();}catch(Exception e){error(e);}
+    }
+
+    /**
+     * A new order for the tasks on screen, as a new order for every task.
+     *
+     * Manual order is one total order over every task, and a list shows only
+     * some of them. The ones on screen swap among the places they already hold
+     * in it, and every other task keeps its place, so reordering a list never
+     * shuffles the tasks in another (#56).
+     */
+    List<UUID> everywhere(List<UUID> shown) {
+        var all=tracker.state().tasks().stream()
+            .sorted(Comparator.comparingInt(Task::order).thenComparing(Task::createdAt)).map(Task::id).toList();
+        var onScreen=new HashSet<>(shown);
+        var next=shown.iterator();
+        return all.stream().map(id->onScreen.contains(id)?next.next():id).toList();
     }
 
     private JLabel due(Task task) {
@@ -683,6 +790,13 @@ final class TasksPanel extends JPanel implements Scrollable {
             }, null));
         });
         menu.addSeparator();
+        // Filing it elsewhere (#56): the Inbox and every list, the one it is in greyed.
+        menu.add(Menus.item("Move to Inbox","task.moveTo."+TaskLists.INBOX+"."+id,task.listId()!=null,
+            ()->moveToList(task,null),"Already in the Inbox"));
+        for(var list:TaskLists.ordered(tracker.state()))
+            menu.add(Menus.item("Move to "+list.name(),"task.moveTo."+list.id()+"."+id,!list.id().equals(task.listId()),
+                ()->moveToList(task,list.id()),"Already in "+list.name()));
+        menu.addSeparator();
         String why="Reordering needs the All view in My order with search cleared";
         menu.add(Menus.item("Move up","task.up."+id,reorderable()&&at>0,()->move(tasks,at,-1),reorderable()?null:why));
         menu.add(Menus.item("Move down","task.down."+id,reorderable()&&at<tasks.size()-1,()->move(tasks,at,1),reorderable()?null:why));
@@ -697,6 +811,10 @@ final class TasksPanel extends JPanel implements Scrollable {
         menu.add(Menus.item("Paste task proposals…","task.import.paste",true,this::importPaste,null));
         menu.add(Menus.item("Notion export…","task.import.notion",true,this::importNotion,null));
         return menu;
+    }
+
+    private void moveToList(Task task,UUID list) {
+        try{tracker.moveTask(task.id(),list);rebuildRows();}catch(Exception e){error(e);}
     }
 
     private void track(Task task) {
@@ -723,7 +841,7 @@ final class TasksPanel extends JPanel implements Scrollable {
     private void move(List<Task> tasks,int index,int delta) {
         var ids=new ArrayList<>(tasks.stream().map(Task::id).toList());
         Collections.swap(ids,index,index+delta);
-        try{tracker.reorderTasks(ids);rebuildRows();}catch(Exception e){error(e);}
+        try{tracker.reorderTasks(everywhere(ids));rebuildRows();}catch(Exception e){error(e);}
     }
 
     public Dimension getPreferredScrollableViewportSize(){return getPreferredSize();}
@@ -747,6 +865,11 @@ final class TasksPanel extends JPanel implements Scrollable {
 
     static Task merged(Task existing,UUID activityId,List<UUID> tagIds,String title,String notes,
                        LocalDate due,TaskStatus status,int orderForNew,LocalDate plannedFor) {
+        return merged(existing,activityId,tagIds,title,notes,due,status,orderForNew,plannedFor,null);
+    }
+
+    static Task merged(Task existing,UUID activityId,List<UUID> tagIds,String title,String notes,
+                       LocalDate due,TaskStatus status,int orderForNew,LocalDate plannedFor,UUID listForNew) {
         return new Task(
             existing==null?UUID.randomUUID():existing.id(),
             activityId,tagIds,title,notes,due,status,
@@ -755,7 +878,9 @@ final class TasksPanel extends JPanel implements Scrollable {
             existing==null?orderForNew:existing.order(),
             plannedFor,
             // The form does not show page links, so an edit keeps them.
-            existing==null?List.of():existing.pageIds());
+            existing==null?List.of():existing.pageIds(),
+            // A new task goes in the list on screen; an edit stays where it is filed (#56).
+            existing==null?listForNew:existing.listId());
     }
 
     /** A new task lands at the bottom of the manual order, not on top of row one. */
@@ -805,7 +930,7 @@ final class TasksPanel extends JPanel implements Scrollable {
                     activity.getSelectedItem() instanceof Activity a?a.id():null,
                     tags.tagIds(),
                     title.getText(),notes.getText(),due.value(),
-                    (TaskStatus)status.getSelectedItem(),nextOrder(),planned.value());
+                    (TaskStatus)status.getSelectedItem(),nextOrder(),planned.value(),newTaskList());
                 // The task and the tags made for it are one write.
                 tracker.saveTask(task,tags.newTags());
                 rebuildRows();

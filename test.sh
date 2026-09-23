@@ -63,6 +63,7 @@ java -ea -cp build/classes dev.yoru.EditingTest
 java -ea -cp build/classes dev.yoru.PortableVaultTest
 java -ea -cp build/classes dev.yoru.RecurringTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskBoardTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskListsTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ScheduleUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskCalendarTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.FocusMixTest

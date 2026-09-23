@@ -202,6 +202,14 @@ public final class Preview {
             new Task(UUID.randomUUID(), study, cs.id(), "Practice quiz", "", today.plusDays(12), TaskStatus.TODO, "Manual entry", now, 9),
             new Task(UUID.randomUUID(), activities.get(2).id(), jpn.id(), "Grammar review", "", today.minusDays(4), TaskStatus.DONE, "Manual entry", now, 10)));
 
+        // Two lists, with most tasks filed in one, so the rail has places in it (#56).
+        var classes = tracker.addList("Classes", 0x6E8FD6);
+        var home = tracker.addList("Home", 0x6FBF8B);
+        for (var task : tracker.state().tasks()) {
+            if (task.title().equals("Order textbook") || task.title().equals("Return library books")) tracker.moveTask(task.id(), home.id());
+            else if (!task.title().equals("Ask about open lab hours")) tracker.moveTask(task.id(), classes.id());
+        }
+
         var folder = tracker.pages().createFolder(null, "Notebook");
         var note = tracker.pages().createPage(folder.id(), "Study notes", """
             # Study notes

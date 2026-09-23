@@ -248,3 +248,21 @@ tasks that carry it; a task keeps its others. A tag typed into the task form
 is created in the same write as the task (`Tracker.saveTask`), so a failed
 save cannot leave a tag behind for a task that was never kept. A Notion
 multi-select column gives a task every tag it lists.
+
+## Task lists (schema 19, #56)
+
+Schema 19 adds `TaskList(id, name, colour, order)` to the state, after the
+Anki integration, and `listId` to each task, after its page links: a
+present-flag and a UUID, with no list meaning the Inbox. List names are unique
+whatever their case, 1 to 40 characters; a task may only be in a list that
+exists. Older vaults arrive with no lists and every task in the Inbox.
+
+Deleting a list takes a backup, then either moves its tasks to the Inbox or
+deletes them with it, as the owner chooses. "Make list" on a tag makes a list
+with the tag's name and colour holding every task the tag is on; the tag stays.
+Resetting lists files every task in the Inbox. Manual order stays one total
+order over every task: reordering inside a list swaps its tasks among the
+places they already hold, so other lists never move.
+
+The portable export is format 8: `"lists"` at the top level and `"listId"` on
+each task. A file without them reads with every task in the Inbox.

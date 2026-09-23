@@ -29,9 +29,10 @@ public final class PortableVault {
      * a format 4 file rather than dropping what it does not understand. Format 5
      * added the Anki integration and the counts it last saw. Format 6 added the
      * day a habit began. Format 7 gave a task a list of tags, "tagIds", where
-     * it had room for one "tagId".
+     * it had room for one "tagId". Format 8 added task lists, "lists", and the
+     * list each task is filed in, "listId".
      */
-    public static final int FORMAT = 7;
+    public static final int FORMAT = 8;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -50,6 +51,7 @@ public final class PortableVault {
         out.put("blocks", state.blocks().stream().map(PortableVault::block).toList());
         out.put("recurring", state.recurring().stream().map(PortableVault::recurring).toList());
         out.put("tags", state.tags().stream().map(PortableVault::tag).toList());
+        out.put("lists", state.lists().stream().map(PortableVault::taskList).toList());
         out.put("tasks", state.tasks().stream().map(PortableVault::task).toList());
         out.put("habits", state.habits().stream().map(PortableVault::habit).toList());
         out.put("folders", state.notes().folders().stream().map(PortableVault::folder).toList());
@@ -133,11 +135,25 @@ public final class PortableVault {
         return m;
     }
 
+    private static Map<String, Object> taskList(TaskList l) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("id", l.id().toString());
+        m.put("name", l.name());
+        m.put("colour", String.format("#%06X", l.colour()));
+        m.put("order", l.order());
+        return m;
+    }
+
+    private static TaskList readTaskList(Map<?, ?> m) {
+        return new TaskList(id(m, "id"), text(m, "name"), colour(text(m, "colour")), int32(m, "order"));
+    }
+
     private static Map<String, Object> task(Task t) {
         var m = new LinkedHashMap<String, Object>();
         m.put("id", t.id().toString());
         m.put("activityId", t.activityId() == null ? null : t.activityId().toString());
         m.put("tagIds", t.tagIds().stream().map(UUID::toString).toList());
+        m.put("listId", t.listId() == null ? null : t.listId().toString());
         m.put("title", t.title());
         m.put("notes", t.notes());
         m.put("due", t.due() == null ? null : t.due().toString());
@@ -222,7 +238,9 @@ public final class PortableVault {
             new Notes(root.get("folders") == null ? List.of() : list(root, "folders", PortableVault::readFolder),
                 root.get("pages") == null ? List.of() : list(root, "pages", PortableVault::readPage)),
             // Before format 5 there was no stored integration: it reads as off.
-            root.get("anki") == null ? Anki.off() : readAnki(Json.object(root.get("anki"))));
+            root.get("anki") == null ? Anki.off() : readAnki(Json.object(root.get("anki"))),
+            // Before format 8 there were no lists: every task is in the Inbox.
+            root.get("lists") == null ? List.of() : list(root, "lists", PortableVault::readTaskList));
     }
 
     private static Anki readAnki(Map<?, ?> m) {
@@ -276,7 +294,7 @@ public final class PortableVault {
             text(m, "title"), text(m, "notes"), optionalDate(m, "due"),
             enumeration(TaskStatus.class, text(m, "status")), text(m, "source"),
             instant(m, "createdAt"), int32(m, "order"), optionalDate(m, "plannedFor"),
-            optionalIds(m, "pageIds"));
+            optionalIds(m, "pageIds"), optionalId(m, "listId"));
     }
 
     /** A list of identifiers that older files leave out entirely. */

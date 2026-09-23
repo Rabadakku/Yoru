@@ -216,6 +216,8 @@ public final class LegacyVaultTest {
             check(byTitle.get("Read chapter 4").plannedFor().equals(LocalDate.parse("2026-09-24"))
                 &&byTitle.get("Buy stamps").status()==TaskStatus.DOING,"Everything after the tag is read where it was");
             check(loaded.habits().getFirst().since().equals(LocalDate.parse("2026-09-18")),"and the habit after the tasks too");
+            check(loaded.lists().isEmpty()&&loaded.tasks().stream().allMatch(t->t.listId()==null),
+                "It has no lists, and every task arrives in the Inbox (#56)");
 
             // A second tag now fits, and survives a save at the current schema.
             var twoTags=loaded.withTasks(loaded.tasks().stream().map(t->t.title().equals("Read chapter 4")

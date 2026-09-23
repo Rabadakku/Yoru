@@ -145,6 +145,26 @@ public final class Model {
         @Override public String toString() { return name; }
     }
 
+    /**
+     * A list tasks are filed in: "Chores", "Personal", "School" (#56).
+     *
+     * A place rather than a label: every task is in exactly one list, or in
+     * none, which is the Inbox. Tags still cut across lists. The order is the
+     * owner's, as the sidebar shows it.
+     */
+    public record TaskList(UUID id, String name, int colour, int order) {
+        public TaskList {
+            Objects.requireNonNull(id);
+            name = requireName(name,40,"list name");
+            colour = requireColour(colour);
+            if (order < 0) throw new IllegalArgumentException("Invalid list order.");
+        }
+        public TaskList renamed(String next) { return new TaskList(id,next,colour,order); }
+        public TaskList recoloured(int next) { return new TaskList(id,name,next,order); }
+        public TaskList withOrder(int next) { return new TaskList(id,name,colour,next); }
+        @Override public String toString() { return name; }
+    }
+
     public record Session(UUID id, UUID activityId, Instant start, Instant end) {
         public Session {
             Objects.requireNonNull(id);
@@ -201,7 +221,13 @@ public final class Model {
      */
     public record Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
                        LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
-                       LocalDate plannedFor, List<UUID> pageIds) {
+                       LocalDate plannedFor, List<UUID> pageIds, UUID listId) {
+        /** A task in the Inbox: every task before lists (#56), and every one made outside a list. */
+        public Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
+                    LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
+                    LocalDate plannedFor, List<UUID> pageIds) {
+            this(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,null);
+        }
         /** The most pages one task may link to. */
         public static final int MAX_PAGES = 100;
         /** The most tags one task may carry: more than a row could ever show, fewer than a typo loop could add. */
@@ -273,23 +299,27 @@ public final class Model {
         // rebuild of an existing task goes through these rather than a
         // constructor, which is where a forgotten field used to go missing.
         public Task withStatus(TaskStatus next) {
-            return new Task(id,activityId,tagIds,title,notes,due,next,source,createdAt,order,plannedFor,pageIds);
+            return new Task(id,activityId,tagIds,title,notes,due,next,source,createdAt,order,plannedFor,pageIds,listId);
         }
         public Task withActivity(UUID next) {
-            return new Task(id,next,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds);
+            return new Task(id,next,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId);
         }
         public Task withTags(List<UUID> next) {
-            return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds);
+            return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId);
+        }
+        /** The same task filed in another list, or in the Inbox for null (#56). */
+        public Task withList(UUID next) {
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,next);
         }
         /** The same task without one tag, which is what deleting a tag does to it. */
         public Task withoutTag(UUID tag) {
             return withTags(tagIds.stream().filter(t -> !t.equals(tag)).toList());
         }
         public Task withOrder(int next) {
-            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,next,plannedFor,pageIds);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,next,plannedFor,pageIds,listId);
         }
         public Task withPages(List<UUID> next) {
-            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,next);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,next,listId);
         }
     }
 
@@ -526,11 +556,11 @@ public final class Model {
      */
     public record State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks,
                         List<RecurringBlock> recurring, List<Task> tasks, List<Habit> habits, List<Tag> tags,
-                        Settings settings, Notes notes, Anki anki) {
+                        Settings settings, Notes notes, Anki anki, List<TaskList> lists) {
         /** The time-tracking core alone, with everything else empty. */
         public State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks) {
             this(activities, sessions, blocks, List.of(), List.of(), List.of(), List.of(), Settings.defaults(),
-                Notes.empty(), Anki.off());
+                Notes.empty(), Anki.off(), List.of());
         }
         public State {
             activities = List.copyOf(activities);
@@ -540,6 +570,7 @@ public final class Model {
             tasks = List.copyOf(tasks);
             habits = List.copyOf(habits);
             tags = List.copyOf(tags);
+            lists = List.copyOf(lists);
             Objects.requireNonNull(settings);
             Objects.requireNonNull(anki);
             Objects.requireNonNull(notes);
@@ -566,12 +597,23 @@ public final class Model {
                         LocalDate.EPOCH.atTime(r.endTime()).toInstant(java.time.ZoneOffset.UTC))).toList());
             validateIntervals(sessions.stream().map(x -> new Interval(x.id(),x.start(),x.end())).toList());
             validateIntervals(blocks.stream().map(x -> new Interval(x.id(),x.start(),x.end())).toList());
+            // Lists (#56): each once, each name once whatever its case, since
+            // "School" and "school" in one sidebar could only be a mistake.
+            if (lists.size() > 1_000) throw new IllegalArgumentException("Vault record limit reached.");
+            var listIds = new HashSet<UUID>();
+            var listNames = new HashSet<String>();
+            for (var l : lists) {
+                if (!listIds.add(l.id())) throw new IllegalArgumentException("Duplicate list.");
+                if (!listNames.add(l.name().toLowerCase(Locale.ROOT)))
+                    throw new IllegalArgumentException("Another list is already called \"" + l.name() + "\".");
+            }
             var tagIds = new HashSet<UUID>(); tags.forEach(t->tagIds.add(t.id()));
             Set<UUID> taskIds = new HashSet<>();
             for (var t : tasks) {
                 if (!taskIds.add(t.id())) throw new IllegalArgumentException("Duplicate task.");
                 if (t.activityId() != null && !ids.contains(t.activityId())) throw new IllegalArgumentException("Unknown task activity.");
                 for (var tag : t.tagIds()) if (!tagIds.contains(tag)) throw new IllegalArgumentException("Unknown task tag.");
+                if (t.listId() != null && !listIds.contains(t.listId())) throw new IllegalArgumentException("A task is in a list that does not exist.");
             }
             // A task may link to a page in the trash, so restoring the page
             // restores the link; it may not link to one that is gone for good.
@@ -634,19 +676,20 @@ public final class Model {
             var nextTasks = tasks.stream().map(t -> activityId.equals(t.activityId())
                 ? t.withActivity(replacement) : t).toList();
             return new State(kept, nextSessions, nextBlocks, nextRepeats, nextTasks, habits, tags,
-                settings, notes, anki);
+                settings, notes, anki, lists);
         }
 
         public State withCore(List<Activity> a, List<Session> s, List<ScheduleBlock> b) {
-            return new State(a,s,b,recurring,tasks,habits,tags,settings,notes,anki);
+            return new State(a,s,b,recurring,tasks,habits,tags,settings,notes,anki,lists);
         }
-        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,notes,anki); }
-        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,notes,anki); }
-        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,notes,anki); }
-        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,notes,anki); }
-        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,notes,anki); }
-        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,anki); }
-        public State withAnki(Anki next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,next); }
+        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,notes,anki,lists); }
+        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,notes,anki,lists); }
+        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,notes,anki,lists); }
+        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,notes,anki,lists); }
+        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,notes,anki,lists); }
+        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,anki,lists); }
+        public State withAnki(Anki next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,next,lists); }
+        public State withLists(List<TaskList> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,anki,next); }
         public static State empty() { return new State(List.of(), List.of(), List.of()); }
     }
 }

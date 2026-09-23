@@ -585,6 +585,7 @@ public final class Tracker {
         SCHEDULE("Schedule blocks and weekly repeats"),
         TASKS("Tasks"),
         TAGS("Tags"),
+        LISTS("Task lists (their tasks move to the Inbox)"),
         DAILY_HABITS("Daily check-offs"),
         TIME_SINCE("Time-since trackers"),
         SETTINGS("Settings"),
@@ -610,6 +611,9 @@ public final class Tracker {
         // survive the assignments filed under them.
         boolean clearTags=parts.contains(ResetPart.TAGS);
         if(clearTags)tasks=tasks.stream().map(x->x.withTags(List.of())).toList();
+        // Clearing lists files their tasks in the Inbox; the tasks stay (#56).
+        boolean clearLists=parts.contains(ResetPart.LISTS);
+        if(clearLists)tasks=tasks.stream().map(x->x.withList(null)).toList();
         // Clearing pages unlinks the tasks that pointed at them; the tasks stay.
         boolean clearPages=parts.contains(ResetPart.PAGES);
         if(clearPages)tasks=tasks.stream().map(x->x.withPages(List.of())).toList();
@@ -623,7 +627,8 @@ public final class Tracker {
             clearTags?List.of():state.tags(),
             parts.contains(ResetPart.SETTINGS)?Settings.defaults():state.settings(),
             clearPages?Notes.empty():state.notes(),
-            parts.contains(ResetPart.ANKI)?Anki.off():state.anki());
+            parts.contains(ResetPart.ANKI)?Anki.off():state.anki(),
+            clearLists?List.of():state.lists());
         repository.backup();commit(next);
     }
 
@@ -664,6 +669,89 @@ public final class Tracker {
         // Untag first: removing a tag a task still points at would not validate.
         commit(state.withTasks(tasks)
             .withTags(state.tags().stream().filter(t->!t.id().equals(id)).toList()));
+    }
+
+    // ---- lists (#56) ---------------------------------------------------------
+
+    /** A new list at the end of the sidebar. Names are unique, whatever their case. */
+    public TaskList addList(String name,int colour) throws IOException {
+        requireFreeListName(null,name);
+        int order=state.lists().stream().mapToInt(TaskList::order).max().orElse(-1)+1;
+        var list=new TaskList(UUID.randomUUID(),name,colour,order);
+        var next=new ArrayList<>(state.lists());
+        next.add(list);
+        commit(state.withLists(next));
+        return list;
+    }
+
+    /** A list's new name and colour; the tasks in it are untouched. */
+    public void editList(UUID id,String name,int colour) throws IOException {
+        var old=list(id);
+        requireFreeListName(id,name);
+        commit(state.withLists(state.lists().stream()
+            .map(l->l.id().equals(id)?old.renamed(name).recoloured(colour):l).toList()));
+    }
+
+    private void requireFreeListName(UUID except,String name) {
+        String wanted=Objects.requireNonNull(name).strip();
+        if(state.lists().stream().anyMatch(l->!l.id().equals(except)&&l.name().equalsIgnoreCase(wanted)))
+            throw new IllegalArgumentException("Another list is already called \""+wanted+"\".");
+    }
+
+    private TaskList list(UUID id) {
+        return state.lists().stream().filter(l->l.id().equals(id)).findFirst()
+            .orElseThrow(()->new IllegalArgumentException("That list no longer exists."));
+    }
+
+    /** The lists in the order given; the sidebar's order is the owner's. */
+    public void reorderLists(List<UUID> order) throws IOException {
+        if(order.size()!=state.lists().size()||!new HashSet<>(order).equals(
+                state.lists().stream().map(TaskList::id).collect(java.util.stream.Collectors.toSet())))
+            throw new IllegalArgumentException("The lists changed. Try again.");
+        var byId=new HashMap<UUID,TaskList>();
+        state.lists().forEach(l->byId.put(l.id(),l));
+        var next=new ArrayList<TaskList>();
+        for(int i=0;i<order.size();i++) next.add(byId.get(order.get(i)).withOrder(i));
+        commit(state.withLists(next));
+    }
+
+    /**
+     * Removes a list. Its tasks move to the Inbox, or go with it when
+     * {@code deleteTasks}; a backup is taken first either way, since either can
+     * move a great many tasks at once.
+     */
+    public void deleteList(UUID id,boolean deleteTasks) throws IOException {
+        list(id);
+        var tasks=deleteTasks
+            ?state.tasks().stream().filter(t->!id.equals(t.listId())).toList()
+            :state.tasks().stream().map(t->id.equals(t.listId())?t.withList(null):t).toList();
+        repository.backup();
+        // Out of the list first: removing a list a task is still in would not validate.
+        commit(state.withTasks(tasks).withLists(state.lists().stream().filter(l->!l.id().equals(id)).toList()));
+    }
+
+    /** Files one task in a list, or in the Inbox for null. */
+    public void moveTask(UUID taskId,UUID listId) throws IOException {
+        if(listId!=null) list(listId);
+        updateTask(task(taskId).withList(listId));
+    }
+
+    /**
+     * A tag as a list (#56): a list with the tag's name and colour, holding
+     * every task the tag was on. The tag stays, so nothing about the tasks is
+     * lost; it can be deleted afterwards if it is no longer wanted.
+     */
+    public TaskList tagToList(UUID tagId) throws IOException {
+        var tag=state.tags().stream().filter(t->t.id().equals(tagId)).findFirst()
+            .orElseThrow(()->new IllegalArgumentException("Tag no longer exists."));
+        requireFreeListName(null,tag.name());
+        int order=state.lists().stream().mapToInt(TaskList::order).max().orElse(-1)+1;
+        var list=new TaskList(UUID.randomUUID(),tag.name(),tag.colour(),order);
+        var lists=new ArrayList<>(state.lists());
+        lists.add(list);
+        commit(state.withLists(lists).withTasks(state.tasks().stream()
+            .map(t->t.tagIds().contains(tagId)?t.withList(list.id()):t).toList()));
+        return list;
     }
 
     public void taskStatus(UUID id,TaskStatus status) throws IOException {

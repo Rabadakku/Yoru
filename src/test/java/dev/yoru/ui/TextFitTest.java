@@ -37,7 +37,7 @@ public final class TextFitTest {
     private static final Dimension DESKTOP = new Dimension(1280, 900);
 
     // The longest names the model accepts (Model.requireName).
-    private static final int ACTIVITY_NAME = 60, TAG_NAME = 40, TASK_TITLE = 160, HABIT_NAME = 60;
+    private static final int ACTIVITY_NAME = 60, TAG_NAME = 40, TASK_TITLE = 160, HABIT_NAME = 60, LIST_NAME = 40;
 
     public static void main(String[] args) throws Exception {
         Path renders = args.length > 0 ? Path.of(args[0]) : null;
@@ -108,7 +108,9 @@ public final class TextFitTest {
             tracker.updateTask(new Task(task.id(), task.activityId(), task.tagIds(),
                 longest(task.title() + ", with every exercise at the end of the section checked against the worked solutions", TASK_TITLE),
                 task.notes(), task.due(), task.status(), task.source(), task.createdAt(), task.order(), task.plannedFor(),
-                task.pageIds()));
+                task.pageIds(), task.listId()));
+        for (var list : tracker.state().lists())
+            tracker.editList(list.id(), longest(list.name() + " for the autumn term", LIST_NAME), list.colour());
         for (var habit : tracker.state().habits())
             tracker.renameHabit(habit.id(), longest(habit.name() + " before the end of every study day", HABIT_NAME));
     }

@@ -35,7 +35,7 @@ public final class FocusMixTest {
         return new State(
             List.of(new Activity(MATHS,"Maths",0),new Activity(PROSE,"Prose",0)),
             List.of(sessions),base.blocks(),base.recurring(),base.tasks(),base.habits(),
-            base.tags(),settings,base.notes(),base.anki());
+            base.tags(),settings,base.notes(),base.anki(),base.lists());
     }
 
     private static Session session(UUID activity,String from,String to) {

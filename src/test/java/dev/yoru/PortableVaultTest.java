@@ -60,6 +60,7 @@ public final class PortableVaultTest {
             Instant.parse("2026-08-01T08:00:00Z"),Instant.parse("2026-09-02T07:00:00Z"));
         var inbox=new Page(UUID.randomUUID(),null,"Inbox","Loose thoughts.",Instant.parse("2026-09-04T08:00:00Z"),
             Instant.parse("2026-09-04T08:00:00Z"),null);
+        var school=new TaskList(UUID.randomUUID(),"School",0x6E8FD6,0);
         return new State(
             List.of(study,japanese),
             List.of(new Session(UUID.randomUUID(),study.id(),Instant.parse("2026-09-03T09:00:00Z"),
@@ -83,7 +84,7 @@ public final class PortableVaultTest {
                     // A task planned for a different day than it is due (#25).
                     new Task(UUID.randomUUID(),study.id(),tag.id(),"MLA citation quiz","",
                         LocalDate.parse("2026-09-11"),TaskStatus.TODO,"reading-list.txt",
-                        Instant.parse("2026-09-01T12:00:02Z"),9,LocalDate.parse("2026-09-10"))),
+                        Instant.parse("2026-09-01T12:00:02Z"),9,LocalDate.parse("2026-09-10")).withList(school.id())),
             List.of(new Habit(UUID.randomUUID(),"Evening reset",HabitKind.DAILY,"America/New_York",
                         Set.of(LocalDate.parse("2026-09-01"),LocalDate.parse("2026-09-03")),List.of()),
                     new Habit(UUID.randomUUID(),"Time since last soda",HabitKind.TIME_SINCE,"Asia/Tokyo",
@@ -95,7 +96,9 @@ public final class PortableVaultTest {
             new Anki(true,"a-key-that-is-not-real",true,5,
                 new AnkiSnapshot("Practice",24,new java.util.TreeMap<>(java.util.Map.of(
                     LocalDate.parse("2026-09-03"),16L,LocalDate.parse("2026-09-04"),24L)),
-                    Instant.parse("2026-09-04T09:30:00Z"))));
+                    Instant.parse("2026-09-04T09:30:00Z"))),
+            // One list, holding the quiz; the other tasks are in the Inbox (#56).
+            List.of(school));
     }
 
     public static void main(String[] args)throws Exception{
@@ -149,6 +152,17 @@ public final class PortableVaultTest {
         check(!json.contains("waifu"),"The withdrawn companion choice is no longer written");
         check(restored.tasks().getFirst().tagIds().equals(List.of(original.tags().getFirst().id())),"Task tagging survives");
         check(json.contains("\"tagIds\": ["),"Format 7 writes a task's tags as a list");
+        check(restored.lists().equals(original.lists()),"Lists survive the round trip");
+        check(restored.tasks().stream().filter(t->t.listId()!=null).map(Task::title).toList().equals(List.of("MLA citation quiz")),
+            "and the task filed in one stays there, the rest in the Inbox");
+        // A format 7 file has no lists: every task arrives in the Inbox.
+        var formatSeven=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 7")
+            .replaceAll(",\\s*\"listId\": (null|\"[^\"]*\")","")
+            .replaceAll("\"lists\": \\[[^\\]]*\\],\\s*","");
+        check(!formatSeven.contains("listId")&&!formatSeven.contains("\"lists\""),"The format 7 fixture has no lists");
+        var seven=PortableVault.parse(formatSeven);
+        check(seven.lists().isEmpty()&&seven.tasks().stream().allMatch(t->t.listId()==null),
+            "A format 7 file reads with every task in the Inbox");
 
         // Several tags a task (#66), in the order they were given.
         var seminar=new Tag(UUID.randomUUID(),"Seminar",0xA98BD4);
@@ -217,7 +231,7 @@ public final class PortableVaultTest {
         var cutTask=new Task(UUID.randomUUID(),null,null,"Revise \uD83D","",null,TaskStatus.TODO,"notion",
             Instant.parse("2026-09-01T12:00:00Z"),0,null);
         var cut=new State(List.of(),List.of(),List.of(),List.of(),List.of(cutTask),List.of(),List.of(),
-            Settings.defaults(),Notes.empty(),Anki.off());
+            Settings.defaults(),Notes.empty(),Anki.off(),List.of());
         var exported=java.nio.file.Files.createTempFile("yoru-export-",".json");
         try{
             java.nio.file.Files.writeString(exported,PortableVault.export(cut,when));
