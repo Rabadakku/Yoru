@@ -232,6 +232,14 @@ previous saved summary. Automatic retries belong to the open vault and stop
 when disabled or closed, independent of the visible tab. No schema change in
 1.0.17.
 
+Automatic Anki streaks retain the complete supplied daily-count map (up to the
+vault limit of 100,000 entries) rather than trimming to 30 entries. The chart
+still shows a month. This changes neither schema 20 nor portable format 9: the
+same count/date/value entries are written, and existing short summaries load
+unchanged. Earlier history is restored at the next successful refresh. Opening
+and saving in an older Yoru build will trim the cache again; Anki remains its
+source. No derived streak value is stored.
+
 ## Several tags a task (schema 18, #66)
 
 Schema 18 replaces a task's one optional tag (`tagId`) with a list of tags

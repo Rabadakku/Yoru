@@ -1,5 +1,6 @@
 package dev.yoru.ui;
 import dev.yoru.application.Analytics;
+import dev.yoru.application.AnkiStreak;
 import dev.yoru.application.HabitStats;
 import dev.yoru.application.Tracker;
 import dev.yoru.domain.Model.*;
@@ -30,7 +31,9 @@ final class HabitsPanel {
             button("+ Daily check-off",()->create(tracker,refresh,HabitKind.DAILY,body)),
             button("+ Time since",()->create(tracker,refresh,HabitKind.TIME_SINCE,body))));
         if(tracker.state().habits().isEmpty()) {
-            body.add(emptyState("No habits yet.",
+            body.add(ankiStreak(tracker));
+            gap(body,SPACE_LG);
+            body.add(emptyState("No manual habits yet.",
                 "Check off a day, or count the time since you stopped.",null));
             return body;
         }
@@ -60,8 +63,51 @@ final class HabitsPanel {
         glue(daily);
         glue(since);
         body.add(new Columns(daily,since));
+        gap(body,SPACE_LG);
+        body.add(ankiStreak(tracker));
         gap(body,SPACE_XL);
         return body;
+    }
+
+    /** Imported reviews are their own read-only habit; no second check-off is needed. */
+    static JPanel ankiStreak(Tracker tracker) {
+        var card=card();
+        card.setName("habits.anki");
+        card.add(sectionHeader("ANKI · AUTOMATIC"));
+        gap(card,SPACE_SM);
+        var value=wrapping("",TYPE_BODY,TEXT);
+        value.setName("habits.anki.streak");
+        value.setAlignmentX(0);
+        card.add(value);
+        var note=bodyLabel("");
+        note.setName("habits.anki.detail");
+        note.setAlignmentX(0);
+        card.add(note);
+        Runnable update=()-> {
+            var anki=tracker.state().anki();
+            var last=anki.last();
+            String summary;
+            String detail;
+            if(last==null) {
+                summary="Your Anki streak appears here after the first sync.";
+                detail=anki.enabled()?"Open Anki with AnkiConnect enabled to sync your reviews."
+                    :"Connect Anki in Settings → Integrations. Any day with reviews counts automatically.";
+            } else {
+                var stats=AnkiStreak.of(last,tracker.now(),ZoneId.systemDefault());
+                summary="Streak: "+plural(stats.current(),"day")+" · best: "+plural(stats.best(),"day");
+                detail="Any day with reviews counts. "
+                    +(stats.cached()?"Saved streak as of "+DateText.date(stats.asOf())+".":"Synced today.")
+                    +(anki.enabled()?"":" Sync is off.");
+            }
+            value.setText(summary);
+            note.setText(detail);
+        };
+        update.run();
+        // Counts refresh even when no timed sitting is imported and this page stays open.
+        var timer=new Timer(60_000,e->update.run());
+        card.putClientProperty("anki.refreshTimer",timer);
+        card.addHierarchyListener(e->{if(card.isShowing())timer.start();else timer.stop();});
+        return card;
     }
 
     /** One card that a column's rows are listed in, edge to edge, divided by hairlines. */
