@@ -1,5 +1,12 @@
 # Yoru roadmap
 
+## Planned — optional study-music download
+
+The owner chose a larger optional jazz/lo-fi music download rather than bundled
+audio. Publisher licensing and candidate tracks are recorded in
+[the music plan](STUDY-MUSIC.md). Pack preparation and Settings access remain.
+Pomodoro completion sounds and their controls are recorded in #61.
+
 ## Release 1.0.19 — interface detail polish (#63)
 
 Quieter page tabs keep long-title close controls visible. Rounded scrollbars
