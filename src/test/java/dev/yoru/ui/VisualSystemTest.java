@@ -66,7 +66,7 @@ public final class VisualSystemTest {
             g.dispose();
             check(image.getRGB(0, 0) == Theme.BG.getRGB(), theme + ": a card's corner is round, so the ground shows there");
             check(image.getRGB(60, 40) == Theme.PANEL.getRGB(), theme + ": and its middle is the panel");
-            check(image.getRGB(60, 0) != Theme.PANEL.getRGB(), theme + ": with a hairline along its edge");
+            check(image.getRGB(60, 0) == Theme.PANEL.getRGB(), theme + ": the surface is not enclosed by a border");
         }
         Theme.apply(ThemeId.MIDNIGHT);
     }
@@ -165,13 +165,13 @@ public final class VisualSystemTest {
         check(!button(app,"session.status").isVisible(),"Clocking out clears the recording status");
 
         open(app, "Data");
-        check(!labels(app).contains("VAULT"), "the vault's controls have left the Data page");
+        check(!labels(app).contains("Vault"), "the vault's controls have left the Data page");
 
         open(app, "Settings");
-        var sections = labels(app).stream().filter(List.of("APPEARANCE", "TRACKING",
-            "TRACKING · STUDY MUSIC", "VAULT", "VAULT · RESET DATA", "UPDATES", "INTEGRATIONS")::contains).toList();
-        check(sections.equals(List.of("APPEARANCE", "TRACKING", "TRACKING · STUDY MUSIC",
-            "VAULT", "VAULT · RESET DATA", "UPDATES")),
+        var sections = labels(app).stream().filter(List.of("Appearance", "Tracking",
+            "Tracking · study music", "Vault", "Vault · reset data", "Updates", "Integrations")::contains).toList();
+        check(sections.equals(List.of("Appearance", "Tracking", "Tracking · study music",
+            "Vault", "Vault · reset data", "Updates")),
             "Settings reads appearance, then tracking, then the vault, with updates last: " + sections);
         var themes = (JPanel) named(app, "settings.themes");
         check(((GridLayout) themes.getLayout()).getColumns() == 3, "theme choices sit three across");

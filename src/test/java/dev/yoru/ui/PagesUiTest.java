@@ -72,10 +72,29 @@ public final class PagesUiTest {
         Preview.layout(app);
         var labels = new java.util.ArrayList<String>();
         texts(app, labels);
-        assert labels.contains("OUTLINE") && labels.contains("LINKED FROM") && labels.contains("TASKS")
+        assert labels.contains("Outline") && labels.contains("Linked from") && labels.contains("Tasks")
             : "the sidebar shows the page's connections: " + labels;
         assert labels.contains("First") : "the page that links here is listed: " + labels;
         assert labels.contains("Write the summary") : "and so is the linked task: " + labels;
+
+        // A narrow window leaves room to write; connections replace the explorer.
+        app.setSize(900, 640);
+        Preview.layout(app);
+        assert !find(app, "pages.connections").isVisible();
+        assert find(app, "pages.explorer").isVisible();
+        assert find(app, "pages.documents").getWidth() >= 350 : "editor remains usable";
+        Preview.button(app, "pages.sidebar").doClick();
+        Preview.layout(app);
+        assert find(app, "pages.connections").isVisible();
+        assert !find(app, "pages.explorer").isVisible();
+        assert find(app, "pages.documents").getWidth() >= 350 : "connections leave room to write";
+        Preview.button(app, "pages.sidebar").doClick();
+        Preview.layout(app);
+        assert find(app, "pages.explorer").isVisible();
+        app.setSize(1280, 900);
+        Preview.layout(app);
+        assert find(app, "pages.connections").isVisible();
+        assert find(app, "pages.explorer").isVisible();
 
         // Reading view draws an embedded page inside the page that names it.
         var host = tracker.pages().createPage(null, "Host", "Before\n\n![[First]]\n\nAfter\n");

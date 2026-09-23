@@ -26,6 +26,8 @@ Columns(JComponent left,JComponent right) {
             @Override public void componentResized(ComponentEvent e) { apply(getWidth()<STACK_BELOW); }
         });
     }
+    @Override public void doLayout() { apply(getWidth() < STACK_BELOW); super.doLayout(); }
+
     private void apply(boolean stack) {
         if(getComponentCount()>0&&stack==stacked)return;
         stacked=stack;

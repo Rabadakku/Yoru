@@ -54,6 +54,12 @@ interface Shell {
     /** Draws this computer's text at {@code percent} of its designed size, rebuilding the window. */
     void textSize(int percent);
 
+    /** Follow this computer’s macOS appearance without changing the vault theme. */
+    default void systemAppearance(boolean on) { }
+    default void selectTheme(dev.yoru.domain.Model.ThemeId id) {
+        applySettings(s -> new dev.yoru.domain.Model.Settings(id,s.dailyGoalHours(),s.minSessionSeconds(),s.weekStartsOn()));
+    }
+
     /** The open vault's own controls: switch, new, rename, password and delete. */
     JPanel vaultCard();
 

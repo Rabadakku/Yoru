@@ -318,7 +318,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         table.setLayout(new BoxLayout(table,BoxLayout.Y_AXIS));
         table.setOpaque(true);
         table.setBackground(PANEL);
-        table.setBorder(new LineBorder(LINE,HAIRLINE,true));
+        table.setBorder(new MatteBorder(HAIRLINE,0,HAIRLINE,0,LINE));
         table.setAlignmentX(0);
         return table;
     }
@@ -454,7 +454,7 @@ final class TasksPanel extends JPanel implements Scrollable {
             var out=COLUMNS.clone();
             for(int i=0;i<out.length;i++) out[i]=grow(out[i]);
             int fixed=Arrays.stream(out).sum();
-            out[TITLE_COLUMN]=Math.max(SPACE_XXL*4,inner-fixed-SPACE_MD*(COLUMNS.length-1));
+            out[TITLE_COLUMN]=Math.max(grow(48),inner-fixed-SPACE_MD*(COLUMNS.length-1));
             return out;
         }
 

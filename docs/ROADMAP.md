@@ -1,5 +1,18 @@
 # Yoru roadmap
 
+## Release 1.0.18 — minimal workspace foundation (#63)
+
+A collapsible line-icon sidebar replaces the top tabs across the workspace.
+System fonts, sentence-case headings, quieter surfaces and list separators
+reduce visual noise. macOS uses its native menu bar and transparent title bar,
+with optional system light/dark and accent following. The five vault palettes
+remain available. Pages trades side panels at narrow widths to preserve room
+for writing; Tasks wraps titles around fixed controls at enlarged sizes.
+
+The shared foundation is implemented on `codex/minimal-workspace`. #63 remains
+open for owner visual approval and further page-specific controls, sheets,
+popovers and animations. See [release details](RELEASE-1.0.18.md).
+
 ## Release 1.0.17 — Anki reconnects across tabs (#51)
 
 The cached summary already added on main now has an encrypted restart test.

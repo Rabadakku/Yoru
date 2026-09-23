@@ -1,3 +1,8 @@
+# v1.0.18 — A quieter workspace
+
+Collapsible sidebar, system typography, native Mac menus and optional system
+appearance. See [release details](docs/RELEASE-1.0.18.md). No vault migration.
+
 # v1.0.15 — Anki study time counts
 
 Finished Anki sittings are now added to your tracked time while Anki is

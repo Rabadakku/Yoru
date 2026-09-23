@@ -27,6 +27,7 @@ final class PagesPage {
     private JPanel root, documents, sidebar, tabStrip, empty;
     private CardLayout cards;
     private PageExplorer explorer;
+    private JSplitPane split;
     private PageIndex index;
     private JLabel status, where;
     private JTextField title;
@@ -37,7 +38,7 @@ final class PagesPage {
     private final Deque<UUID> embedding = new ArrayDeque<>();
     private static final int EMBED_DEPTH = 3;
     private UUID selected;
-    private boolean sidebarOpen = true, renaming;
+    private boolean sidebarOpen = true, narrowConnections, renaming;
 
     PagesPage(Shell shell) { this.shell = shell; }
 
@@ -58,7 +59,12 @@ final class PagesPage {
     // ---------------------------------------------------------------- building
 
     private void build() {
-        root = new JPanel(new BorderLayout());
+        root = new JPanel(new BorderLayout()) {
+            @Override public void doLayout() {
+                layoutPanels();
+                super.doLayout();
+            }
+        };
         root.setOpaque(false);
         root.setName("pages.workspace");
 
@@ -88,6 +94,7 @@ final class PagesPage {
         tabStrip.setName("pages.tabs");
 
         sidebar = new JPanel(new BorderLayout());
+        sidebar.setName("pages.connections");
         sidebar.setOpaque(true);
         sidebar.setBackground(PANEL);
         sidebar.setBorder(new MatteBorder(0, HAIRLINE, 0, 0, LINE));
@@ -100,7 +107,8 @@ final class PagesPage {
         middle.add(documents, BorderLayout.CENTER);
         middle.add(sidebar, BorderLayout.EAST);
 
-        var split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, explorer, middle);
+        split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, explorer, middle);
+        split.setBackground(PANEL);
         split.setBorder(new LineBorder(LINE));
         split.setResizeWeight(0);
         split.setContinuousLayout(true);
@@ -123,6 +131,20 @@ final class PagesPage {
         status.setBorder(new EmptyBorder(SPACE_XS, SPACE_XS, 0, SPACE_XS));
         root.add(status, BorderLayout.SOUTH);
         keys();
+    }
+
+    /** At narrow widths, the explorer and connections share the side-panel space. */
+    private void layoutPanels() {
+        if (split == null) return;
+        boolean narrow = root.getWidth() > 0 && root.getWidth() < grow(900);
+        boolean connections = selected != null && (narrow ? narrowConnections : sidebarOpen);
+        sidebar.setVisible(connections);
+        boolean showExplorer = !narrow || !connections;
+        if (explorer.isVisible() != showExplorer) {
+            explorer.setVisible(showExplorer);
+            split.setDividerSize(showExplorer ? HAIRLINE * 3 : 0);
+            split.setDividerLocation(showExplorer ? grow(240) : 0);
+        }
     }
 
     /** Back and forward, the page's own title, and what to do with it. */
@@ -164,8 +186,9 @@ final class PagesPage {
         actions.add(mode);
         actions.add(PageExplorer.icon(Glyphs.Kind.SEARCH, "Search pages (Cmd/Ctrl-Shift-F)", "pages.search", () -> switcher(true)));
         sidebarToggle = PageExplorer.icon(Glyphs.Kind.SIDEBAR, "Show or hide the page's connections", "pages.sidebar", () -> {
-            sidebarOpen = !sidebarOpen;
-            sidebar.setVisible(sidebarOpen);
+            if (root.getWidth() < grow(900)) narrowConnections = !narrowConnections;
+            else sidebarOpen = !sidebarOpen;
+            layoutPanels();
             updateSidebar();
             root.revalidate();
         });
@@ -453,7 +476,7 @@ final class PagesPage {
         if (sidebar == null || status == null) return;
         var tab = active();
         status.setText(statusLine(tab));
-        sidebar.setVisible(sidebarOpen && tab != null);
+        layoutPanels();
         if (!sidebar.isVisible()) { root.revalidate(); return; }
         var column = stack();
         column.setBorder(new EmptyBorder(SPACE_MD, SPACE_MD, SPACE_XL, SPACE_MD));

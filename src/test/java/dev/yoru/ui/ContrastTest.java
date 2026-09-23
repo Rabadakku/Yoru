@@ -131,7 +131,7 @@ public final class ContrastTest {
             check(ratio(palette.accentText(),palette.panel())>=4.5,
                 id+" readable accent text on a panel, "
                 +String.format("%.2f",ratio(palette.accentText(),palette.panel())));
-            check(Theme.sectionHeader("TASKS").getForeground().equals(palette.accentText()),
+            check(Theme.sectionHeader("TASKS").getForeground().equals(palette.text()),
                 id+" a section header is not drawn in the readable accent role");
             // The second accent needs the same pair of roles, for the same
             // reason: Linen's gold measured 3.0:1 on the panel and Sakura's
