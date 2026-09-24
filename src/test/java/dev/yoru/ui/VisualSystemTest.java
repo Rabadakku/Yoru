@@ -188,8 +188,9 @@ public final class VisualSystemTest {
         // The rules inside a list divide its rows; the last row has nothing
         // below it but the card's own edge, so it carries no rule.
         var rows = new ArrayList<JComponent>();
+        // Rows carry the list's rule or its end; the card's head carries neither.
         for (var child : ((Container) agenda).getComponents())
-            if (child instanceof JPanel row && row.getLayout() instanceof BorderLayout) rows.add(row);
+            if (child instanceof JPanel row && row.getLayout() instanceof BorderLayout && row.getBorder() != null) rows.add(row);
         check(rows.size() == 2, "the agenda lists the blocks planned today, got " + rows.size());
         check(rows.getFirst().getBorder() instanceof javax.swing.border.CompoundBorder,
             "a block is ruled off from the one after it");

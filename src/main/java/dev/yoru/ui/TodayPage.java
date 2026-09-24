@@ -352,14 +352,21 @@ final class TodayPage {
         var tracker=tracker();
         var zone=zone();
         var box = card();
-        var top = wrappingRow();
-        top.add(sectionHeader("TODAY · SCHEDULE"));
-        top.add(button("Expand calendar ↗", () -> shell.show("Schedule")));
-        top.add(button("+ Plan block", () -> shell.timeDialog(true)));
-        box.add(top);
-        var day = LocalDate.now();
-        var blocks = tracker.state().blocks().stream().filter(b -> b.start().isBefore(day.plusDays(1).atStartOfDay(zone).toInstant())
-                && b.end().isAfter(day.atStartOfDay(zone).toInstant())).sorted(Comparator.comparing(ScheduleBlock::start)).toList();
+        // The card's own head, with one action beside the title: a row that
+        // wrapped the title and two buttons had no height of its own and took
+        // half the slack the focus card beside it left. The way to the whole
+        // week is the link at the foot, as Tasks today has one to its page.
+        box.add(cardHead(sectionHeader("TODAY · SCHEDULE"), button("+ Plan block", () -> shell.timeDialog(true))));
+        var day = LocalDate.ofInstant(tracker.now(), zone);
+        var from = day.atStartOfDay(zone).toInstant();
+        var to = day.plusDays(1).atStartOfDay(zone).toInstant();
+        // The day's one-off blocks and its weekly repeats together: a class that
+        // repeats every Thursday is on Thursday's schedule as much as a one-off is.
+        var blocks = new java.util.ArrayList<ScheduleBlock>();
+        tracker.state().blocks().stream().filter(b -> b.start().isBefore(to) && b.end().isAfter(from)).forEach(blocks::add);
+        for (var weekly : Analytics.occurrencesOn(tracker.state(), day, zone))
+            blocks.add(new ScheduleBlock(weekly.recurringId(), weekly.activityId(), weekly.start(), weekly.end()));
+        blocks.sort(Comparator.comparing(ScheduleBlock::start));
         if (blocks.isEmpty()) {
             gap(box,SPACE_LG);
             box.add(emptyState("No blocks planned today.","Drag on the Schedule grid, or plan one here.",null));
@@ -375,10 +382,18 @@ final class TodayPage {
             line.add(label(b.start().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")) + " — "
                     + b.end().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")), TYPE_BODY, GOLD_TEXT), BorderLayout.WEST);
             line.add(shortenable(shell.activityName(b.activityId()), TYPE_BODY, TEXT), BorderLayout.CENTER);
-            line.add(label(String.format("%.0f%% matched",100*Analytics.adherence(tracker.state(),b,Instant.now())), TYPE_CAPTION, MUTED), BorderLayout.EAST);
+            line.add(label(String.format("%.0f%% matched",100*Analytics.adherence(tracker.state(),b,tracker.now())), TYPE_CAPTION, MUTED), BorderLayout.EAST);
+            // Its own height: in the card's column an unbounded row took a share
+            // of the slack the taller focus card beside it left, and two blocks
+            // stood a third of the card apart.
+            line.setMaximumSize(new Dimension(Integer.MAX_VALUE, line.getPreferredSize().height));
             box.add(line);
         }
-        if (blocks.size()>3) box.add(label("+ " + (blocks.size()-3) + " more in calendar",TYPE_CAPTION,MUTED));
+        gap(box,SPACE_SM);
+        var week = ghost(button(blocks.size()>3 ? (blocks.size()-3) + " more · Open Schedule →" : "Open Schedule →",
+            () -> shell.show("Schedule")));
+        week.setName("today.schedule.all");
+        box.add(week);
         return box;
     }
 
