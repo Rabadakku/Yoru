@@ -304,6 +304,13 @@ public final class WorkspaceToolsTest {
         var moved = titled("Invented quiz");
         check(moved.status() == TaskStatus.TODO && moved.due().isAfter(quiz.due()) && moved.history().size() == 1,
             "Finishing a repeating task moves it on, as it does by hand");
+        var again = titled("Invented quiz");
+        int before = repo.saves;
+        ok("update_task", Map.of("id", again.id().toString(), "title", "Invented quiz, retaken", "status", "done"), true);
+        var retaken = titled("Invented quiz, retaken");
+        check(repo.saves == before + 1, "A new title and done are one save, not two: " + (repo.saves - before));
+        check(retaken.history().size() == 2 && retaken.status() == TaskStatus.TODO, "and the repeat still moves on");
+        quiz = retaken;
         refused("update_task", Map.of("id", quiz.id().toString(), "due", ""), true);
         refused("update_task", Map.of("id", essay.id().toString(), "due_time", "18:00"), true);
 

@@ -517,6 +517,19 @@ public final class Tracker {
         commit(state.withTags(tags).withTasks(next));
     }
 
+    /**
+     * A task's edited fields and a new status, saved as one change (#47).
+     *
+     * The status goes through the same rule as a click on the task, so a
+     * repeating task marked done moves on to its next date. Saved once, so a
+     * status the rule refuses leaves the fields unsaved too, never half done.
+     */
+    public void saveTask(Task task, List<Tag> newTags, TaskStatus status, ZoneId zone) throws IOException {
+        var next = status == null || status == task.status() ? task
+            : TaskBatch.status(task, status, state, clock.instant(), zone);
+        saveTask(next, newTags);
+    }
+
     public void updateTask(Task task) throws IOException {
         var next = new ArrayList<>(state.tasks());
         int index = -1;

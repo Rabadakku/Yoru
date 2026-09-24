@@ -62,6 +62,17 @@ public final class BridgeTest {
             }
             check(text(Bridge.call(folder, "echo", Map.of("word", "still"))).equals("echo still"), "and the first keeps answering");
 
+            // Callers that connect and say nothing never hold up one that asks.
+            var silent = new ArrayList<SocketChannel>();
+            for (int i = 0; i < 8; i++) {
+                var idle = SocketChannel.open(StandardProtocolFamily.UNIX);
+                idle.connect(UnixDomainSocketAddress.of(folder.resolve(Bridge.SOCKET)));
+                silent.add(idle);
+            }
+            check(text(Bridge.call(folder, "echo", Map.of("word", "through"))).equals("echo through"),
+                "Eight silent connections do not block an answer");
+            for (var idle : silent) idle.close();
+
             // Several callers at once each get their own answer.
             var threads = new ArrayList<Thread>();
             var answers = Collections.synchronizedList(new ArrayList<String>());

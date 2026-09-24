@@ -686,11 +686,10 @@ public final class WorkspaceTools {
         var edited = t;
         boolean fields = !edited.equals(old), moves = status != null && status != old.status();
         if (!fields && !moves) return ordered("unchanged", task(old, true));
-        changes.apply("Edited the task “" + edited.title() + "”", () -> {
-            if (fields) tracker.saveTask(edited, fresh);
-            // Through the tracker's own status change, so a repeating task moves on.
-            if (moves) tracker.taskStatus(edited.id(), status, zone);
-        });
+        // One save for the fields and the status, the status by the tracker's own
+        // rule, so a repeating task moves on and nothing is ever half changed.
+        changes.apply("Edited the task “" + edited.title() + "”",
+            () -> tracker.saveTask(edited, fresh, moves ? status : null, zone));
         return ordered("updated", task(find(old.id()), true));
     }
 

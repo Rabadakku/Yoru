@@ -117,17 +117,22 @@ public final class Bridge implements AutoCloseable {
 
     private void answer(SocketChannel client) {
         try (client) {
+            var in = new BufferedReader(new InputStreamReader(Channels.newInputStream(client), StandardCharsets.UTF_8));
+            var out = Channels.newOutputStream(client);
+            // Read before taking a turn: a caller that connects and says
+            // nothing waits on its own thread, and never holds a turn from one
+            // that has asked something.
+            String line = readLine(in, MAX_REQUEST);
+            if (line == null) return;
+            Map<String, Object> reply;
             turns.acquire();
             try {
-                var in = new BufferedReader(new InputStreamReader(Channels.newInputStream(client), StandardCharsets.UTF_8));
-                var out = Channels.newOutputStream(client);
-                String line = readLine(in, MAX_REQUEST);
-                if (line == null) return;
-                out.write((Json.write(respond(line)) + "\n").getBytes(StandardCharsets.UTF_8));
-                out.flush();
+                reply = respond(line);
             } finally {
                 turns.release();
             }
+            out.write((Json.write(reply) + "\n").getBytes(StandardCharsets.UTF_8));
+            out.flush();
         } catch (IOException | InterruptedException ignored) {
             // The caller went away before its answer; there is nobody left to tell.
         }
