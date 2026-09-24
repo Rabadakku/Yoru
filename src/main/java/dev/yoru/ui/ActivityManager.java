@@ -42,7 +42,7 @@ final class ActivityManager {
         if (usage.sessions() == 0) text.append("\"").append(label).append("\" has no recorded sessions.");
         else text.append("\"").append(label).append("\" has ").append(usage.sessions())
             .append(usage.sessions() == 1 ? " recorded session" : " recorded sessions")
-            .append(" totalling ").append(Analytics.duration(usage.seconds())).append(".");
+            .append(" totalling ").append(Analytics.report(usage.seconds())).append(".");
         var kept = new StringBuilder();
         if (usage.blocks() > 0) kept.append(usage.blocks()).append(usage.blocks() == 1 ? " planned block" : " planned blocks");
         if (usage.repeats() > 0) kept.append(kept.isEmpty() ? "" : ", ").append(usage.repeats())
@@ -139,7 +139,7 @@ final class ActivityManager {
         else if (choice == 1) {
             var warning = stack();
             warning.add(label(usage.sessions() + (usage.sessions() == 1 ? " recorded session" : " recorded sessions")
-                + " totalling " + Analytics.duration(usage.seconds()) + " will be deleted with \""
+                + " totalling " + Analytics.report(usage.seconds()) + " will be deleted with \""
                 + activity.name() + "\".", TYPE_LABEL, TEXT));
             gap(warning, SPACE_MD);
             warning.add(bodyLabel("This cannot be undone. Everything else keeps its records."));
@@ -266,7 +266,7 @@ final class ActivityManager {
             var usage = tracker.usage(activity.id());
             var name = shortenable(activity.name(), TYPE_PROSE, TEXT);
             var recorded = label(usage.sessions() + (usage.sessions() == 1 ? " session" : " sessions")
-                + " · " + Analytics.duration(usage.seconds()), TYPE_BODY, MUTED);
+                + " · " + Analytics.report(usage.seconds()), TYPE_BODY, MUTED);
             // Named so the count and duration a removal quotes can be read back
             // off the page that offers it.
             recorded.setName("activity.recorded." + activity.id());

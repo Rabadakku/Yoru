@@ -94,8 +94,8 @@ public final class ActivityUiTest {
                     "retargeting changes only the target, by identity");
                 var recorded=(JLabel)find(app,"activity.recorded."+coding);
                 check(recorded!=null,"the Data page lists each activity's session count and time");
-                check(recorded.getText().equals("2 sessions · 01:30:00"),"counted from the records, got "+recorded.getText());
-                check(((JLabel)find(app,"activity.recorded."+japanese)).getText().equals("1 session · 00:30:00"),
+                check(recorded.getText().equals("2 sessions · 1h 30m"),"counted from the records, got "+recorded.getText());
+                check(((JLabel)find(app,"activity.recorded."+japanese)).getText().equals("1 session · 30m"),
                     "and counts each activity separately");
 
                 // The order is the owner's (#59): arrows on each row, off at either end.
@@ -117,7 +117,7 @@ public final class ActivityUiTest {
 
                 // What the dialogs say before a choice is made.
                 var moved=ActivityManager.summary("Coding",tracker.usage(coding));
-                check(moved.contains("2 recorded sessions")&&moved.contains("01:30:00"),
+                check(moved.contains("2 recorded sessions")&&moved.contains("1h 30m"),
                     "the confirmation quotes the count and the duration, got "+moved);
                 check(moved.contains("1 planned block"),"and says what is kept either way, got "+moved);
                 check(ActivityManager.KEEP.contains(Model.UNCATEGORIZED)&&ActivityManager.DELETE.startsWith("Delete"),
