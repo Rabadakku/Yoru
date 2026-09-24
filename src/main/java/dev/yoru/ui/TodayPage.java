@@ -24,7 +24,7 @@ import static dev.yoru.ui.Theme.*;
  *
  * Moved out of YoruApp (#12), which built every page itself alongside the
  * navigation, the ticker and the vault. It reaches the window only through
- * {@link Shell}, as the Collection and Game pages do. The window's ticker still
+ * {@link Shell}, as the other pages do. The window's ticker still
  * drives it, by {@link #tick}, and a page change lets its live labels go, by
  * {@link #leave}.
  */
@@ -51,7 +51,7 @@ final class TodayPage {
     private ZoneId zone() { return shell.zone(); }
 
     /** One step of the window's ticker: the clock reads the time. */
-    void tick(boolean animate, Session running, boolean onScreen) {
+    void tick(boolean onScreen) {
         ankiCard.syncConnection();
         if(timerLabel!=null&&onScreen)updateTimer();
         if(dailyGoal!=null&&onScreen)dailyGoal.update();

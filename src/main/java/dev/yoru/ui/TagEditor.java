@@ -11,7 +11,7 @@ import static dev.yoru.ui.Theme.*;
 /**
  * Tag create, order, rename, recolour and delete (#3, #59).
  *
- * Unlike PartyEditor this is not a draft: Tracker commits each tag operation on
+ * This is not a draft: Tracker commits each tag operation on
  * its own, so re-implementing a transaction here would only be able to get it
  * wrong. Deleting is confirmed instead, and says plainly that the tasks stay.
  */

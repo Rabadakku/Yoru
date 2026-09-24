@@ -168,14 +168,15 @@ public final class YoruApp extends JPanel implements Shell {
         root.add(content,BorderLayout.CENTER);
         pomodoro=new PomodoroClock(()->this.tracker,java.time.Clock.systemUTC(),()->{ if(page.equals("Today")) showPage("Today"); });
         showPage("Today");
-        // 70ms: the Emerald walk cycle reads about right at this rate; 120 dragged.
-        ticker=new javax.swing.Timer(70,e-> {
+        // Four times a second: often enough that a clock showing seconds never
+        // visibly skips one, and a quarter of the wakeups the 70 ms the removed
+        // game's walk cycle needed, which a laptop's battery paid for all day.
+        ticker=new javax.swing.Timer(250,e-> {
             if(!displayDate.equals(today())){displayDate=today();showPage(page);}
             var running=tracker.active();
-            boolean animate=running!=null && !reducedMotion;
             try { pomodoro.tick(); }
             catch(Exception failure) { pomodoroFailed(failure); }
-            todayPage.tick(animate,tracker.active(),page.equals("Today"));
+            todayPage.tick(page.equals("Today"));
             if (SystemAppearance.enabled() && System.currentTimeMillis()-appearanceCheck > 30_000) refreshAppearance();
             updateRecordingStatus();
             // Synced here rather than from the clock-in and clock-out buttons, so
@@ -461,7 +462,6 @@ public final class YoruApp extends JPanel implements Shell {
         form.add(startCaption);form.add(start);gap(form,SPACE_MD);form.add(endCaption);form.add(end);
         var running=new JCheckBox("Keep timer running",session!=null&&session.end()==null);running.setOpaque(false);running.setForeground(TEXT);
         if(session!=null&&session.end()==null)form.add(running);
-        if(!plan){gap(form,SPACE_MD);form.add(label("Correcting time also recalculates the encounters it earned.",TYPE_CAPTION,MUTED));}
         while(Dialogs.confirm(this,form,plan?"Schedule block":existing?"Edit tracked time":"Log time","Save")) {
             try {
                 UUID id=((Activity)activity.getSelectedItem()).id();Instant from=start.value(),to=running.isSelected()?null:end.value();
@@ -506,9 +506,8 @@ public final class YoruApp extends JPanel implements Shell {
     }
 
     /**
-     * Moves to another vault. The game is stopped first: it holds the save of
-     * the vault it was playing, and would write it into whichever vault came
-     * next. Nothing moves until the vault being moved to has opened in full.
+     * Moves to another vault. Unsaved page text is saved first, and nothing
+     * moves until the vault being moved to has opened in full.
      */
     private void switchVault() {
         if (!pagesPage.flush()) return;

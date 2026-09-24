@@ -28,7 +28,7 @@ import static dev.yoru.ui.Theme.*;
  * Nothing reaches the network until Check for updates is pressed. An installer is
  * fetched only from the Yoru releases and kept only when its size and SHA-256
  * match the release. On a Mac the new app is staged while this one runs, and a
- * script swaps them once Yoru has closed its game and vault and quit; on Windows
+ * script swaps them once Yoru has closed its vault and quit; on Windows
  * the .msi runs after Yoru quits; installing a .deb needs an administrator, so on
  * Linux Yoru verifies it and says the one command to run. A copy built from
  * source is never overwritten.
@@ -173,7 +173,7 @@ final class UpdatesCard extends JPanel {
                     actions(notesButton(release));
                 } else {
                     status("Yoru " + next + " is downloaded and verified.", TEXT);
-                    detail("Yoru will close its game and vault, replace itself and reopen.");
+                    detail("Yoru will close your vault, replace itself and reopen.");
                     var restart = accentButton("Restart to update", () -> restartMac(staged, installed, work));
                     restart.setName("updates.restart");
                     actions(restart);
@@ -181,7 +181,7 @@ final class UpdatesCard extends JPanel {
             }
             case WINDOWS -> {
                 status("Yoru " + next + " is downloaded and verified.", TEXT);
-                detail("Yoru will close its game and vault, then the installer replaces it. Open Yoru again when the installer finishes.");
+                detail("Yoru will close your vault, then the installer replaces it. Open Yoru again when the installer finishes.");
                 var restart = accentButton("Close and install", () -> closeAndRun(() -> {
                     // The window is gone by now, so there is nowhere left to report a failure;
                     // the installed copy is untouched and the installer can be run by hand.

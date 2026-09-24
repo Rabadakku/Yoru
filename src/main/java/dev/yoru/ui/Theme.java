@@ -1102,7 +1102,7 @@ final class Theme {
      * saying "this one is different", never "make this unreadable". Both gold
      * roles are therefore accepted and the readable one is what gets drawn, so
      * the header that names an exception stays as legible as every other
-     * header — {@link #GOLD} stays what it is: a fill for chips and sprites.
+     * header — {@link #GOLD} stays what it is: a fill for chips.
      */
     static JLabel sectionHeader(String text, Color colour) {
         return label(quietCase(text), TYPE_SECTION, GOLD.equals(colour) ? GOLD_TEXT : colour);
@@ -1531,7 +1531,7 @@ final class Theme {
             if(isEnabled()||getText()==null||getText().isEmpty()) { super.paintComponent(graphics); return; }
             // BasicButtonUI paints disabled text as getBackground().darker(),
             // ignoring Button.disabledText entirely. On a dark theme that lands
-            // *below* the fill it sits on: "Current buddy" measured 1.9:1 on
+            // *below* the fill it sits on: a disabled label measured 1.9:1 on
             // screen while the palette claimed 4.6. Painting it here is the only
             // way the palette actually reaches the pixels.
             var g=(Graphics2D)graphics.create();
