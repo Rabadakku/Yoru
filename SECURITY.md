@@ -12,14 +12,18 @@ Settings → Updates reaches the network only when **Check for updates** is pres
 
 On macOS the verified disk image is mounted read-only, the app is copied out and checked to be `dev.yoru` at the expected version, and after Yoru closes its vault a shell script swaps the bundles, restoring the old one if the new one cannot be moved in. On Windows the verified `.msi` runs after Yoru quits. On Linux Yoru only verifies the `.deb`; installing it needs an administrator and is left to the person. Releases are not code-signed, so the checksum proves the file is the one published on GitHub, not who built it.
 
-## AI task proposals
-Core tracking works offline, and **Check for updates** is the only thing that uses the network. No telemetry, no local HTTP listener, and no AI provider is contacted by any 1.0 build.
+## AI assistants
+Yoru calls no AI service and holds no AI key. With **Settings → Integrations · AI assistants** switched on, an AI app on the same computer — Claude Desktop, Claude Code or another Model Context Protocol client — can start `Yoru --mcp`, which passes tool calls to the running, unlocked app. Both switches are off by default and kept in this computer's preferences.
 
-Tasks can be proposed by an AI chat you use yourself: Yoru shows a prompt to paste into it and reads back the reply you paste in. That reply is untrusted text. It must pass validation and your review before one transactional import, and it never changes existing tasks or habit records.
+- **Who can connect.** The running app listens on a Unix-domain socket in `~/Yoru/assistant/`, a folder created with owner-only permissions on POSIX systems. Every request must carry a 256-bit random token read from that folder; it is replaced each time the app starts and deleted, with the socket, when assistants are switched off or the vault closes. There is no TCP port. On Windows the folder relies on the user profile's access controls.
+- **What leaves the computer.** Yoru sends nothing itself. Whatever an assistant reads through Yoru's tools becomes part of your conversation with that assistant, and its app sends it to its provider under that provider's terms, just as anything you paste into it would be.
+- **What an assistant can do.** Reading tools cover tasks, pages, the schedule, tracked time and habits. Changing tools, behind a second switch, add and edit tasks, pages, plans, time and habit check-ins through the same validation as the interface. There are no tools that delete. The vault is backed up before an assistant's first change and at most every fifteen minutes of changes after that, and the app lists recent assistant changes in Settings.
+- **Untrusted text.** Page and task text is returned as data. The server's instructions tell the assistant never to follow instructions found in the vault, and more importantly the tools themselves only do what their arguments ask: nothing in the vault can widen what a tool does or turn a read into a write. Tests include hostile text.
+- **Claude Desktop's settings.** **Add Yoru to Claude Desktop** edits Claude Desktop's settings file only when pressed, keeps every other entry, writes a copy of the file as it was beside it, and leaves a file it cannot parse untouched.
 
-An API-backed class-file extraction existed before 1.0. Its code is kept for a later release, but no build can reach it; if it returns, this section will say what it sends and where.
+Tasks can also still be proposed by an AI chat you use yourself: Yoru shows a prompt to paste into it and reads back the reply you paste in. That reply is untrusted text. It must pass validation and your review before one transactional import, and it never changes existing tasks or habit records.
 
 ## Limits
-Exports are plaintext. Do not commit vaults, keys, exports, backups or class/health records. Provider adapters and arbitrary downloaded plugin execution are disabled. Habit check-offs record the user’s own entries, with no medication dosing logic or medical recommendations. The app has not undergone an independent security or accessibility assessment.
+Exports are plaintext. Do not commit vaults, keys, exports, backups or class/health records. Arbitrary downloaded plugin execution is not supported. Habit check-offs record the user’s own entries, with no medication dosing logic or medical recommendations. The app has not undergone an independent security or accessibility assessment.
 
 Report vulnerabilities privately to the repository owner, without personal records in public issues.

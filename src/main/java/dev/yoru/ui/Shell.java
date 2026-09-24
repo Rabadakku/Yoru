@@ -57,6 +57,9 @@ interface Shell {
     /** The window's pomodoro (#61), or null where there is none, as in a page built on its own. */
     default PomodoroClock pomodoro() { return null; }
 
+    /** AI assistants' way into the open vault (#47), or null in a page built on its own. */
+    default Assistants assistants() { return null; }
+
     /** Follow this computer’s macOS appearance without changing the vault theme. */
     default void systemAppearance(boolean on) { }
     default void selectTheme(dev.yoru.domain.Model.ThemeId id) {

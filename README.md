@@ -7,7 +7,7 @@ notes in one encrypted vault on your own machine. No account, no cloud sync.
 
 [Download](https://github.com/Rabadakku/Yoru/releases/latest) ·
 [Features](#features) · [Install](#install) · [Connect Anki](#connect-anki) ·
-[Build from source](#build-from-source)
+[Use Yoru with Claude](#use-yoru-with-claude) · [Build from source](#build-from-source)
 
 ![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/yoru-today-light.png)
 
@@ -89,6 +89,19 @@ on other pages. Setup lives in **Settings → Integrations · Anki**.
 
 [Connect Anki](#connect-anki)
 
+### AI assistants
+
+Ask Claude what is due this week, have it plan your study blocks around your
+classes, or turn a syllabus or lecture notes into tasks and pages. Yoru works
+as a tool for Claude Desktop, Claude Code or any other app that supports the
+Model Context Protocol, using your own account with that app: Yoru needs no
+API key. Assistants can read your tasks, pages, schedule, time and habits;
+with a second switch they can add and edit them too. They can never delete
+anything. Both switches are off until you turn them on in **Settings →
+Integrations · AI assistants**.
+
+[Use Yoru with Claude](#use-yoru-with-claude)
+
 ### Appearance and navigation
 
 - Collapsible sidebar for Today, Tasks, Pages, Habits, Schedule, Data and Settings.
@@ -108,6 +121,10 @@ on other pages. Setup lives in **Settings → Integrations · Anki**.
 - **Explicit network access.** Checking for updates contacts GitHub; downloading
   an update retrieves its installer. Anki communication stays on your computer
   at `127.0.0.1:8765`. Yoru does not upload your workspace.
+- **AI on your terms.** Yoru never calls an AI service. When you switch
+  assistants on, an AI app on your computer can ask Yoru questions; what it
+  reads goes to that app's provider as part of your conversation, as anything
+  you paste into it would.
 
 Without a password, a random key is kept beside the vault: convenient, but not
 protection from someone who can read both files. [SECURITY.md](SECURITY.md)
@@ -181,6 +198,47 @@ study sessions. It does not store card content, answers or deck names.
 Closing the app preserves the saved summary and settings. Switching the
 integration off stops automatic reads; **Clear key** removes the saved API key.
 Custom ports and remote Anki instances are not supported.
+
+## Use Yoru with Claude
+
+1. In Yoru, open **Settings → Integrations · AI assistants** and switch it on.
+   Tick **Let assistants make changes** if you want Claude to add and edit
+   things, not only read them.
+2. **Claude Desktop:** choose **Add Yoru to Claude Desktop**, then quit and
+   reopen Claude Desktop. Yoru keeps everything else in Claude Desktop's
+   settings and leaves a copy of them as they were. To do it by hand instead,
+   choose **Copy settings** and paste into Claude Desktop's **Settings →
+   Developer → Edit Config**.
+3. **Claude Code:** choose **Copy command** and run it in a terminal. It is
+   `claude mcp add yoru -- <path to Yoru> --mcp`.
+4. Keep Yoru open with your vault unlocked while you chat. Claude asks before
+   each tool it uses, unless you tell it to always allow one.
+
+Try "What's due this week, and how much did I study?", "Plan tomorrow around
+my classes", or "Turn these lecture notes into a page and tasks".
+
+### What an assistant can do
+
+| Reads | Changes, with the second switch |
+|---|---|
+| Today at a glance: the timer, tracked time, what is due, habits | Add a task, or one from a quick-add line |
+| Tasks, filtered by status, list, tag, dates or words | Edit a task's fields, status and links |
+| Pages: search, list and read | Create a page, add to it, or replace a passage |
+| The schedule: plans, weekly repeats, recorded time | Plan a block, record time, start and stop the timer |
+| Time totals by activity and day, and streaks | Check off a habit |
+| Habits: streaks, consistency and the last week | |
+
+Nothing can be deleted by an assistant. The vault is backed up before an
+assistant's first change, and again every fifteen minutes of changes after
+that. **Settings** lists the changes assistants made while Yoru was open.
+
+### How it connects
+
+Claude's app starts a second copy of Yoru with `--mcp`. That copy opens no
+window and no vault: it passes each request to the Yoru you have open, through
+a socket in a folder only your account can open, with a key that changes every
+time Yoru starts. Nothing listens on the network. When Yoru is closed, locked,
+or has assistants switched off, Claude is told so and how to fix it.
 
 ## Build from source
 

@@ -30,7 +30,7 @@ final class SettingsPage {
     JPanel view() {
         var settings=shell.tracker().state().settings();
         var p=stack();
-        p.add(YoruApp.pageHeaderFor("Settings","APPEARANCE · TRACKING · VAULT · UPDATES"));
+        p.add(YoruApp.pageHeaderFor("Settings","APPEARANCE · TRACKING · INTEGRATIONS · VAULT · UPDATES"));
         if(updates==null)updates=new UpdatesCard(dev.yoru.update.Version.running(),dev.yoru.update.Updates.current(),
             ()->new dev.yoru.update.ReleaseFeed().latest(),new UpdatesCard.Host() {
                 public void quitThen(Runnable afterVaultClosed) { shell.quitForUpdate(afterVaultClosed); }
@@ -209,7 +209,8 @@ final class SettingsPage {
         // workspace, so they come last.
         var anki=AnkiSettings.card(shell,new dev.yoru.anki.AnkiConnect()::read);
         var pomodoro=PomodoroSettings.card(shell);
-        for(var section:new JComponent[]{appearance,tracking,pomodoro,audio,anki,shell.vaultCard(),reset,updates}) {
+        var assistants=Assistants.card(shell,shell.assistants());
+        for(var section:new JComponent[]{appearance,tracking,pomodoro,audio,anki,assistants,shell.vaultCard(),reset,updates}) {
             p.add(section);
             gap(p,SPACE_XL);
         }

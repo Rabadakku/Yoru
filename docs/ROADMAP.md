@@ -1,5 +1,41 @@
 # Yoru roadmap
 
+## AI assistants: Yoru as a tool for Claude (#47)
+
+On `claude/wizardly-mayer-7jnqwb`. The owner wanted Claude in Yoru without an
+API key, and Anthropic does not let third-party apps sign in with claude.ai.
+So Claude's own apps call Yoru instead: Yoru is a Model Context Protocol
+server that Claude Desktop, Claude Code or any other MCP client starts with
+`Yoru --mcp`. That process opens no window or vault; it forwards each tool call
+over a Unix-domain socket in an owner-only folder, with a per-launch token, to
+the running and unlocked app. No port, no network code, no key.
+
+- **Tools** (`ai.WorkspaceTools`): nine that read (overview, tasks, one task,
+  page search, page list, one page, schedule, time totals, habits) and twelve
+  that change (add a task, quick-add a line, edit a task, create a page, add to
+  a page, replace a passage, link a task to a page, plan a block, record time,
+  start and stop the timer, check off a habit). None deletes.
+- **Switches** (`ui.Assistants`, per computer): reading off by default; changing
+  a second switch. The first change in fifteen minutes backs the vault up; the
+  page editor saves first and the page on screen redraws after; Settings lists
+  what assistants changed. **Add Yoru to Claude Desktop** merges Yoru into
+  Claude Desktop's settings file, keeping everything else and a copy of the
+  original; Claude Code gets a command to copy.
+- **Supersedes** the API-key plan in #47's first draft (providers, keys,
+  budgets): the assistant's own app runs and pays for the model.
+- Not done: AI inside the page editor (select text → rewrite) needs a model Yoru
+  can call itself, so it waits for a decision on API keys or for MCP sampling
+  in Claude's apps.
+
+Validation: `McpTest` (68: handshake, versions, JSON-RPC errors),
+`WorkspaceToolsTest` (433: every tool, refusals that name the choices, the
+changes switch, hostile page text, a failed save), `BridgeTest` (24: owner-only
+socket and token, a wrong token refused, a second window refused, a stale
+socket replaced, end to end from standard input), `ClaudeSetupTest` (27) and
+`AssistantsUiTest` (36: both switches off by default, a change drawn at once,
+every theme). `test.sh` also runs `--mcp` from the named module, as the
+installers do. The Settings card was reviewed at 100% and 200% text.
+
 ## Merged — repeat weeks, tasks as a database, quick add (#59, #68, #74; PR #109)
 
 On `claude/outstanding-tickets-97unts`, working down the open tickets in the

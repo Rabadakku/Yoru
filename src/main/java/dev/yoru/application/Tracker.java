@@ -54,8 +54,12 @@ public final class Tracker {
         }
         return any?next.withTasks(tasks):next;
     }
-    /** The whole-vault backup a destructive change takes first. */
-    void backup() throws IOException {
+    /**
+     * The whole-vault backup a destructive change takes first. Public for the
+     * one caller outside this package that needs it: an AI assistant's first
+     * change in a while is backed up the same way (#47).
+     */
+    public void backup() throws IOException {
         repository.backup();
     }
     private final Pages pages=new Pages(this);

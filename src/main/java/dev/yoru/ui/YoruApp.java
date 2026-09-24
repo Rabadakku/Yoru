@@ -53,6 +53,8 @@ public final class YoruApp extends JPanel implements Shell {
     private final TasksPanel.ViewState taskViewState=new TasksPanel.ViewState();
     private final Map<String,JButton> navigation = new LinkedHashMap<>();
     private boolean closed;
+    /** AI assistants' way into the open vault (#47); kept when a new palette rebuilds the window. */
+    private final Assistants assistants;
     /** What the bar needs to show every tab whole; measured when the bar is built. */
     private final int navMinimumWidth;
     private JPanel sidebar;
@@ -105,10 +107,15 @@ public final class YoruApp extends JPanel implements Shell {
         return pageHeader(rowFor(nav).nav(),subtitle,actions);
     }
 
-    public YoruApp(Tracker tracker,Repository vault) { this(tracker,vault,null,null,null); }
-    private YoruApp(Tracker tracker,Repository vault,VaultStore store,String openName,char[] secret) {
+    public YoruApp(Tracker tracker,Repository vault) { this(tracker,vault,null,null,null,null); }
+    private YoruApp(Tracker tracker,Repository vault,VaultStore store,String openName,char[] secret,Assistants assistants) {
         super(new BorderLayout());
         this.tracker=tracker;
+        this.assistants=assistants!=null?assistants:new Assistants(tracker,zone,dev.yoru.ai.Bridge.folder());
+        this.assistants.attach(new Assistants.Window() {
+            public boolean flush() { return !closed && pagesPage.flush(); }
+            public void refresh() { YoruApp.this.refresh(); }
+        });
         this.vault=vault;
         this.store=store;
         this.vaultName=openName;
@@ -179,8 +186,10 @@ public final class YoruApp extends JPanel implements Shell {
         }
         );
         ticker.start();
+        this.assistants.sync();
     }
     @Override public PomodoroClock pomodoro() { return pomodoro; }
+    @Override public Assistants assistants() { return assistants; }
 
     /** A pomodoro that could not record its work says so once, rather than every tick. */
     private String pomodoroFailure;
@@ -230,6 +239,7 @@ public final class YoruApp extends JPanel implements Shell {
     private void quit() {
         if(closed)return;
         closed=true;
+        assistants.close();
         pagesPage.stop();
         todayPage.close();
         music.close();
@@ -1385,7 +1395,7 @@ public final class YoruApp extends JPanel implements Shell {
         pagesPage.stop();
         if(window instanceof JFrame frame) {
             closed=true;
-            var fresh=new YoruApp(tracker,vault,store,vaultName,secret);
+            var fresh=new YoruApp(tracker,vault,store,vaultName,secret,assistants);
             frame.setContentPane(fresh);
             DesktopChrome.install(frame,fresh);
             // Rebuilt from the new bar: a palette swap can change the brand's
@@ -1430,7 +1440,10 @@ public final class YoruApp extends JPanel implements Shell {
             + "Open it with any Game Boy Advance emulator. Yoru will not touch it again.");
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws java.io.IOException {
+        // Started by an AI app (#47): speak the protocol on standard input and
+        // output, and never open a window or a vault.
+        if(args.length>0&&args[0].equals("--mcp")) { dev.yoru.ai.McpMain.main(args); return; }
         DesktopChrome.prepare();
         if (SystemAppearance.enabled()) Theme.systemStyle=SystemAppearance.read();
         SwingUtilities.invokeLater(()-> {
@@ -1444,7 +1457,7 @@ public final class YoruApp extends JPanel implements Shell {
                 Theme.apply(SystemAppearance.enabled() && Theme.systemStyle != null ? Theme.systemStyle.theme() : tracker.state().settings().theme());
                 // The store, the name and the session's secret travel with the
                 // window: rename, switch and delete all happen from the Data page.
-                var app=new YoruApp(tracker,opened.vault(),opened.store(),opened.name(),opened.secret());
+                var app=new YoruApp(tracker,opened.vault(),opened.store(),opened.name(),opened.secret(),null);
                 var frame=new JFrame("Yoru / 夜 — local study workspace");frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);frame.setContentPane(app);DesktopChrome.install(frame,app);frame.pack();
                 // Without an explicit icon the platform substitutes stock Java artwork.
                 frame.setIconImages(Theme.appIcons());

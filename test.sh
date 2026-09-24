@@ -18,6 +18,11 @@ java -ea -cp build/classes dev.yoru.anki.AnkiConnectTest
 java -ea -cp build/classes dev.yoru.AnkiTimeTest
 java -ea -cp build/classes dev.yoru.AnkiStreakTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AnkiStreakUiTest
+java -ea -cp build/classes dev.yoru.ai.McpTest
+java -ea -cp build/classes dev.yoru.ai.WorkspaceToolsTest
+java -ea -cp build/classes dev.yoru.ai.BridgeTest
+java -ea -cp build/classes dev.yoru.ai.ClaudeSetupTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.AssistantsUiTest
 java -ea -cp build/classes dev.yoru.pages.MarkdownTest
 java -ea -cp build/classes dev.yoru.pages.LinksTest
 java -ea -cp build/classes dev.yoru.PagesTest
@@ -127,3 +132,16 @@ public final class ModuleUiCheck {
 EOF
 javac --release 22 --module-path build/classes --add-modules dev.yoru -d build/classes build/module-check/dev/yoru/ui/ModuleUiCheck.java
 java -Djava.awt.headless=true --module-path build/classes --module dev.yoru/dev.yoru.ui.ModuleUiCheck
+
+# An AI app starts the packaged launcher with --mcp (#47). Run it the same way,
+# as the named module, and hold it to the protocol: one JSON reply per request
+# on standard output and nothing else there.
+reply=$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+    '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+    | java --module-path build/classes --module dev.yoru/dev.yoru.ui.YoruApp --mcp 2>/dev/null)
+case "$reply" in
+    '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"'*'"id":2,"result":{"tools":[{"name":"get_overview"'*) ;;
+    *) echo "FAIL: Yoru --mcp did not answer as a tool server: $reply" >&2; exit 1 ;;
+esac
+[ "$(printf '%s\n' "$reply" | wc -l)" -eq 2 ] || { echo "FAIL: Yoru --mcp wrote more than its replies" >&2; exit 1; }
+echo "PASS: Yoru --mcp answers the protocol from the named module"
