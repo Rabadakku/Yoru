@@ -1,6 +1,6 @@
 # Yoru roadmap
 
-## In progress — bulk session actions (#59)
+## Bulk session actions (#59)
 
 `codex/session-bulk-actions` adds multiple selection to recorded sessions on
 Data, with Move to activity, Shift times (elapsed minutes) and confirmed Delete.
@@ -12,6 +12,11 @@ sessions, future times, stale selections and overlaps refuse the entire action.
 Failed saves retain selection for retry. Anki IDs and durations survive edits;
 the delete confirmation explains possible reimport of recent Anki sittings.
 No stored fields or schema changes. Other CRUD areas in #59 remain open.
+
+Validation: full isolated suite passed in a clean checkout; 30 domain/persistence
+checks and 22 UI checks cover sorting/filtering, failures, running timers, Anki
+IDs and DST. Inspected controls in all five themes and both 100%/200% text sizes,
+including move/shift dialogs. The preview inventory passed all 302 checks.
 
 ## Habit order and daily time zone (#59, PR #105)
 
