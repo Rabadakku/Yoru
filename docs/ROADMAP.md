@@ -1,6 +1,21 @@
 # Yoru roadmap
 
-## In review — correcting habit history (#59)
+## Habit order and daily time zone (#59, PR #105)
+
+`codex/habit-controls` adds Move up/down to both kinds of habit and Time zone
+to the daily habit menu. Each kind reorders only among its own neighbours; the
+existing ordered list persists it. Changing zone preserves check-in dates and
+the habit’s beginning, and only changes the local daily boundary. Both actions
+validate before one backup/save, with no-ops at boundaries or an unchanged zone.
+No schema change.
+
+Validation: full isolated suite in a clean checkout, 19 domain/persistence
+checks and 9 UI checks (including the final UTC label check). Changed order and
+zone survive encrypted/portable roundtrips. The form was reviewed in all five
+themes and at 200% text. The contributor rules now require complete CRUD controls
+and coverage for new records.
+
+## Merged — correcting habit history (#59, PR #104)
 
 `codex/habit-history-fixes` opens the daily history beyond four weeks with paging and
 a jump-to-date field. Old check-ins can be added or removed in place; corrections

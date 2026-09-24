@@ -39,6 +39,8 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SystemAppearance
 
 java -ea -cp build/classes dev.yoru.HabitsTest
 java -ea -cp build/classes dev.yoru.HabitHistoryTest
+java -ea -cp build/classes dev.yoru.HabitControlsTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.HabitControlsUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.HabitHistoryUiTest
 java -ea -cp build/classes dev.yoru.HabitStatsTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.HabitGridTest

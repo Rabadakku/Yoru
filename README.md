@@ -58,6 +58,8 @@ habits off beside your tasks, from the mouse or the keyboard. In a daily habit�
 History, browse earlier weeks or use Show date to correct older check-ins. In
 a time-since tracker’s History, Add missed restart records a past boundary
 without moving the existing ones. History corrections are backed up first.
+Use a habit’s menu to move it up or down in its list. Daily habits also offer
+Time zone; changing it keeps recorded check-ins on their original dates.
 
 ![Yoru Habits in the dark theme, with daily habits and time-since trackers](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/yoru-habits-dark.png)
 

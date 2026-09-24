@@ -1,10 +1,9 @@
 # Working on Yoru
 
 Read [AGENTS.md](AGENTS.md) first: nothing personal ever goes into the repository
-or onto GitHub. Then [docs/PRODUCT-GOALS.md](docs/PRODUCT-GOALS.md). Yoru's gameplay target
-is the full game inside the application, with original battles and progression
-and studying replacing the grind. Battles happen in the real game running in the
-Game tab; the Java battle prototype was removed on 2026-09-11.
+or onto GitHub. Then [docs/PRODUCT-GOALS.md](docs/PRODUCT-GOALS.md). Yoru is a
+local desktop productivity workspace for time, tasks, habits and Markdown notes.
+The product goals supersede the retired game direction.
 
 Written for whoever picks this up next — a person, or an AI agent working
 alongside another one. Several agents have already worked this repository
@@ -135,7 +134,7 @@ and say why.
 
 ## 5. Tests
 
-`./test.sh` runs everything. 213 checks plus page rendering across:
+`./test.sh` runs the isolated checks and page renders. Representative suites:
 
 | Suite | Covers |
 |---|---|
@@ -149,6 +148,11 @@ and say why.
 | `ArtworkTest` | artwork naming, nested folders, zip import and path escapes |
 | `ReliabilityTest` | edits, evolution, shiny odds, vault reopen, backup failure and reset accounting |
 | `ui/RouteTest` | centered camera, pause/resume, resize and all four themes |
+
+Every new record must ship with create, view, edit and delete controls (#59),
+reachable by mouse and keyboard and named for accessibility. Cover the tracker
+operations and actual UI controls, including failed saves; take a backup before
+destructive changes. No record should require editing the vault by hand.
 
 Add tests with the feature, not after. The features recovered from an
 interrupted session shipped with zero coverage and two of them had real bugs —
