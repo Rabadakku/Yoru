@@ -22,14 +22,48 @@ public final class Tracker {
     }
     /** Package-private so services beside the tracker (Pages) save through the same one path. */
     void commit(State next) throws IOException {
+        next=stamped(next);
         repository.save(next);
         state=next;
+    }
+
+    /**
+     * The next state with every task that changed marked as edited now (#68).
+     *
+     * Done here, where every change passes, rather than by each change: a task
+     * edited by a path that forgot to stamp it would show a stale "edited"
+     * time, and the owner could not tell. Its place in the manual order is not
+     * an edit, a new task needs no stamp, and a list untouched by the change
+     * is the same list, so most writes compare nothing.
+     */
+    private State stamped(State next) {
+        if(next.tasks()==state.tasks()) return next;
+        var before=new HashMap<UUID,Task>();
+        for(var t:state.tasks()) before.put(t.id(),t);
+        var now=clock.instant();
+        boolean any=false;
+        var tasks=new ArrayList<Task>(next.tasks().size());
+        for(var t:next.tasks()) {
+            var was=before.get(t.id());
+            // A new task is not stamped: until it changes, it was last edited
+            // when it was made, which is what Task.edited() reads.
+            boolean edited=was!=null
+                &&!t.withOrder(was.order()).withDetails(t.details().withEdited(was.details().editedAt())).equals(was);
+            if(edited) { t=t.withDetails(t.details().withEdited(now)); any=true; }
+            tasks.add(t);
+        }
+        return any?next.withTasks(tasks):next;
     }
     /** The whole-vault backup a destructive change takes first. */
     void backup() throws IOException {
         repository.backup();
     }
     private final Pages pages=new Pages(this);
+    private final TaskProperties properties=new TaskProperties(this);
+    /** Priority, statuses and the owner's own task properties: the one way to change them (#68). */
+    public TaskProperties properties() {
+        return properties;
+    }
     /** Pages and folders: the one way to change them (#46). */
     public Pages pages() {
         return pages;
@@ -49,7 +83,10 @@ public final class Tracker {
     public void restore(State next) throws IOException {
         Objects.requireNonNull(next, "Nothing to restore.");
         repository.backup();
-        commit(next);
+        // As the file has it: an import is not an edit, and its tasks keep the
+        // edited times they were exported with (#68).
+        repository.save(next);
+        state=next;
     }
 
     public Session active() {
@@ -692,6 +729,7 @@ public final class Tracker {
         TASKS("Tasks"),
         TAGS("Tags"),
         LISTS("Task lists (their tasks move to the Inbox)"),
+        PROPERTIES("Task properties and statuses (tasks are kept, without them)"),
         DAILY_HABITS("Daily check-offs"),
         TIME_SINCE("Time-since trackers"),
         SETTINGS("Settings"),
@@ -723,6 +761,13 @@ public final class Tracker {
         // Clearing pages unlinks the tasks that pointed at them; the tasks stay.
         boolean clearPages=parts.contains(ResetPart.PAGES);
         if(clearPages)tasks=tasks.stream().map(x->x.withPages(List.of())).toList();
+        // Clearing properties and statuses (#68) takes their values off the
+        // tasks, which fall back to their group's own status; the tasks stay.
+        boolean clearDatabase=parts.contains(ResetPart.PROPERTIES);
+        if(clearDatabase)tasks=tasks.stream().map(x->x.withDetails(new Details(x.priority(),null,Map.of(),x.details().editedAt()))).toList();
+        var database=clearDatabase?TaskDatabase.EMPTY:state.database();
+        // A property kept for one list belongs to every task once lists are gone.
+        if(clearLists)database=database.withProperties(database.properties().stream().map(p->p.withList(null)).toList());
         var next=new State(
             activities?List.of():state.activities(),
             sessions?List.of():state.sessions(),
@@ -734,7 +779,8 @@ public final class Tracker {
             parts.contains(ResetPart.SETTINGS)?Settings.defaults():state.settings(),
             clearPages?Notes.empty():state.notes(),
             parts.contains(ResetPart.ANKI)?Anki.off():state.anki(),
-            clearLists?List.of():state.lists());
+            clearLists?List.of():state.lists(),
+            database);
         repository.backup();commit(next);
     }
 
@@ -832,8 +878,12 @@ public final class Tracker {
             ?state.tasks().stream().filter(t->!id.equals(t.listId())).toList()
             :state.tasks().stream().map(t->id.equals(t.listId())?t.withList(null):t).toList();
         repository.backup();
-        // Out of the list first: removing a list a task is still in would not validate.
-        commit(state.withTasks(tasks).withLists(state.lists().stream().filter(l->!l.id().equals(id)).toList()));
+        // Out of the list first: removing a list a task is still in would not
+        // validate. Its own properties (#68) then belong to every task, so no
+        // value is lost with the list.
+        var database=state.database();
+        database=database.withProperties(database.properties().stream().map(p->id.equals(p.listId())?p.withList(null):p).toList());
+        commit(state.withTasks(tasks).withDatabase(database).withLists(state.lists().stream().filter(l->!l.id().equals(id)).toList()));
     }
 
     /** Files one task in a list, or in the Inbox for null. */

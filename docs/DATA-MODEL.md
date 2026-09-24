@@ -323,3 +323,42 @@ a schema 20 vault written by the unmodified build. The portable export is
 format 10: `"changes"` on each repeat, with `"week"`, `"skipped"` and, when
 moved, `"day"`, `"startTime"` and `"endTime"`. A file without them reads with
 no changed weeks.
+
+## Tasks as a database (schema 22, #68)
+
+Schema 22 gives every task a `Details` part and the vault a `TaskDatabase`
+part. Later database features (views, sub-tasks, projects, templates) add to
+these two rather than to `Task`'s and `State`'s own arguments.
+
+`Details` is a task's `Priority` (none, low, medium, high, urgent), the id of
+one of the owner's `StatusOption`s or null for its group's own status, the
+values of its properties keyed by property id, and `editedAt`. A value is one
+of `Value.Text` (text and links), `Value.Amount` (an exact decimal, compared
+with trailing zeros stripped, so 2.50 is 2.5), `Value.Choice`, `Value.Choices`,
+`Value.Day` or `Value.Tick`; an empty value is no entry, and an unticked
+checkbox is not stored. `editedAt` is a raw fact stamped by `Tracker.commit`
+on every task whose content changed — not its place in the manual order, not
+a task just added, and not a whole-vault import, which keeps the times it
+carries. A task from before it was kept reads its creation time.
+
+`TaskDatabase` holds the owner's `StatusOption`s (a name and colour inside one
+of the three `TaskStatus` groups; names unique, the groups' own "To do",
+"Doing" and "Done" included) and `Property` definitions: a name, a
+`PropertyType`, the options of a select or multi-select, the list it belongs to
+or null for every task, and whether it is hidden from the table. The two
+`PropertyType`s CREATED and EDITED hold no values; they read the task's times.
+State refuses a status in the wrong group, a value its property does not
+accept, a value for a property that is gone, and a property for a list that is
+gone. Deleting a list gives its properties to every task, and resetting lists
+does the same; resetting "Task properties and statuses" clears the database
+and the values and statuses on tasks, leaving priorities.
+
+In the vault each task's details follow its history: the priority's name, the
+status id (flagged), `editedAt` (flagged), and the values as a count of
+property id, a kind byte and that kind's payload, in id order. The statuses
+and properties follow the repeat changes of schema 21. `LegacyVaultTest`
+opens a schema 21 vault written by `610a59d`. The portable export is format
+11: `"statuses"` and `"properties"` at the top level, and on each task
+`"priority"`, `"statusId"`, `"editedAt"` and `"values"`, each value an object
+naming its kind (`"text"`, `"number"` as a string, `"option"`, `"options"`,
+`"date"`, `"checked"`). A file without them reads with no database.

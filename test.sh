@@ -71,6 +71,7 @@ java -ea -cp build/classes dev.yoru.PortableVaultTest
 java -ea -cp build/classes dev.yoru.RecurringTest
 java -ea -cp build/classes dev.yoru.RepeatWeekTest
 java -ea -cp build/classes dev.yoru.TaskBatchTest
+java -ea -cp build/classes dev.yoru.TaskPropertiesTest
 java -ea -cp build/classes dev.yoru.SessionBatchTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SessionActionsTest
 java -ea -cp build/classes dev.yoru.RepeatTest

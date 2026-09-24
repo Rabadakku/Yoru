@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=21, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=22, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -252,6 +252,17 @@ public final class EncryptedVault implements Repository {
                     if (task.repeat() != null) repeat(out, task.repeat());
                     out.writeInt(task.history().size());
                     for (var o : task.history()) { out.writeLong(o.due().toEpochDay()); instant(out, o.at()); out.writeBoolean(o.skipped()); }
+                    // Schema 22: priority, the owner's status, property values
+                    // and when it last changed (#68). Values in property order
+                    // by id, so the same task always writes the same bytes.
+                    var details = task.details();
+                    out.writeUTF(details.priority().name());
+                    out.writeBoolean(details.statusId() != null);
+                    if (details.statusId() != null) uuid(out, details.statusId());
+                    out.writeBoolean(details.editedAt() != null);
+                    if (details.editedAt() != null) instant(out, details.editedAt());
+                    out.writeInt(details.values().size());
+                    for (var value : new TreeMap<>(details.values()).entrySet()) { uuid(out, value.getKey()); value(out, value.getValue()); }
                 }
                 out.writeInt(state.habits().size());
                 for(var h:state.habits()) {
@@ -325,6 +336,21 @@ public final class EncryptedVault implements Repository {
                             out.writeInt(c.start().toSecondOfDay()); out.writeInt(c.end().toSecondOfDay());
                         }
                     }
+                }
+                // Schema 22: the owner's statuses and task properties (#68).
+                var database = state.database();
+                out.writeInt(database.statuses().size());
+                for (var own : database.statuses()) {
+                    uuid(out, own.id()); out.writeUTF(own.name()); out.writeUTF(own.group().name()); out.writeInt(own.colour());
+                }
+                out.writeInt(database.properties().size());
+                for (var property : database.properties()) {
+                    uuid(out, property.id()); out.writeUTF(property.name()); out.writeUTF(property.type().name());
+                    out.writeInt(property.options().size());
+                    for (var option : property.options()) { uuid(out, option.id()); out.writeUTF(option.name()); out.writeInt(option.colour()); }
+                    out.writeBoolean(property.listId() != null);
+                    if (property.listId() != null) uuid(out, property.listId());
+                    out.writeBoolean(property.hidden());
                 }
             }
             if(bytes.size()>31_000_000)throw new IOException("Vault is too large.");
@@ -428,7 +454,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 21.
+     * Reads any schema from 1 to 22.
      *
      * Every field older vaults lack arrives as a sensible empty, and everything
      * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
@@ -533,7 +559,17 @@ public final class EncryptedVault implements Repository {
                     var history=new ArrayList<Occurrence>();
                     if(schema>=20) for(int h=count(in);h>0;h--)
                         history.add(new Occurrence(LocalDate.ofEpochDay(in.readLong()),instant(in),in.readBoolean()));
-                    tasks.add(new Task(id,activity,tags,title,notes,due,status,source,created,order,planned,pages,list,rule,history));
+                    // Schema 22 gave a task its database details; before it, none had any.
+                    var details=Details.NONE;
+                    if(schema>=22) {
+                        var priority=Priority.valueOf(in.readUTF());
+                        var own=in.readBoolean()?uuid(in):null;
+                        var edited=in.readBoolean()?instant(in):null;
+                        var values=new HashMap<UUID,Value>();
+                        for(int v=count(in);v>0;v--) values.put(uuid(in),value(in));
+                        details=new Details(priority,own,values,edited);
+                    }
+                    tasks.add(new Task(id,activity,tags,title,notes,due,status,source,created,order,planned,pages,list,rule,history,details));
                 }
                 if (schema <= 10) skipLegacyCollection(in, schema);
             }
@@ -632,8 +668,23 @@ public final class EncryptedVault implements Repository {
                 var r=recurring.get(i);
                 recurring.set(i,new RecurringBlock(r.id(),r.activityId(),r.dayOfWeek(),r.startTime(),r.endTime(),changes));
             }
+            // Schema 22: the owner's statuses and task properties (#68).
+            var database=TaskDatabase.EMPTY;
+            if(schema>=22) {
+                var statuses=new ArrayList<StatusOption>();
+                for(int n=count(in);n>0;n--) statuses.add(new StatusOption(uuid(in),in.readUTF(),TaskStatus.valueOf(in.readUTF()),in.readInt()));
+                var properties=new ArrayList<Property>();
+                for(int n=count(in);n>0;n--) {
+                    var id=uuid(in); var name=in.readUTF(); var type=PropertyType.valueOf(in.readUTF());
+                    var options=new ArrayList<PropertyOption>();
+                    for(int o=count(in);o>0;o--) options.add(new PropertyOption(uuid(in),in.readUTF(),in.readInt()));
+                    var list=in.readBoolean()?uuid(in):null;
+                    properties.add(new Property(id,name,type,options,list,in.readBoolean()));
+                }
+                database=new TaskDatabase(statuses,properties);
+            }
             if(in.available()!=0)throw new IOException("Unexpected vault content.");
-            return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,new Notes(folders,pages),anki,lists);
+            return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,new Notes(folders,pages),anki,lists,database);
         }
         catch(RuntimeException e) {
             throw new IOException("Invalid vault data.",e);
@@ -641,6 +692,28 @@ public final class EncryptedVault implements Repository {
         finally {
             Arrays.fill(bytes,(byte)0);
         }
+    }
+    /** One property value: a kind, then what that kind holds. */
+    private static void value(DataOutputStream out,Value value)throws IOException {
+        switch(value) {
+            case Value.Text t -> { out.writeByte(0); out.writeUTF(t.text()); }
+            case Value.Amount a -> { out.writeByte(1); out.writeUTF(a.amount().toString()); }
+            case Value.Choice c -> { out.writeByte(2); uuid(out,c.option()); }
+            case Value.Choices cs -> { out.writeByte(3); out.writeInt(cs.options().size()); for(var o:cs.options()) uuid(out,o); }
+            case Value.Day d -> { out.writeByte(4); out.writeLong(d.date().toEpochDay()); }
+            case Value.Tick ignored -> out.writeByte(5);
+        }
+    }
+    private static Value value(DataInputStream in)throws IOException {
+        return switch(in.readByte()) {
+            case 0 -> new Value.Text(in.readUTF());
+            case 1 -> new Value.Amount(new java.math.BigDecimal(in.readUTF()));
+            case 2 -> new Value.Choice(uuid(in));
+            case 3 -> { var options=new ArrayList<UUID>(); for(int n=count(in);n>0;n--) options.add(uuid(in)); yield new Value.Choices(options); }
+            case 4 -> new Value.Day(LocalDate.ofEpochDay(in.readLong()));
+            case 5 -> new Value.Tick();
+            default -> throw new IOException("Unknown property value.");
+        };
     }
     /** A repeat rule, field by field; weekdays as one bit each. */
     private static void repeat(DataOutputStream out,Repeat r)throws IOException {

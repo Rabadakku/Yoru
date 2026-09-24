@@ -61,7 +61,7 @@ public final class PortableVaultTest {
         var inbox=new Page(UUID.randomUUID(),null,"Inbox","Loose thoughts.",Instant.parse("2026-09-04T08:00:00Z"),
             Instant.parse("2026-09-04T08:00:00Z"),null);
         var school=new TaskList(UUID.randomUUID(),"School",0x6E8FD6,0);
-        return new State(
+        return withDatabase(new State(
             List.of(study,japanese),
             List.of(new Session(UUID.randomUUID(),study.id(),Instant.parse("2026-09-03T09:00:00Z"),
                         Instant.parse("2026-09-03T10:30:00Z")),
@@ -98,13 +98,54 @@ public final class PortableVaultTest {
                     LocalDate.parse("2026-09-03"),16L,LocalDate.parse("2026-09-04"),24L)),
                     Instant.parse("2026-09-04T09:30:00Z"))),
             // One list, holding the quiz; the other tasks are in the Inbox (#56).
-            List.of(school));
+            List.of(school),TaskDatabase.EMPTY));
+    }
+
+    /**
+     * Tasks as a database (#68): two statuses of the owner's, a property of
+     * every kind with a value on the first task, one kept for the School list
+     * and one hidden.
+     */
+    static State withDatabase(State state) {
+        var waiting=new StatusOption(UUID.randomUUID(),"Waiting on reply",TaskStatus.TODO,0xE8B24C);
+        var review=new StatusOption(UUID.randomUUID(),"In review",TaskStatus.DOING,0xA98BD4);
+        var easy=new PropertyOption(UUID.randomUUID(),"Easy",0x6FBF8B);
+        var hard=new PropertyOption(UUID.randomUUID(),"Hard",0xD9736A);
+        var reading=new PropertyOption(UUID.randomUUID(),"Reading",0x90D8DA);
+        var writing=new PropertyOption(UUID.randomUUID(),"Writing",0x6E8FD6);
+        var school=state.lists().getFirst().id();
+        var properties=List.of(
+            new Property(UUID.randomUUID(),"Summary",PropertyType.TEXT,List.of(),null,false),
+            new Property(UUID.randomUUID(),"Effort",PropertyType.NUMBER,List.of(),null,false),
+            new Property(UUID.randomUUID(),"Difficulty",PropertyType.SELECT,List.of(easy,hard),null,false),
+            new Property(UUID.randomUUID(),"Skills",PropertyType.MULTI_SELECT,List.of(reading,writing),null,false),
+            new Property(UUID.randomUUID(),"Handed in",PropertyType.DATE,List.of(),school,false),
+            new Property(UUID.randomUUID(),"Printed",PropertyType.CHECKBOX,List.of(),null,true),
+            new Property(UUID.randomUUID(),"Link",PropertyType.URL,List.of(),null,false),
+            new Property(UUID.randomUUID(),"Made",PropertyType.CREATED,List.of(),null,false),
+            new Property(UUID.randomUUID(),"Changed",PropertyType.EDITED,List.of(),null,false));
+        var values=new HashMap<UUID,Value>();
+        values.put(properties.get(0).id(),new Value.Text("Two sections, with \"quotes\" and 日本語"));
+        values.put(properties.get(1).id(),new Value.Amount(new java.math.BigDecimal("2.50")));
+        values.put(properties.get(2).id(),new Value.Choice(hard.id()));
+        values.put(properties.get(3).id(),new Value.Choices(List.of(writing.id(),reading.id())));
+        values.put(properties.get(4).id(),new Value.Day(LocalDate.parse("2026-09-12")));
+        values.put(properties.get(5).id(),new Value.Tick());
+        values.put(properties.get(6).id(),new Value.Text("https://example.com/syllabus"));
+        var tasks=new ArrayList<>(state.tasks());
+        tasks.set(0,tasks.get(0).withDetails(new Details(Priority.HIGH,review.id(),values,Instant.parse("2026-09-02T08:00:00Z"))));
+        tasks.set(2,tasks.get(2).withDetails(new Details(Priority.URGENT,waiting.id(),Map.of(),null)));
+        return state.withDatabase(new TaskDatabase(List.of(waiting,review),properties)).withTasks(tasks);
     }
 
     public static void main(String[] args)throws Exception{
         var original=populated();
         var when=Instant.parse("2026-09-09T19:30:00Z");
         var json=PortableVault.export(original,when);
+        // What an older build would have exported: no statuses, properties or
+        // task details (#68). The older formats below are cut down from this.
+        var plain=PortableVault.export(original.withTasks(original.tasks().stream().map(t->t.withDetails(Details.NONE)).toList())
+            .withDatabase(TaskDatabase.EMPTY),when);
 
         // Readable, and honest about what it is.
         check(json.contains("\n  \"activities\""),"The export is indented, not one line");
@@ -134,7 +175,7 @@ public final class PortableVaultTest {
         check(restored.tasks().getFirst().pageIds().size()==2,"A task keeps the pages it links to");
         check(restored.notes().pages().getFirst().body().length()>70_000,"A long page is not cut short");
         // A format 2 file, from before Pages, still imports: no pages, no links.
-        var formatTwo=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 2").replaceAll(",\\s*\"pageIds\": \\[[^\\]]*\\]","");
+        var formatTwo=plain.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 2").replaceAll(",\\s*\"pageIds\": \\[[^\\]]*\\]","");
         formatTwo=formatTwo.substring(0,formatTwo.indexOf(",\n  \"folders\""))+"\n}";
         var older=PortableVault.parse(formatTwo);
         check(older.notes().pages().isEmpty()&&older.tasks().stream().allMatch(t->t.pageIds().isEmpty()),
@@ -166,12 +207,12 @@ public final class PortableVaultTest {
         check(PortableVault.parse(repeatJson).equals(repeating),"A repeat rule and its history survive the round trip");
         check(repeatJson.contains("\"days\": [\n")&&repeatJson.contains("\"FRIDAY\""),"Its weekdays are written by name");
         check(repeatJson.contains("\"skipped\": true"),"and a skipped occurrence says so");
-        check(PortableVault.parse(json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 8")
+        check(PortableVault.parse(plain.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 8")
             .replaceAll(",\\s*\"repeat\": null","").replaceAll(",\\s*\"history\": \\[\\]","")).tasks().stream()
             .noneMatch(Task::repeats),"A format 8 file reads with nothing repeating");
 
         // A format 7 file has no lists: every task arrives in the Inbox.
-        var formatSeven=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 7")
+        var formatSeven=plain.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 7")
             .replaceAll(",\\s*\"listId\": (null|\"[^\"]*\")","")
             .replaceAll("\"lists\": \\[[^\\]]*\\],\\s*","");
         check(!formatSeven.contains("listId")&&!formatSeven.contains("\"lists\""),"The format 7 fixture has no lists");
@@ -188,7 +229,7 @@ public final class PortableVaultTest {
         check(twoBack.equals(withTwo),"Two tags on a task survive the round trip");
         check(twoBack.tasks().getFirst().tagIds().getFirst().equals(seminar.id()),"in the order they were given");
         // A format 6 file names one tag per task, and still imports with it.
-        var formatSix=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 6")
+        var formatSix=plain.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 6")
             .replaceAll("\"tagIds\": \\[\\s*(\"[^\"]+\")\\s*\\]","\"tagId\": $1")
             .replaceAll("\"tagIds\": \\[\\s*\\]","\"tagId\": null");
         check(!formatSix.contains("tagIds"),"The format 6 fixture has no lists of tags");
@@ -235,7 +276,7 @@ public final class PortableVaultTest {
             "A daily goal past the int range is refused, not read as 7");
         // A file from before the game was removed still imports: what it held
         // for the game is simply ignored (#58).
-        String withGame=json.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 3,\n  \"campaign\": {\"seed\": 42, \"encountersUsed\": 3, \"rewardedSeconds\": 5400},\n"
+        String withGame=plain.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 3,\n  \"campaign\": {\"seed\": 42, \"encountersUsed\": 3, \"rewardedSeconds\": 5400},\n"
             +"  \"rewards\": [{\"id\": \""+UUID.randomUUID()+"\", \"nationalDex\": 252, \"level\": 5, \"earnedAt\": \"2026-09-01T08:00:00Z\", \"deliveredAt\": null}]");
         var withoutGame=PortableVault.parse(withGame);
         check(withoutGame.tasks().size()==restored.tasks().size(),"An older file's tasks still import");
@@ -246,7 +287,7 @@ public final class PortableVaultTest {
         var cutTask=new Task(UUID.randomUUID(),null,null,"Revise \uD83D","",null,TaskStatus.TODO,"notion",
             Instant.parse("2026-09-01T12:00:00Z"),0,null);
         var cut=new State(List.of(),List.of(),List.of(),List.of(),List.of(cutTask),List.of(),List.of(),
-            Settings.defaults(),Notes.empty(),Anki.off(),List.of());
+            Settings.defaults(),Notes.empty(),Anki.off(),List.of(),TaskDatabase.EMPTY);
         var exported=java.nio.file.Files.createTempFile("yoru-export-",".json");
         try{
             java.nio.file.Files.writeString(exported,PortableVault.export(cut,when));

@@ -142,7 +142,7 @@ public final class TaskListsTest {
         rejects(() -> new State(List.of(), List.of(), List.of(), List.of(),
             List.of(new Task(UUID.randomUUID(), null, List.of(), "Orphan", "", null, TaskStatus.TODO, "", now, 0,
                 null, List.of(), UUID.randomUUID())), List.of(), List.of(), Settings.defaults(), Notes.empty(),
-            Anki.off(), List.of()), "A task in a list that does not exist is not a valid vault");
+            Anki.off(), List.of(), TaskDatabase.EMPTY), "A task in a list that does not exist is not a valid vault");
 
         // ---- the board
         var state = new TasksPanel.ViewState();
