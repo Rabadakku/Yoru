@@ -40,6 +40,7 @@ final class TestShell implements Shell {
     @Override public ZoneId zone() { return zone; }
     @Override public void timeDialog(boolean plan) { }
     @Override public void editTime(Session session) { }
+    @Override public void editBlock(ScheduleBlock block) { }
     @Override public void addActivity() { }
     @Override public String activityName(UUID id) {
         return tracker.state().activities().stream().filter(a -> a.id().equals(id)).map(Activity::name)

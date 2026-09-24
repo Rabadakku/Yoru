@@ -182,8 +182,8 @@ public final class CoreTest {
             }
         }
         ,"tampering rejected");
-        check(dev.yoru.ui.YoruApp.csv("=1+1").equals("\"'=1+1\""),"CSV formula neutralized");
-        check(dev.yoru.ui.YoruApp.csv("a\"b").equals("\"a\"\"b\""),"CSV quote escaped");
+        check(dev.yoru.application.SessionCsv.cell("=1+1").equals("\"'=1+1\""),"CSV formula neutralized");
+        check(dev.yoru.application.SessionCsv.cell("a\"b").equals("\"a\"\"b\""),"CSV quote escaped");
         Files.delete(file);
         Files.delete(Path.of(file+".lock"));
         Files.delete(dir);

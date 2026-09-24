@@ -45,6 +45,9 @@ interface Shell {
     /** Opens the editor for a recorded or running session. */
     void editTime(dev.yoru.domain.Model.Session session);
 
+    /** Opens the editor for a planned block. */
+    void editBlock(dev.yoru.domain.Model.ScheduleBlock block);
+
     /** Asks for a new activity and adds it. */
     void addActivity();
 
