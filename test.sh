@@ -38,6 +38,8 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.DesktopChromeTes
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SystemAppearanceTest
 
 java -ea -cp build/classes dev.yoru.HabitsTest
+java -ea -cp build/classes dev.yoru.HabitHistoryTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.HabitHistoryUiTest
 java -ea -cp build/classes dev.yoru.HabitStatsTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.HabitGridTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.HabitChecklistTest

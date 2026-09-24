@@ -431,14 +431,11 @@ final class HabitsPanel {
 
     /** Every day a daily habit has been checked off, with the grid to correct them. */
     static JComponent historyGrid(Tracker tracker,Runnable refresh,Habit habit) {
-        var box=stack();
-        box.setPreferredSize(new Dimension(grow(520),grow(360)));
-        daily(tracker,refresh,habit,box);
-        return new JScrollPane(box);
+        return new DailyHabitHistory(tracker,refresh,habit.id());
     }
 
-    private static void daily(Tracker tracker,Runnable refresh,Habit habit,JPanel card) {
-        var today=LocalDate.now(ZoneId.of(habit.zone()));
+    static void daily(Tracker tracker,Runnable refresh,Habit habit,JPanel card,LocalDate end) {
+        var today=tracker.now().atZone(ZoneId.of(habit.zone())).toLocalDate();
         // The whole of what the row only hints at, in body ink: the accent is
         // saved for the filled day cells below, where it marks which days are
         // done. Drawn in the accent this line measured 3.0:1 on Linen and 3.5:1
@@ -459,8 +456,8 @@ final class HabitsPanel {
         // so this grid and the task calendar break their weeks in the same place.
         var settings=tracker.state().settings();
         var weekStart=settings.weekStartsOn();
-        var first=settings.weekOf(today).minusWeeks(WEEKS-1);
-        int side=grow(SPACE_XXL);
+        var first=settings.weekOf(end).minusWeeks(WEEKS-1);
+        int side=grow(48);
         int width=7*side+6*SPACE_XS;
         var initials=new JPanel(new GridLayout(1,7,SPACE_XS,0));
         initials.setOpaque(false);
@@ -486,14 +483,14 @@ final class HabitsPanel {
             var date=first.plusDays(i);
             // The rest of this week has not happened yet: an empty column keeps
             // the grid square without offering a day to check off in advance.
-            if(date.isAfter(today)) {
+            if(date.isAfter(today) || date.getYear()<1900) {
                 var blank=new JPanel();
                 blank.setOpaque(false);
                 days.add(blank);
                 continue;
             }
             boolean done=habit.checkIns().contains(date);
-            var cell=selected(button("",()->act(card,refresh,()->tracker.checkIn(habit.id(),date,!done))),done);
+            var cell=selected(button(Integer.toString(date.getDayOfMonth()),()->act(card,refresh,()->tracker.checkIn(habit.id(),date,!done))),done);
             cell.setName("habit.day."+date);
             // Today is outlined whether or not it is done, so the row says
             // where now is without counting back from the end. The ring is
@@ -509,7 +506,7 @@ final class HabitsPanel {
         gap(card,SPACE_SM);
         // The zone id is a developer's string, not the user's: it says nothing
         // the day cells do not already say.
-        card.add(bodyLabel("Last "+WEEKS+" weeks · click a day to correct it"));
+        card.add(bodyLabel(DateText.date(first)+" – "+DateText.date(first.plusWeeks(WEEKS).minusDays(1))+" · click a day to correct it"));
     }
 
     /**
@@ -529,19 +526,30 @@ final class HabitsPanel {
         var rows=stack();
         var scroll=new JScrollPane(rows);
         scroll.setBorder(controlBorder(LINE));
-        scroll.setPreferredSize(new Dimension(640,240));
+        scroll.setPreferredSize(new Dimension(Math.min(grow(640),1000),Math.min(grow(240),440)));
         Runnable[] rebuild=new Runnable[1];
         rebuild[0]=()-> {
             rows.removeAll();
             var habit=tracker.state().habits().stream().filter(h->h.id().equals(habitId)).findFirst().orElse(null);
             if(habit==null) rows.add(bodyLabel("This tracker no longer exists."));
             else {
+                var add=button("Add missed restart…",()-> {
+                    var input=new DateTimeField(tracker.now(),zone,"Restarted at");
+                    var form=missedPeriodForm(input);
+                    while(Dialogs.confirm(rows,form,"Add missed restart","Add restart")) {
+                        try{tracker.addHabitPeriod(habitId,input.value());refresh.run();rebuild[0].run();return;}
+                        catch(Exception error){Dialogs.error(rows,"Check date",error.getMessage());}
+                    }
+                });
+                add.setName("habit.period.add."+habitId);
+                rows.add(add);
+                gap(rows,SPACE_SM);
                 var starts=habit.starts();
                 for(int i=0;i<starts.size();i++) {
                     var start=starts.get(i);
                     var end=i+1<starts.size()?starts.get(i+1):Instant.now();
                     String when=began(start,zone);
-                    var line=row();
+                    var line=wrappingRow();
                     line.add(label(when,TYPE_BODY,TEXT));
                     line.add(label(Analytics.report(Duration.between(start,end).getSeconds()),TYPE_BODY,MUTED));
                     if(i==starts.size()-1)line.add(label("current",TYPE_CAPTION,CYAN));
@@ -572,6 +580,14 @@ final class HabitsPanel {
         };
         rebuild[0].run();
         return scroll;
+    }
+
+    static JPanel missedPeriodForm(DateTimeField input) {
+        var form=stack();
+        form.add(bodyLabel("Add a past restart. Existing starts stay in place; this splits the period containing that time."));
+        gap(form,SPACE_SM);
+        form.add(input);
+        return form;
     }
 
     private static void create(Tracker tracker,Runnable refresh,HabitKind kind,Component owner) {

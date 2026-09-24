@@ -143,6 +143,7 @@ and say why.
 | `SchemaTest` | schema 5 round trip, tag deletion, reset scoping |
 | `ExpansionTest` | encounter economy, task dedup, older-schema decode, AI response fixtures |
 | `HabitsTest` | streaks, timezones, restart history, password-free vaults |
+| `HabitHistoryTest`, `ui/HabitHistoryUiTest` | old daily corrections, retained beginning, missed restarts, paging, failures and persistence |
 | `ui/InputTest` | revert-on-invalid, DST gaps and overlaps, range clamping |
 | `ui/UiTest` | every page rendered headlessly at two widths |
 | `ArtworkTest` | artwork naming, nested folders, zip import and path escapes |
