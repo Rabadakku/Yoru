@@ -1080,10 +1080,21 @@ final class Theme {
         label.setFont(labelFont().deriveFont(Font.BOLD));
         return label;
     }
-    private static String quietCase(String text) {
-        return text.length() > 1 && text.equals(text.toUpperCase(java.util.Locale.ROOT))
-            ? text.substring(0,1) + text.substring(1).toLowerCase(java.util.Locale.ROOT) : text;
+    static String quietCase(String text) {
+        if (text.length() <= 1 || !text.equals(text.toUpperCase(java.util.Locale.ROOT))) return text;
+        var out = new StringBuilder(text.substring(0,1) + text.substring(1).toLowerCase(java.util.Locale.ROOT));
+        // Names keep their capitals: sentence case made "INTEGRATIONS · ANKI" read "Integrations · anki".
+        var words = java.util.regex.Pattern.compile("\\p{L}+").matcher(text);
+        while (words.find()) {
+            String kept = PROPER.get(words.group());
+            if (kept != null) out.replace(words.start(), words.end(), kept);
+        }
+        return out.toString();
     }
+
+    /** Words an uppercase header keeps capitalised when it is set in sentence case. */
+    private static final java.util.Map<String, String> PROPER = java.util.Map.of(
+        "ANKI", "Anki", "AI", "AI", "CLAUDE", "Claude", "MCP", "MCP", "JSON", "JSON", "CSV", "CSV", "UTC", "UTC");
     /**
      * A card's signpost where the card is not the ordinary case (a caution, a promise).
      *

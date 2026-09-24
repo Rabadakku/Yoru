@@ -1027,7 +1027,7 @@ public final class YoruApp extends JPanel implements Shell {
             e.getKey(),Analytics.duration(e.getValue())
         }
         ).toArray(Object[][]::new);
-        p.add(sectionHeader("DAILY TOTALS · "+zone));
+        p.add(sectionHeader("Daily totals · "+zone.getId()));
         gap(p,SPACE_MD);
         if(dailyRows.length==0) p.add(emptyState("No time recorded yet.","Your first session fills this in.",null));
         else {

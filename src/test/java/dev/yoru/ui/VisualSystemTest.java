@@ -46,9 +46,19 @@ public final class VisualSystemTest {
         edt(VisualSystemTest::dailyGoal);
         edt(VisualSystemTest::wrappingRowsAskAgain);
         edt(VisualSystemTest::todayAtAGlance);
+        headersKeepNames();
         System.out.println("PASS: " + checks + " visual system checks (titles, cards, breadcrumb, Today order, Settings sections, scroll, Today without scrolling)");
         // The windows built here leave Swing's threads running.
         System.exit(0);
+    }
+
+    /** Sentence case for a header, but a name keeps its capitals and mixed case is left as written. */
+    private static void headersKeepNames() {
+        check(Theme.quietCase("INTEGRATIONS · ANKI").equals("Integrations · Anki"), "Anki keeps its capital");
+        check(Theme.quietCase("INTEGRATIONS · AI ASSISTANTS").equals("Integrations · AI assistants"), "AI stays AI");
+        check(Theme.quietCase("TRACKING · POMODORO").equals("Tracking · pomodoro"), "Other words go to sentence case");
+        check(Theme.quietCase("FAILED AGAIN").equals("Failed again"), "A name inside a word is not a name");
+        check(Theme.quietCase("Daily totals · America/New_York").equals("Daily totals · America/New_York"), "Mixed case is left alone");
     }
 
     private static void titlesAndCards() {
