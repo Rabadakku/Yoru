@@ -133,7 +133,7 @@ public final class PortableVaultTest {
         values.put(properties.get(5).id(),new Value.Tick());
         values.put(properties.get(6).id(),new Value.Text("https://example.com/syllabus"));
         var tasks=new ArrayList<>(state.tasks());
-        tasks.set(0,tasks.get(0).withDetails(new Details(Priority.HIGH,review.id(),values,Instant.parse("2026-09-02T08:00:00Z"))));
+        tasks.set(0,tasks.get(0).withDetails(new Details(Priority.HIGH,review.id(),values,Instant.parse("2026-09-02T08:00:00Z"),java.time.LocalTime.of(17,30))));
         tasks.set(2,tasks.get(2).withDetails(new Details(Priority.URGENT,waiting.id(),Map.of(),null)));
         return state.withDatabase(new TaskDatabase(List.of(waiting,review),properties)).withTasks(tasks);
     }
@@ -173,6 +173,9 @@ public final class PortableVaultTest {
         check(restored.tasks().getFirst().notes().equals(original.tasks().getFirst().notes()),"Newlines and quotes in notes survive");
         check(restored.notes().equals(original.notes()),"Folders and pages survive, trashed ones included");
         check(restored.tasks().getFirst().pageIds().size()==2,"A task keeps the pages it links to");
+        check(java.time.LocalTime.of(17,30).equals(restored.tasks().getFirst().dueTime()),"A due time survives the round trip (#74)");
+        check(json.contains("\"dueTime\": \"17:30\""),"and is written readably");
+        check(restored.tasks().get(1).dueTime()==null&&!plain.contains("\"dueTime\": \""),"A task with no due time keeps none");
         check(restored.notes().pages().getFirst().body().length()>70_000,"A long page is not cut short");
         // A format 2 file, from before Pages, still imports: no pages, no links.
         var formatTwo=plain.replace("\"yoru\": "+PortableVault.FORMAT,"\"yoru\": 2").replaceAll(",\\s*\"pageIds\": \\[[^\\]]*\\]","");
@@ -255,6 +258,7 @@ public final class PortableVaultTest {
         refuses(json.replace("\"activities\"","\"activitys\""),"activities","A missing section is named");
         refuses(json.replace("\"targetMinutes\": 30","\"targetMinutes\": \"thirty\""),"targetMinutes","A wrong type is named");
         refuses(json.replace("\"name\": \"Study\"","\"name\": 5"),"name","A wrong type in a record is named");
+        refuses(json.replace("\"dueTime\": \"17:30\"","\"dueTime\": \"25:00\""),"dueTime","A due time that is no time of day is named");
         refuses(json.replace("\"weekStartsOn\": \"MONDAY\"","\"weekStartsOn\": \"NONEDAY\""),"NONEDAY","An unknown enum value is named");
         // Except the theme: a palette is a preference, not data, so an unknown
         // one falls back instead of refusing the whole workspace.

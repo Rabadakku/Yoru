@@ -362,3 +362,22 @@ opens a schema 21 vault written by `610a59d`. The portable export is format
 `"priority"`, `"statusId"`, `"editedAt"` and `"values"`, each value an object
 naming its kind (`"text"`, `"number"` as a string, `"option"`, `"options"`,
 `"date"`, `"checked"`). A file without them reads with no database.
+
+## A time of day on the due date (schema 23, #74)
+
+Schema 23 adds `dueTime` to a task's `Details`: a `LocalTime` to the minute,
+or null. It only means something beside a due date, so `Task` refuses a time
+without one, and clearing the date clears the time. A repeating task keeps its
+time as it moves on to its next date, and resetting task properties leaves due
+times, since, like the priority, the time is the task's own.
+
+In the vault the time follows a task's property values: a flag, then the
+second of the day. `LegacyVaultTest` opens a schema 22 vault written by
+`31c3fe1`. The portable export is format 12, with `"dueTime"` as `"HH:mm"` on
+a task that has one; a file without it reads with no times.
+
+Quick add (`application.QuickAdd`) is where most times come from. It reads a
+typed line into a title, due date and time, tags, a list, a priority and a
+repeat, and its rules are written at the top of the class: a bare weekday is
+the next one after today, "at 1" to "at 7" mean the afternoon, the first date
+and the first time win, and nothing is taken if it would leave no title.

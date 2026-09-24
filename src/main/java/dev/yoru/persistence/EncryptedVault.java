@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=22, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=23, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -263,6 +263,9 @@ public final class EncryptedVault implements Repository {
                     if (details.editedAt() != null) instant(out, details.editedAt());
                     out.writeInt(details.values().size());
                     for (var value : new TreeMap<>(details.values()).entrySet()) { uuid(out, value.getKey()); value(out, value.getValue()); }
+                    // Schema 23: the time of day it is due (#74).
+                    out.writeBoolean(details.dueTime() != null);
+                    if (details.dueTime() != null) out.writeInt(details.dueTime().toSecondOfDay());
                 }
                 out.writeInt(state.habits().size());
                 for(var h:state.habits()) {
@@ -454,7 +457,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 22.
+     * Reads any schema from 1 to 23.
      *
      * Every field older vaults lack arrives as a sensible empty, and everything
      * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
@@ -567,7 +570,9 @@ public final class EncryptedVault implements Repository {
                         var edited=in.readBoolean()?instant(in):null;
                         var values=new HashMap<UUID,Value>();
                         for(int v=count(in);v>0;v--) values.put(uuid(in),value(in));
-                        details=new Details(priority,own,values,edited);
+                        // Schema 23 gave a task a due time; before it none had one.
+                        var time=schema>=23&&in.readBoolean()?java.time.LocalTime.ofSecondOfDay(in.readInt()):null;
+                        details=new Details(priority,own,values,edited,time);
                     }
                     tasks.add(new Task(id,activity,tags,title,notes,due,status,source,created,order,planned,pages,list,rule,history,details));
                 }

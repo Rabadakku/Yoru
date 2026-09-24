@@ -425,7 +425,10 @@ public final class Model {
             if (repeat != null && due == null) throw new IllegalArgumentException("A repeating task needs a due date.");
             if (pageIds.size() > MAX_PAGES) throw new IllegalArgumentException("A task can link to at most " + MAX_PAGES + " pages.");
             details = details == null ? Details.NONE : details;
+            if (details.dueTime() != null && due == null) throw new IllegalArgumentException("A due time needs a due date.");
         }
+        /** The time of day it is due, or null for any time on its due date (#74). */
+        public LocalTime dueTime() { return details.dueTime(); }
         public Priority priority() { return details.priority(); }
         public UUID statusId() { return details.statusId(); }
         public Map<UUID, Value> values() { return details.values(); }
@@ -468,7 +471,9 @@ public final class Model {
         // constructor, which is where a forgotten field used to go missing.
         /** Both task dates changed, with every unrelated property preserved. */
         public Task withDates(LocalDate deadline, LocalDate planned) {
-            return new Task(id,activityId,tagIds,title,notes,deadline,status,source,createdAt,order,planned,pageIds,listId,repeat,history,details);
+            // No deadline, no time on it (#74).
+            var kept=deadline==null?details.withDueTime(null):details;
+            return new Task(id,activityId,tagIds,title,notes,deadline,status,source,createdAt,order,planned,pageIds,listId,repeat,history,kept);
         }
         /** Another group; the owner's status inside the old one does not come along (#68). */
         public Task withStatus(TaskStatus next) {
@@ -536,11 +541,17 @@ public final class Model {
      * @param editedAt when the task last changed, stamped by the tracker; null
      *                 for a task from before this was kept, which reads as its
      *                 creation.
+     * @param dueTime  the time of day it is due, on its due date, or null for
+     *                 any time that day (#74).
      */
-    public record Details(Priority priority, UUID statusId, Map<UUID, Value> values, Instant editedAt) {
+    public record Details(Priority priority, UUID statusId, Map<UUID, Value> values, Instant editedAt, LocalTime dueTime) {
         /** The most property values one task keeps. */
         public static final int MAX_VALUES = 200;
-        public static final Details NONE = new Details(Priority.NONE, null, Map.of(), null);
+        public static final Details NONE = new Details(Priority.NONE, null, Map.of(), null, null);
+        /** Details with no due time: every task before #74. */
+        public Details(Priority priority, UUID statusId, Map<UUID, Value> values, Instant editedAt) {
+            this(priority, statusId, values, editedAt, null);
+        }
         public Details {
             priority = priority == null ? Priority.NONE : priority;
             values = values == null ? Map.of() : Map.copyOf(values);
@@ -548,14 +559,18 @@ public final class Model {
             for (var value : values.values()) Objects.requireNonNull(value);
             if (editedAt != null) requireTime(editedAt);
         }
-        public Details withPriority(Priority next) { return new Details(next, statusId, values, editedAt); }
-        public Details withStatus(UUID next) { return new Details(priority, next, values, editedAt); }
-        public Details withEdited(Instant next) { return new Details(priority, statusId, values, next); }
+        public Details withPriority(Priority next) { return new Details(next, statusId, values, editedAt, dueTime); }
+        public Details withStatus(UUID next) { return new Details(priority, next, values, editedAt, dueTime); }
+        public Details withEdited(Instant next) { return new Details(priority, statusId, values, next, dueTime); }
+        /** Due at this time on the due date, or any time that day with null. Seconds are not kept. */
+        public Details withDueTime(LocalTime next) {
+            return new Details(priority, statusId, values, editedAt, next == null ? null : next.withSecond(0).withNano(0));
+        }
         /** The same details with one property's value set, or cleared by null. */
         public Details withValue(UUID property, Value value) {
             var next = new HashMap<>(values);
             if (value == null) next.remove(Objects.requireNonNull(property)); else next.put(Objects.requireNonNull(property), value);
-            return new Details(priority, statusId, next, editedAt);
+            return new Details(priority, statusId, next, editedAt, dueTime);
         }
     }
 

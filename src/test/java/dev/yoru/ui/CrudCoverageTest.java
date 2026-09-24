@@ -440,6 +440,8 @@ public final class CrudCoverageTest {
         var board = find(app, TasksPanel.class);
         check(board != null, "Tasks: the page holds the task table");
         usable(board, "task.new", "Tasks", "create");
+        usable(board, "task.quickAdd", "Tasks", "create in one line");
+        usable(board, "task.quickAdd.add", "Tasks", "create in one line");
         var task = state.tasks().stream().filter(x -> x.status() != TaskStatus.DONE).findFirst().orElseThrow().id();
         shown(board, "task.title." + task, "Tasks");
         var menu = board.rowMenu(task);

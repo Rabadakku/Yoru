@@ -82,6 +82,8 @@ final class TasksPanel extends JPanel implements Scrollable {
         @Override public void open(String link) { openLink(link); }
     };
     private final JTextField search=styleInput(new JTextField(24));
+    /** The table's last line: a whole task typed on one line (#74). Kept across rebuilds, so it keeps its focus. */
+    private final QuickAddField quickAdd=new QuickAddField(this::quickContext,this::quickAdd,()->edit(null));
     private final JButton clearSearch=button("Clear",()->search.setText(""));
     private View view=View.ALL;
     private Sort sort=Sort.MANUAL;
@@ -720,10 +722,13 @@ final class TasksPanel extends JPanel implements Scrollable {
         // A planned day that is not the deadline gets a marker, because the two
         // being different is the thing worth noticing.
         if(task.plannedFor()!=null&&task.due()!=null&&!task.plannedFor().equals(task.due())) text="→ "+text;
+        // The time it is due, when it has one (#74).
+        if(task.dueTime()!=null&&(task.plannedFor()==null||task.plannedFor().equals(task.due()))) text=text+", "+DateText.time(task.dueTime());
         // A repeating task says so where its date is, since the date is what repeats (#57).
         if(task.repeats()) text="↻ "+text;
         l.setText(text);
         l.setForeground(colour);
+        if(task.dueTime()!=null) l.setToolTipText("Due "+DateText.date(task.due())+" at "+DateText.time(task.dueTime()));
         if(task.scheduledLate())
             l.setToolTipText("Planned for "+DateText.date(task.plannedFor())+", but due "+DateText.date(task.due()));
         else if(task.plannedFor()!=null&&task.due()!=null)
@@ -736,7 +741,7 @@ final class TasksPanel extends JPanel implements Scrollable {
                 +(dev.yoru.application.Repeats.streak(history)>1?", "+dev.yoru.application.Repeats.streak(history)+" in a row":"");
             String before=l.getToolTipText();
             l.setToolTipText((before==null?"":before+" · ")+RepeatField.describe(task.repeat())+record);
-            l.getAccessibleContext().setAccessibleName(text.replace("↻ ","")+", repeats "+RepeatField.describe(task.repeat()).toLowerCase(Locale.ROOT));
+            l.getAccessibleContext().setAccessibleName(text.replace("↻ ","")+", repeats "+RepeatField.inSentence(task.repeat()));
         }
         return l;
     }
@@ -765,22 +770,41 @@ final class TasksPanel extends JPanel implements Scrollable {
         }
     }
 
-    /** The last line of the table, as in Notion: a quiet way to add a task right where the list ends. */
+    /**
+     * The last line of the table, as in Notion: a task typed where the list
+     * ends, its date, tags, list, priority and repeat read from the line (#74),
+     * with the full form a button away.
+     */
     private JComponent newRow() {
-        var add=button("+  New task",()->edit(null));
-        add.setName("task.newRow");
-        add.setBackground(PANEL);
-        add.setForeground(MUTED);
-        add.setHorizontalAlignment(SwingConstants.LEFT);
-        add.setBorder(new EmptyBorder(SPACE_SM,SPACE_MD,SPACE_SM,SPACE_MD));
         var slot=new JPanel(new BorderLayout()) {
             @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE,getPreferredSize().height); }
         };
         slot.setOpaque(false);
         slot.setAlignmentX(0);
-        slot.add(add,BorderLayout.CENTER);
+        slot.add(quickAdd,BorderLayout.CENTER);
         return slot;
     }
+
+    /** What a typed line is read against: today, the week start, and the vault's tags and lists. */
+    private dev.yoru.application.QuickAdd.Context quickContext() {
+        var state=tracker.state();
+        return new dev.yoru.application.QuickAdd.Context(LocalDate.now(),state.settings().weekStartsOn(),
+            state.tags().stream().map(Tag::name).toList(),state.lists().stream().map(TaskList::name).toList());
+    }
+
+    /** Saves a typed line as a task in the place on screen, with the tags it names made in the same write. */
+    void quickAdd(dev.yoru.application.QuickAdd.Result line) {
+        try {
+            var draft=dev.yoru.application.QuickAdd.draft(line,tracker.state(),newTaskList(),LocalDate.now(),Instant.now(),TagEditor::paletteColour);
+            tracker.properties().save(draft.task(),draft.newTags(),Map.of());
+            quickAdd.clear();
+            rebuildRows();
+            SwingUtilities.invokeLater(()->quickAdd.field().requestFocusInWindow());
+        } catch(Exception e){error(e);}
+    }
+
+    /** The quick-add line, for the tests and the command palette. */
+    QuickAddField quickAddField() { return quickAdd; }
 
     void pageOpener(java.util.function.Consumer<UUID> opener) { this.openPage = opener; }
 
@@ -971,7 +995,13 @@ final class TasksPanel extends JPanel implements Scrollable {
             // Priority, properties and when it was edited stay (#68); the owner's
             // status stays while the group does, since it belongs to one group.
             existing==null?Details.NONE
-                :status==existing.status()?existing.details():existing.details().withStatus(null));
+                :carried(existing,status,due));
+    }
+
+    /** What an edit keeps of a task's details: its status of the owner's while the group stays, its time while it has a date. */
+    private static Details carried(Task existing,TaskStatus status,LocalDate due) {
+        var kept=status==existing.status()?existing.details():existing.details().withStatus(null);
+        return due==null?kept.withDueTime(null):kept;
     }
 
     /** A new task lands at the bottom of the manual order, not on top of row one. */
@@ -1002,6 +1032,10 @@ final class TasksPanel extends JPanel implements Scrollable {
         var title=new JTextField(existing==null?"":existing.title(),36);
         var notes=new JTextArea(existing==null?"":existing.notes(),5,36);notes.setLineWrap(true);notes.setWrapStyleWord(true);
         var due=dueField(existing,day);
+        // The time on the due date, or none (#74).
+        var dueTime=styleInput(new JTextField(existing==null||existing.dueTime()==null?"":DateText.time(existing.dueTime()),10));
+        dueTime.setName("task.form.dueTime");
+        dueTime.getAccessibleContext().setAccessibleName("Due time, optional");
         var activity=plainCombo(new JComboBox<Object>());activity.addItem("Unassigned");tracker.state().activities().forEach(activity::addItem);
         if(existing!=null&&existing.activityId()!=null)for(int i=1;i<activity.getItemCount();i++)if(((Activity)activity.getItemAt(i)).id().equals(existing.activityId()))activity.setSelectedIndex(i);
         // Every status the owner keeps, their own inside each group (#68).
@@ -1021,7 +1055,8 @@ final class TasksPanel extends JPanel implements Scrollable {
         planned.setName("task.plannedFor");
         var repeat=new RepeatField(existing==null?null:existing.repeat(),tracker.state().settings().weekStartsOn());
         var form=stack();form.add(new JLabel("Title"));form.add(title);gap(form,SPACE_MD);form.add(new JLabel("Notes"));form.add(new JScrollPane(notes));gap(form,SPACE_MD);
-        form.add(new JLabel("Due · the deadline"));form.add(due);gap(form,SPACE_MD);
+        form.add(new JLabel("Due · the deadline"));form.add(due);gap(form,SPACE_SM);
+        form.add(new JLabel("Due time · optional, like 5pm or 17:00"));form.add(dueTime);gap(form,SPACE_MD);
         form.add(new JLabel("Plan for · the day you mean to do it · blank to use the deadline"));form.add(planned);gap(form,SPACE_MD);
         form.add(new JLabel("Repeat · from the due date"));form.add(repeat);gap(form,SPACE_MD);
         form.add(new JLabel("Activity"));form.add(activity);gap(form,SPACE_MD);form.add(new JLabel("Status"));form.add(status);gap(form,SPACE_MD);
@@ -1040,7 +1075,9 @@ final class TasksPanel extends JPanel implements Scrollable {
                     tags.tagIds(),
                     title.getText(),notes.getText(),deadline,
                     chosen.group(),nextOrder(),planned.value(),newTaskList()).withRepeat(rule);
-                task=task.withDetails(task.details().withPriority((Priority)priority.getSelectedItem()).withStatus(chosen.id()));
+                var time=dueTime.getText().isBlank()?null:DateText.parseTime(dueTime.getText());
+                if(time!=null&&task.due()==null) throw new IllegalArgumentException("Choose a due date for the due time, or clear the time.");
+                task=task.withDetails(task.details().withPriority((Priority)priority.getSelectedItem()).withStatus(chosen.id()).withDueTime(time));
                 // The task, the tags made for it and its property values are one write (#68).
                 tracker.properties().save(task,tags.newTags(),fields.entries());
                 rebuildRows();

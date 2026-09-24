@@ -35,9 +35,10 @@ public final class PortableVault {
      * weeks of a repeat changed on their own, "changes" (#59). Format 11 made
      * tasks a database (#68): "statuses" and "properties" at the top level,
      * and on each task its "priority", own "statusId", "editedAt" and the
-     * "values" of its properties.
+     * "values" of its properties. Format 12 added the time a task is due on
+     * its due date, "dueTime" (#74).
      */
-    public static final int FORMAT = 11;
+    public static final int FORMAT = 12;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -218,6 +219,7 @@ public final class PortableVault {
         m.put("priority", t.priority().name());
         m.put("statusId", t.statusId() == null ? null : t.statusId().toString());
         m.put("editedAt", t.details().editedAt() == null ? null : t.details().editedAt().toString());
+        m.put("dueTime", t.dueTime() == null ? null : t.dueTime().toString());
         var values = new LinkedHashMap<String, Object>();
         for (var value : new TreeMap<>(t.values()).entrySet()) values.put(value.getKey().toString(), value(value.getValue()));
         m.put("values", values);
@@ -415,7 +417,7 @@ public final class PortableVault {
     }
 
     private static Details readDetails(Map<?, ?> m) {
-        if (m.get("priority") == null && m.get("values") == null && m.get("statusId") == null) return Details.NONE;
+        if (m.get("priority") == null && m.get("values") == null && m.get("statusId") == null && m.get("dueTime") == null) return Details.NONE;
         var values = new HashMap<UUID, Value>();
         if (m.get("values") != null) for (var entry : Json.object(m.get("values")).entrySet()) {
             UUID property;
@@ -424,7 +426,9 @@ public final class PortableVault {
             values.put(property, readValue(Json.object(entry.getValue())));
         }
         return new Details(m.get("priority") == null ? Priority.NONE : enumeration(Priority.class, text(m, "priority")),
-            optionalId(m, "statusId"), values, optionalInstant(m, "editedAt"));
+            optionalId(m, "statusId"), values, optionalInstant(m, "editedAt"),
+            // Before format 12 no task had a due time.
+            m.get("dueTime") == null ? null : localTime(m, "dueTime"));
     }
 
     private static Value readValue(Map<?, ?> m) {

@@ -72,6 +72,7 @@ java -ea -cp build/classes dev.yoru.RecurringTest
 java -ea -cp build/classes dev.yoru.RepeatWeekTest
 java -ea -cp build/classes dev.yoru.TaskBatchTest
 java -ea -cp build/classes dev.yoru.TaskPropertiesTest
+java -ea -cp build/classes dev.yoru.QuickAddTest
 java -ea -cp build/classes dev.yoru.SessionBatchTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.SessionActionsTest
 java -ea -cp build/classes dev.yoru.RepeatTest
@@ -79,6 +80,7 @@ java -ea -cp build/classes dev.yoru.PomodoroTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskBoardTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskBulkActionsTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskPropertiesUiTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.QuickAddUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskListsTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.RepeatUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.PomodoroClockTest

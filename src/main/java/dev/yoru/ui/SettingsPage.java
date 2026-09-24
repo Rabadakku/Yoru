@@ -128,6 +128,18 @@ final class SettingsPage {
         gap(tracking,SPACE_SM);
         tracking.add(bodyLabel("Used by the week calendar and the task calendar."));
         gap(tracking,SPACE_LG);
+        // Quick add (#74): kept on this computer, and applied as it is ticked.
+        var reads=new JCheckBox("Read a new task's line for dates, #tags, /lists, !priority and repeats",QuickAddSetting.enabled());
+        reads.setName("settings.quickAdd");
+        reads.setOpaque(false);
+        reads.setForeground(TEXT);
+        reads.setFont(labelFont());
+        reads.setAlignmentX(0);
+        reads.addActionListener(e->QuickAddSetting.enabled(reads.isSelected()));
+        tracking.add(reads);
+        gap(tracking,SPACE_SM);
+        tracking.add(bodyLabel("Off, the whole line is the task's title. Kept on this computer."));
+        gap(tracking,SPACE_LG);
         tracking.add(named(button("Save tracking settings",()->shell.applySettings(s->new Settings(s.theme(),
             (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem()))),"settings.tracking.save"));
 

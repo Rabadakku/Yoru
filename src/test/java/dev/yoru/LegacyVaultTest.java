@@ -125,6 +125,25 @@ public final class LegacyVaultTest {
         "Hsq3m+ZL1Kb8MJSYm71x3FhJ4XAEHAa4XxGsmME4ShMTxfR+rJxnPTx7UVdtS9gvtzcZqpJz" +
         "6A==";
 
+    /**
+     * A vault written by the schema 22 build (`31c3fe1`, before a task could be
+     * due at a time of day): a tagged task with a priority, a status of the
+     * owner's and a number, and an undated one, all invented. Opened now,
+     * neither is due at a time (#74).
+     */
+    private static final String BEFORE_DUE_TIME_VAULT =
+        "WU9SVQAAAAENIdkZRNgHjThGBFQXMXw8I8wYFKSMAbWbh5auLHYMaNY7ZRl46F9olha5+iuA" +
+        "gUy/QmAZiWBB9vxP6F2RWt6757GDwihO+L7c2EY/BqUvp+raomb5cwHl4T03UJEqJGTy2VN1" +
+        "6GB2QTtIHD7+TDqCgXjdYzS8yOiQg9INxReVCnfDpCgn+0HFvi1deTyzN4lqNEj2p4Yk5P5j" +
+        "D1aRFcQCvDvQ292AhmPmYlzRDhfL/TNFrtZbwgkyUz5NUrZp+8eGahQ6wf/aCZ9ar79iM2SE" +
+        "G6ITZIs0Yr/azw+EgqQAl7SS3XXT8KZV/QyPh5qoOs0kYa464Qes0nhFfM+SGQBPEYXa+4Vr" +
+        "M0hsXuj2S5Cx0Yst3QsYGBZQ3yuVHvx5Pd1HrSemAuQgsT1OqdkAdyfaxLTs6epfKyzc70KM" +
+        "4fTGKruSww0iw0Y0YxwptnNNTp1ayGa/1K0uWveTs6WvCHJKfKq5hOLEmqPr2oulcUbkTNnu" +
+        "6OBY632spDZpGqi1/gA/tMAQhX6e+MxezcEsEVJVia6G5bT4KQE0HW1P+Nl/bSr34ZlK0dGY" +
+        "0qu+ZUtLWLX7HMJvGnNXecVlB1TovIM39obX5VLqPbbJbDs9/EChJQzrWWUdEqBsQosPY7FF" +
+        "2eQBaQct8AeEH5WuWW26UajKsHEkgGgIzXYg4x6wIYifSS4NLIj7BEKb7ukK3DvGyzU+DjIX" +
+        "vPU232gdjjAbMiZsNgvo6euUY3YcUGKlG23Z2G0IXOd1eBj4oYewPF9ELZGB3C2wvOvt6J72";
+
     public static void main(String[] args)throws Exception{
         Path dir=Files.createTempDirectory("yoru-legacy-");
         try {
@@ -194,6 +213,7 @@ public final class LegacyVaultTest {
         oneTag();
         weekly();
         beforeDatabase();
+        beforeDueTime();
         System.out.println("PASS: "+checks+" legacy vault checks (an older build's file still opens)");
     }
 
@@ -297,6 +317,39 @@ public final class LegacyVaultTest {
                 check(vault.load().equals(withDatabase),"A priority, a status and a property value survive a save and reopen");
             }
             check(Files.exists(Path.of(file+".v21.bak")),"The schema 21 file is kept as a backup before the upgrade");
+        } finally {
+            try(var files=Files.walk(dir)){
+                for(var path:files.sorted(Comparator.reverseOrder()).toList())Files.delete(path);
+            }
+        }
+    }
+
+    /** The schema 22 vault above: its tasks open with no due time and keep their details, then keep a time. */
+    private static void beforeDueTime() throws Exception {
+        Path dir=Files.createTempDirectory("yoru-before-due-time-");
+        try {
+            Path file=dir.resolve("before-due-time.vault");
+            Files.write(file,Base64.getDecoder().decode(BEFORE_DUE_TIME_VAULT));
+            State loaded;
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){loaded=vault.load();}
+            var report=loaded.tasks().stream().filter(t->t.title().equals("Invented report")).findFirst().orElseThrow();
+            var reading=loaded.tasks().stream().filter(t->t.title().equals("Invented reading")).findFirst().orElseThrow();
+            check(loaded.tasks().stream().allMatch(t->t.dueTime()==null),"No schema 22 task is due at a time of day (#74)");
+            var effort=loaded.database().properties().getFirst();
+            check(report.details().priority()==Priority.HIGH
+                &&report.details().statusId().equals(loaded.database().statuses().getFirst().id())
+                &&report.details().values().get(effort.id()).equals(new Value.Amount(new java.math.BigDecimal("3"))),
+                "A schema 22 task keeps its priority, its owner's status and its number");
+            check(report.due().equals(LocalDate.parse("2026-10-02"))&&reading.due()==null,"and its due date, or none");
+            check(loaded.habits().size()==1,"and the habit after the tasks is read where it was");
+
+            var timed=loaded.withTasks(loaded.tasks().stream().map(t->t.title().equals("Invented report")
+                ?t.withDetails(t.details().withDueTime(java.time.LocalTime.of(17,0))):t).toList());
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){vault.save(timed);}
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){
+                check(vault.load().equals(timed),"A due time survives a save and reopen");
+            }
+            check(Files.exists(Path.of(file+".v22.bak")),"The schema 22 file is kept as a backup before the upgrade");
         } finally {
             try(var files=Files.walk(dir)){
                 for(var path:files.sorted(Comparator.reverseOrder()).toList())Files.delete(path);

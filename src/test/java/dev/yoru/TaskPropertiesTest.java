@@ -219,12 +219,14 @@ public final class TaskPropertiesTest {
             "Deleting a status in use backs up first, and its tasks keep their group");
 
         // A repeating task finished by a Done status moves on to its next date.
-        var laundry = invented("Invented laundry", 2).withRepeat(Repeat.weekly(1, EnumSet.of(DayOfWeek.FRIDAY), LocalDate.of(2026, 10, 9)));
+        var weekly = invented("Invented laundry", 2).withRepeat(Repeat.weekly(1, EnumSet.of(DayOfWeek.FRIDAY), LocalDate.of(2026, 10, 9)));
+        var laundry = weekly.withDetails(weekly.details().withDueTime(LocalTime.of(7, 30)));
         t.addTask(laundry);
         var shelved = props.addStatus("Shelved", TaskStatus.DONE);
         props.setStatus(laundry.id(), new TaskProperties.StatusChoice(TaskStatus.DONE, shelved), ZONE);
         check(task(t, laundry.id()).due().equals(LocalDate.of(2026, 10, 16)) && task(t, laundry.id()).status() == TaskStatus.TODO
             && task(t, laundry.id()).statusId() == null, "A Done status finishes this occurrence of a repeating task, as the checkbox does");
+        check(LocalTime.of(7, 30).equals(task(t, laundry.id()).dueTime()), "and the next one is due at the same time of day (#74)");
 
         // Failures.
         var before = t.state();
@@ -244,6 +246,7 @@ public final class TaskPropertiesTest {
         check(t.state().database().equals(TaskDatabase.EMPTY) && t.state().tasks().stream().allMatch(x -> x.values().isEmpty() && x.statusId() == null),
             "Resetting properties clears them and their values");
         check(task(t, reading.id()).priority() == Priority.LOW, "and priorities, which are the task's own, stay");
+        check(LocalTime.of(7, 30).equals(task(t, laundry.id()).dueTime()), "and so do due times");
 
         // Restoring an export keeps the edited times it carries.
         var exported = PortableVault.parse(PortableVault.export(before, NOW));

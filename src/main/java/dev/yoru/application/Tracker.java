@@ -774,7 +774,7 @@ public final class Tracker {
         // Clearing properties and statuses (#68) takes their values off the
         // tasks, which fall back to their group's own status; the tasks stay.
         boolean clearDatabase=parts.contains(ResetPart.PROPERTIES);
-        if(clearDatabase)tasks=tasks.stream().map(x->x.withDetails(new Details(x.priority(),null,Map.of(),x.details().editedAt()))).toList();
+        if(clearDatabase)tasks=tasks.stream().map(x->x.withDetails(new Details(x.priority(),null,Map.of(),x.details().editedAt(),x.dueTime()))).toList();
         var database=clearDatabase?TaskDatabase.EMPTY:state.database();
         // A property kept for one list belongs to every task once lists are gone.
         if(clearLists)database=database.withProperties(database.properties().stream().map(p->p.withList(null)).toList());
