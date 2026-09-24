@@ -88,7 +88,7 @@ public final class Preview {
                 }
                 // Every page, plus the arranging and calendar views, in every theme
                 // and at both sizes.
-                System.out.println("Wrote " + (PAGES.length + 2) * ThemeId.values().length * 2
+                System.out.println("Wrote " + (PAGES.length + 3) * ThemeId.values().length * 2
                     + " renders to " + out);
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -118,6 +118,11 @@ public final class Preview {
         var tasksTab = button(app, "Tasks");
         if (tasksTab != null) {
             tasksTab.doClick();
+            button(app, "tasks.select").doClick();
+            button(app, "tasks.bulk.all").doClick();
+            layout(app);
+            write(out, "tasks-bulk" + suffix, app, width, height);
+            button(app, "tasks.select").doClick();
             var calendarView = button(app, "view.calendar");
             if (calendarView != null) {
                 calendarView.doClick();

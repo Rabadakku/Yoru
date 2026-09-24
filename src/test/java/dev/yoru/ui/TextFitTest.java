@@ -90,6 +90,14 @@ public final class TextFitTest {
             inspected += inspect(app, app, page + " at " + step + "%, " + width + "×" + height, problems);
             if (renders != null)
                 Preview.write(renders, page.toLowerCase(Locale.ROOT) + "-" + step + "-" + width, app, width, height);
+            if (page.equals("Tasks")) {
+                Preview.button(app, "tasks.select").doClick();
+                Preview.button(app, "tasks.bulk.all").doClick();
+                settle(app);
+                inspected += inspect(app, app, "Task selection at " + step + "%, " + width + "×" + height, problems);
+                if (renders != null) Preview.write(renders, "tasks-bulk-" + step + "-" + width, app, width, height);
+                Preview.button(app, "tasks.select").doClick();
+            }
         }
         return inspected;
     }

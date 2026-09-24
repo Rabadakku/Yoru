@@ -1,6 +1,24 @@
 # Yoru roadmap
 
-## In review — text shortcuts and Inbox guidance
+## In progress — bulk task actions (#59)
+
+`codex/bulk-task-actions` adds selection to the task table for status, list,
+due date, planned day, tags and deletion. Each operation validates the whole
+selection before one backup and one save. Repeating tasks use the same
+completion rules as individual edits. Hidden tasks leave the selection; Escape
+cancels it. No vault format changes. The other CRUD work in #59 remains open.
+
+Validation: 40 batch checks, 55 selection/form checks, full isolated suite,
+five-theme desktop/minimum renders and enlarged-text layout checks.
+
+## Cancelled — Apple Health integration (#40)
+
+The owner requires laptop-only automatic syncing and has declined an iPhone
+bridge. macOS apps cannot read HealthKit records directly, so this integration
+and its automatic exercise streak are out of scope. Do not substitute a manual
+export or require a companion app. Automatic Anki streaks remain in scope.
+
+## Merged — text shortcuts and Inbox guidance (PR #99)
 
 On `codex/task-details`, from 1.0.21. For #49, Pages now receives the shared
 Command-Delete action without replacing its own undo history. Shared deletion,
