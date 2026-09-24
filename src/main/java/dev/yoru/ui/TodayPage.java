@@ -98,8 +98,8 @@ final class TodayPage {
         p.add(new Columns(focusCard(),rail));
         gap(p,SPACE_XL);
 
-        var daily=Analytics.daily(tracker.state(),null,zone,Instant.now());
-        LocalDate today=LocalDate.now();
+        var daily=Analytics.daily(tracker.state(),null,zone,shell.now());
+        LocalDate today=shell.today();
         long weekSeconds=0;
         for(int i=0;i<7;i++)weekSeconds+=daily.getOrDefault(today.minusDays(i),0L);
         var stats=new JPanel(new GridLayout(1,3,SPACE_LG,0));
@@ -496,13 +496,13 @@ final class TodayPage {
 
     private void clockOut() {
         var tracker=tracker();
-        var end=new DateTimeField(Instant.now(),zone(),"End");var form=stack();
+        var end=new DateTimeField(shell.now(),zone(),"End");var form=stack();
         form.add(label("Finish now, or select when you actually stopped.",TYPE_LABEL,TEXT));gap(form,SPACE_MD);form.add(end);
         var now=new JCheckBox("Use the exact current time",true);now.setOpaque(false);now.setForeground(TEXT);form.add(now);
         if(Dialogs.confirm(shell.owner(),form,"Clock out","Clock out"))shell.perform(()->{
             // Said out loud. A session vanishing with no explanation looks like
             // the app lost it, which is the one thing this must not feel like.
-            if(!tracker.stop(now.isSelected()?Instant.now():end.value()))
+            if(!tracker.stop(now.isSelected()?shell.now():end.value()))
                 Dialogs.info(shell.owner(),"That session was under the minimum, so it was not recorded.\n\n"
                     +"Change the minimum in Settings if short sessions should count.");
         });

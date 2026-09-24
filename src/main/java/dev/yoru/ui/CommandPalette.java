@@ -65,7 +65,7 @@ final class CommandPalette {
         var state = tracker.state();
         QuickAdd.Result read;
         if (QuickAddSetting.enabled()) {
-            var context = new QuickAdd.Context(LocalDate.now(), state.settings().weekStartsOn(),
+            var context = new QuickAdd.Context(app.today(), state.settings().weekStartsOn(),
                 state.tags().stream().map(t -> t.name()).toList(), state.lists().stream().map(l -> l.name()).toList());
             read = QuickAdd.parse(line, context);
         } else {
@@ -74,7 +74,7 @@ final class CommandPalette {
         if (read.title().isBlank()) return null;
         var result = read;
         return new Command("Add task “" + result.title() + "”", summary(result), "task.add", () -> app.perform(() -> {
-            var draft = QuickAdd.draft(result, tracker.state(), null, LocalDate.now(), Instant.now(), TagEditor::paletteColour);
+            var draft = QuickAdd.draft(result, tracker.state(), null, app.today(), app.now(), TagEditor::paletteColour);
             tracker.properties().save(draft.task(), draft.newTags(), Map.of());
         }));
     }
@@ -82,8 +82,8 @@ final class CommandPalette {
     /** What an added line will be, in a line: "Due Thu, Oct 8, 5:00 PM · #school · High · every Monday · Inbox". */
     static String summary(QuickAdd.Result r) {
         var bits = new ArrayList<String>();
-        var due = r.due() == null ? LocalDate.now() : r.due();
-        bits.add("Due " + due.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.ENGLISH))
+        // No date typed is due today, as a task written down is (#67).
+        bits.add((r.due() == null ? "Due today" : "Due " + r.due().format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.ENGLISH)))
             + (r.time() == null ? "" : ", " + DateText.time(r.time())));
         for (var tag : r.tags()) bits.add("#" + tag);
         if (r.priority() != dev.yoru.domain.Model.Priority.NONE) bits.add(r.priority().label);

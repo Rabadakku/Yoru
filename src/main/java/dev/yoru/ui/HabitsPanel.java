@@ -724,7 +724,7 @@ final class HabitsPanel {
         var form=stack();
         var name=new JTextField(24);
         form.add(new JLabel("Name"));form.add(name);
-        var since=new DateTimeField(Instant.now(),ZoneId.systemDefault());
+        var since=new DateTimeField(tracker.now(),ZoneId.systemDefault());
         if(kind==HabitKind.TIME_SINCE){gap(form,SPACE_MD);form.add(new JLabel("Started at · choose a past date and time"));form.add(since);}
         if(!Dialogs.confirm(owner,form,kind==HabitKind.DAILY?"New daily check-off":"New time-since tracker","Create"))return;
         act(owner,refresh,()->tracker.addHabit(name.getText(),kind,ZoneId.systemDefault(),

@@ -33,6 +33,12 @@ interface Shell {
     /** The zone study time is recorded and shown in. */
     java.time.ZoneId zone();
 
+    /** Now, by the tracker's clock: every page asks this rather than the wall, so they agree and tests can pin it. */
+    default java.time.Instant now() { return tracker().now(); }
+
+    /** Today in {@link #zone()}, by the tracker's clock. */
+    default java.time.LocalDate today() { return java.time.LocalDate.ofInstant(now(), zone()); }
+
     /** Opens the editor for a new logged session, or a planned block when {@code plan}. */
     void timeDialog(boolean plan);
 

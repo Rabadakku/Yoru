@@ -39,7 +39,7 @@ public final class YoruApp extends JPanel implements Shell {
     private final JPanel content=new JPanel(new BorderLayout());
     private String page="Today";
     private boolean reducedMotion;
-    private LocalDate displayDate=LocalDate.now();
+    private LocalDate displayDate;
     private LocalDate week;
     private final MusicPlayer music=new MusicPlayer();
     /** The pomodoro keeps its time whichever page is open (#61). */
@@ -128,7 +128,8 @@ public final class YoruApp extends JPanel implements Shell {
         this.store=store;
         this.vaultName=openName;
         this.secret=secret;
-        week=tracker.state().settings().weekOf(LocalDate.now());
+        displayDate=today();
+        week=tracker.state().settings().weekOf(displayDate);
         setPreferredSize(new Dimension(1280,900));
         // The window's minimum is derived from the bar rather than fixed here —
         // see windowMinimum(). A panel minimum as well would only disagree with
@@ -179,7 +180,7 @@ public final class YoruApp extends JPanel implements Shell {
         showPage("Today");
         // 70ms: the Emerald walk cycle reads about right at this rate; 120 dragged.
         ticker=new javax.swing.Timer(70,e-> {
-            if(!displayDate.equals(LocalDate.now())){displayDate=LocalDate.now();showPage(page);}
+            if(!displayDate.equals(today())){displayDate=today();showPage(page);}
             var running=tracker.active();
             boolean animate=running!=null && !reducedMotion;
             try { pomodoro.tick(); }
@@ -307,7 +308,7 @@ public final class YoruApp extends JPanel implements Shell {
         heading.setOpaque(false);
         heading.setBorder(new EmptyBorder(0,0,SPACE_XL,0));
         // No breadcrumb: the pages are flat, and the title below already names the page (#9).
-        var date=label(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d",Locale.ENGLISH)),TYPE_CAPTION,MUTED);
+        var date=label(today().format(DateTimeFormatter.ofPattern("EEEE, MMMM d",Locale.ENGLISH)),TYPE_CAPTION,MUTED);
         date.setToolTipText("Times shown in "+zone);
         heading.add(date,BorderLayout.EAST);
         var leading = new JPanel(new FlowLayout(FlowLayout.LEFT,SPACE_MD,0)); leading.setOpaque(false);
@@ -458,8 +459,8 @@ public final class YoruApp extends JPanel implements Shell {
         var activity=plainCombo(new JComboBox<Activity>(tracker.state().activities().toArray(Activity[]::new)));
         UUID activityId=block!=null?block.activityId():session==null?null:session.activityId();
         for(int i=0;i<activity.getItemCount();i++)if(activity.getItemAt(i).id().equals(activityId))activity.setSelectedIndex(i);
-        Instant startValue=block!=null?block.start():session==null?Instant.now().minusSeconds(plan?0:3600):session.start();
-        Instant endValue=block!=null?block.end():session==null||session.end()==null?Instant.now().plusSeconds(plan?3600:0):session.end();
+        Instant startValue=block!=null?block.start():session==null?now().minusSeconds(plan?0:3600):session.start();
+        Instant endValue=block!=null?block.end():session==null||session.end()==null?now().plusSeconds(plan?3600:0):session.end();
         var start=new DateTimeField(startValue,zone,"Start");var end=new DateTimeField(endValue,zone,"End");var form=stack();
         var activityCaption=bodyLabel("Activity");activityCaption.setLabelFor(activity);
         activity.getAccessibleContext().setAccessibleName("Activity");
@@ -558,7 +559,7 @@ public final class YoruApp extends JPanel implements Shell {
         forward.getAccessibleContext().setAccessibleName("Next week");
         nav.add(forward);
         nav.add(button("This week",()->{
-            week=tracker.state().settings().weekOf(LocalDate.now());showPage("Schedule");
+            week=tracker.state().settings().weekOf(today());showPage("Schedule");
         }));
         // What the page makes goes on its title's line; what moves the grid
         // stays with the grid it moves.
@@ -568,7 +569,7 @@ public final class YoruApp extends JPanel implements Shell {
         p.add(nav);
         gap(p,SPACE_MD);
 
-        var grid=new ScheduleGrid(tracker.state(),week,zone,Instant.now(),new ScheduleGrid.Edits() {
+        var grid=new ScheduleGrid(tracker.state(),week,zone,now(),new ScheduleGrid.Edits() {
             public void create(Instant start,Instant end) { perform(()->tracker.plan(activityForBlock(),start,end)); }
             public void update(UUID id,Instant start,Instant end) {
                 var existing=tracker.state().blocks().stream().filter(b->b.id().equals(id)).findFirst().orElse(null);
@@ -636,7 +637,7 @@ public final class YoruApp extends JPanel implements Shell {
             what.setLayout(new BoxLayout(what,BoxLayout.X_AXIS));
             what.setOpaque(false);
             what.add(shortenable(name(b.activityId()),TYPE_BODY,TEXT));
-            what.add(label(" · "+String.format("%.0f%% matched",100*Analytics.adherence(tracker.state(),b,Instant.now())),TYPE_BODY,TEXT));
+            what.add(label(" · "+String.format("%.0f%% matched",100*Analytics.adherence(tracker.state(),b,now())),TYPE_BODY,TEXT));
             what.add(Box.createHorizontalGlue());
             line.add(what,BorderLayout.CENTER);
             var actions=row();
@@ -760,7 +761,7 @@ public final class YoruApp extends JPanel implements Shell {
         );
         top.add(filter);
         heat.add(top);
-        var days=Analytics.daily(tracker.state(),heatActivity,zone,Instant.now());
+        var days=Analytics.daily(tracker.state(),heatActivity,zone,now());
         // An empty 52x7 grid reads as a broken chart rather than as a first run.
         if(days.values().stream().noneMatch(seconds->seconds>0)) {
             gap(heat,SPACE_LG);
@@ -785,7 +786,7 @@ public final class YoruApp extends JPanel implements Shell {
         card.add(cardHead(sectionHeader("ANKI REVIEWS · LAST 30 DAYS"),
             label("profile “"+last.profile()+"” · read "+AnkiCard.ago(last.fetchedAt(),tracker.now()),TYPE_CAPTION,MUTED)));
         gap(card,SPACE_LG);
-        var today=LocalDate.now(zone);
+        var today=today();
         long most=1;
         for(int i=0;i<30;i++) most=Math.max(most,last.days().getOrDefault(today.minusDays(i),0L));
         int floor=grow(CHART_HEIGHT);
@@ -839,24 +840,24 @@ public final class YoruApp extends JPanel implements Shell {
         // are already on screen.
         p.add(ActivityManager.activities(tracker,this,()->showPage("Data")));
         gap(p,SPACE_LG);
-        p.add(heatCard(LocalDate.now()));
+        p.add(heatCard(today()));
         gap(p,SPACE_LG);
         var anki=tracker.state().anki();
         if(anki.enabled()&&anki.last()!=null) { p.add(ankiHistory(anki)); gap(p,SPACE_LG); }
 
-        var days=Analytics.daily(tracker.state(),null,zone,Instant.now());
+        var days=Analytics.daily(tracker.state(),null,zone,now());
         var chart=card();
         chart.add(sectionHeader("LAST 14 DAYS · HOURS"));
         gap(chart,SPACE_LG);
         boolean anyTime=false;
-        for(int i=0;i<14;i++)anyTime|=days.getOrDefault(LocalDate.now().minusDays(i),0L)>0;
+        for(int i=0;i<14;i++)anyTime|=days.getOrDefault(today().minusDays(i),0L)>0;
         if(!anyTime) {
             // Fourteen empty bars is not a chart, it is a rendering fault.
             chart.add(emptyState("No time recorded yet.","Your first session fills this in.",null));
         } else {
             int goal=tracker.state().settings().dailyGoalHours();
             long max=3600;
-            for(int i=0;i<14;i++)max=Math.max(max,days.getOrDefault(LocalDate.now().minusDays(i),0L));
+            for(int i=0;i<14;i++)max=Math.max(max,days.getOrDefault(today().minusDays(i),0L));
             // The goal is part of the scale, so the fortnight is drawn against
             // what the days were for and not only against their own best one: a
             // quiet fortnight used to stretch to fill the card and look like a
@@ -913,7 +914,7 @@ public final class YoruApp extends JPanel implements Shell {
             dayNumbers.setOpaque(false);
             dayNumbers.setAlignmentX(0);
             for(int i=13;i>=0;i--) {
-                LocalDate d=LocalDate.now().minusDays(i);
+                LocalDate d=today().minusDays(i);
                 long sec=days.getOrDefault(d,0L);
                 boolean none=sec==0;
                 var cell=stack();
@@ -939,7 +940,7 @@ public final class YoruApp extends JPanel implements Shell {
                 durations.add(duration);
                 // Today's number is the one in body ink: the chart then says
                 // which end is now without counting the columns.
-                dayNumbers.add(label(""+d.getDayOfMonth(),TYPE_CAPTION,d.equals(LocalDate.now())?TEXT:MUTED));
+                dayNumbers.add(label(""+d.getDayOfMonth(),TYPE_CAPTION,d.equals(today())?TEXT:MUTED));
             }
             bars.setAlignmentX(0);
             bars.setBorder(new javax.swing.border.MatteBorder(0,0,HAIRLINE,0,LINE));
@@ -949,7 +950,7 @@ public final class YoruApp extends JPanel implements Shell {
             gap(chart,SPACE_SM);
             chart.add(dayNumbers);
             gap(chart,SPACE_MD);
-            chart.add(TodayPage.heatLegend(LocalDate.now(),tracker.state().settings().dailyGoalHours()));
+            chart.add(TodayPage.heatLegend(today(),tracker.state().settings().dailyGoalHours()));
         }
         p.add(chart);
 
@@ -957,7 +958,7 @@ public final class YoruApp extends JPanel implements Shell {
         // and the heat map both total every activity together, so a week spent
         // entirely on one subject and a week split four ways draw identically.
         gap(p,SPACE_LG);
-        var asOf=Instant.now();
+        var asOf=now();
         var mixFrom=mixDays==0?Instant.EPOCH:asOf.minus(Duration.ofDays(mixDays));
         var mix=card();
         var mixHead=row();
@@ -990,7 +991,7 @@ public final class YoruApp extends JPanel implements Shell {
         p.add(mix);
         gap(p,SPACE_LG);
 
-        var now=Instant.now();
+        var now=now();
         var all=tracker.state().sessions();
         var sessions=all.stream().filter(x->Analytics.counts(x,tracker.state(),now))
             .sorted(Comparator.comparing(Session::start).reversed()).toList();
@@ -999,7 +1000,7 @@ public final class YoruApp extends JPanel implements Shell {
         for(int i=0;i<sessions.size();i++) {
             var s=sessions.get(i);
             rows[i]=new Object[] {
-                name(s.activityId()),s.start().atZone(zone).format(dateTime),s.end()==null?"Running":s.end().atZone(zone).format(dateTime),Analytics.duration(Duration.between(s.start(),s.end()==null?Instant.now():s.end()).getSeconds())
+                name(s.activityId()),s.start().atZone(zone).format(dateTime),s.end()==null?"Running":s.end().atZone(zone).format(dateTime),Analytics.duration(Duration.between(s.start(),s.end()==null?now():s.end()).getSeconds())
             }
             ;
         }
@@ -1272,10 +1273,10 @@ public final class YoruApp extends JPanel implements Shell {
     }
     /** The whole vault as readable JSON: the debugging and acceptance-check tool. */
     private void exportVault() {
-        Path file=Dialogs.saveFile(this,"Export vault","yoru-vault-"+LocalDate.now()+".json");
+        Path file=Dialogs.saveFile(this,"Export vault","yoru-vault-"+today()+".json");
         if(file==null)return;
         perform(()->{
-            Files.writeString(file,dev.yoru.persistence.PortableVault.export(tracker.state(),Instant.now()));
+            Files.writeString(file,dev.yoru.persistence.PortableVault.export(tracker.state(),now()));
             Dialogs.info(this,"Vault exported to "+file.getFileName()+".\n\n"
                 +"This file is NOT encrypted. It holds everything in your vault as plain\n"
                 +"readable text. Keep it where you keep the vault.");
@@ -1324,7 +1325,7 @@ public final class YoruApp extends JPanel implements Shell {
             tracker.settings(next);
             // The visible week was computed under the old preference; moving the
             // week start without realigning it leaves the grid straddling two.
-            if(next.weekStartsOn()!=previous.weekStartsOn()) week=next.weekOf(LocalDate.now());
+            if(next.weekStartsOn()!=previous.weekStartsOn()) week=next.weekOf(today());
             if (next.theme()!=previous.theme()) { SystemAppearance.choose(false); Theme.systemStyle=null; }
             if(!SystemAppearance.enabled() && next.theme()!=Theme.current()) { Theme.apply(next.theme()); rebuild(); }
             else showPage(page);
