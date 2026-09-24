@@ -183,8 +183,16 @@ public final class Preview {
             java.time.LocalTime.of(9, 0), java.time.LocalTime.of(10, 30));
         tracker.repeat(activities.get(2).id(), java.time.DayOfWeek.WEDNESDAY,
             java.time.LocalTime.of(14, 15), java.time.LocalTime.of(15, 45));
-        tracker.repeat(activities.get(1).id(), java.time.DayOfWeek.FRIDAY,
+        var friday = tracker.repeat(activities.get(1).id(), java.time.DayOfWeek.FRIDAY,
             java.time.LocalTime.of(13, 0), java.time.LocalTime.of(14, 0));
+        // One week changed on its own (#59): this week's Friday is held on
+        // Thursday afternoon, so the grid and the list under it show a moved week.
+        var fridayThisWeek = tracker.state().settings().weekOf(today)
+            .with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.FRIDAY));
+        if (fridayThisWeek.isAfter(tracker.state().settings().weekOf(today).plusDays(6)))
+            fridayThisWeek = fridayThisWeek.minusWeeks(1);
+        tracker.changeRepeatWeek(friday.id(), fridayThisWeek, fridayThisWeek.minusDays(1),
+            java.time.LocalTime.of(16, 0), java.time.LocalTime.of(17, 0));
         tracker.plan(activities.get(1).id(), today.atTime(14, 0).atZone(zone).toInstant(),
             today.atTime(15, 30).atZone(zone).toInstant());
 

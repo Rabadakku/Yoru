@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 public final class EncryptedVault implements Repository {
-    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=20, MAX=100_000;
+    private static final int MAGIC=0x594F5255, VERSION=1, SCHEMA=21, MAX=100_000;
     /**
      * The file's layout: a header of magic, version and salt, which is also the
      * cipher's associated data, then the nonce, then the ciphertext and its tag.
@@ -313,6 +313,19 @@ public final class EncryptedVault implements Repository {
                 for (var list : state.lists()) {
                     uuid(out, list.id()); out.writeUTF(list.name()); out.writeInt(list.colour()); out.writeInt(list.order());
                 }
+                // Schema 21: the weeks of each repeat changed on their own, in
+                // the order the rules were written above (#59).
+                for (var r : state.recurring()) {
+                    out.writeInt(r.changes().size());
+                    for (var c : r.changes()) {
+                        out.writeLong(c.date().toEpochDay());
+                        out.writeBoolean(!c.skipped());
+                        if (!c.skipped()) {
+                            out.writeLong(c.movedTo().toEpochDay());
+                            out.writeInt(c.start().toSecondOfDay()); out.writeInt(c.end().toSecondOfDay());
+                        }
+                    }
+                }
             }
             if(bytes.size()>31_000_000)throw new IOException("Vault is too large.");
             byte[] header=ByteBuffer.allocate(24).putInt(MAGIC).putInt(VERSION).put(salt).array(),nonce=new byte[12];
@@ -415,7 +428,7 @@ public final class EncryptedVault implements Repository {
     }
 
     /**
-     * Reads any schema from 1 to 20.
+     * Reads any schema from 1 to 21.
      *
      * Every field older vaults lack arrives as a sensible empty, and everything
      * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
@@ -606,6 +619,19 @@ public final class EncryptedVault implements Repository {
             // Schema 19: the task lists (#56).
             var lists=new ArrayList<TaskList>();
             if(schema>=19) for(int n=count(in);n>0;n--) lists.add(new TaskList(uuid(in),in.readUTF(),in.readInt(),in.readInt()));
+            // Schema 21: each repeat's changed weeks, rule by rule (#59).
+            if(schema>=21) for(int i=0;i<recurring.size();i++) {
+                var changes=new ArrayList<RepeatChange>();
+                for(int n=count(in);n>0;n--) {
+                    var week=LocalDate.ofEpochDay(in.readLong());
+                    changes.add(in.readBoolean()
+                        ? new RepeatChange(week,LocalDate.ofEpochDay(in.readLong()),
+                            java.time.LocalTime.ofSecondOfDay(in.readInt()),java.time.LocalTime.ofSecondOfDay(in.readInt()))
+                        : RepeatChange.skip(week));
+                }
+                var r=recurring.get(i);
+                recurring.set(i,new RecurringBlock(r.id(),r.activityId(),r.dayOfWeek(),r.startTime(),r.endTime(),changes));
+            }
             if(in.available()!=0)throw new IOException("Unexpected vault content.");
             return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,new Notes(folders,pages),anki,lists);
         }

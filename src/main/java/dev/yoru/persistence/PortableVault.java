@@ -31,9 +31,10 @@ public final class PortableVault {
      * day a habit began. Format 7 gave a task a list of tags, "tagIds", where
      * it had room for one "tagId". Format 8 added task lists, "lists", and the
      * list each task is filed in, "listId". Format 9 added how a task repeats,
-     * "repeat", and the occurrences behind it, "history".
+     * "repeat", and the occurrences behind it, "history". Format 10 added the
+     * weeks of a repeat changed on their own, "changes" (#59).
      */
-    public static final int FORMAT = 9;
+    public static final int FORMAT = 10;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -124,6 +125,20 @@ public final class PortableVault {
         m.put("dayOfWeek", r.dayOfWeek().name());
         m.put("startTime", r.startTime().toString());
         m.put("endTime", r.endTime().toString());
+        m.put("changes", r.changes().stream().map(PortableVault::repeatChange).toList());
+        return m;
+    }
+
+    /** One week changed on its own: moved, with its times, or skipped, with none. */
+    private static Map<String, Object> repeatChange(RepeatChange c) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("week", c.date().toString());
+        m.put("skipped", c.skipped());
+        if (!c.skipped()) {
+            m.put("day", c.movedTo().toString());
+            m.put("startTime", c.start().toString());
+            m.put("endTime", c.end().toString());
+        }
         return m;
     }
 
@@ -312,6 +327,15 @@ public final class PortableVault {
     private static RecurringBlock readRecurring(Map<?, ?> m) {
         return new RecurringBlock(id(m, "id"), id(m, "activityId"),
             enumeration(java.time.DayOfWeek.class, text(m, "dayOfWeek")),
+            localTime(m, "startTime"), localTime(m, "endTime"),
+            // Before format 10 no week was changed on its own.
+            m.get("changes") == null ? List.of() : list(m, "changes", PortableVault::readRepeatChange));
+    }
+
+    private static RepeatChange readRepeatChange(Map<?, ?> m) {
+        var week = java.time.LocalDate.parse(text(m, "week"));
+        if (bool(m, "skipped")) return RepeatChange.skip(week);
+        return new RepeatChange(week, java.time.LocalDate.parse(text(m, "day")),
             localTime(m, "startTime"), localTime(m, "endTime"));
     }
 

@@ -621,12 +621,58 @@ public final class Tracker {
         return block;
     }
 
+    /**
+     * Changes the rule itself: every week that follows it moves with it.
+     *
+     * Weeks changed on their own keep their change while the rule stays on its
+     * day. Moved to another day, the rule has no block left on the dates those
+     * changes name, so they go with the old day; the form says so first.
+     */
     public void editRepeat(UUID id,UUID activityId,DayOfWeek day,LocalTime start,LocalTime end) throws IOException {
         requireActivity(activityId);
         var next=new ArrayList<>(state.recurring());
-        var existing=next.stream().filter(r->r.id().equals(id)).findFirst()
+        var existing=repeatRule(id);
+        var kept=day==existing.dayOfWeek()?existing.changes():List.<RepeatChange>of();
+        next.set(next.indexOf(existing),new RecurringBlock(id,activityId,day,start,end,kept));
+        commit(state.withRecurring(next));
+    }
+
+    /** Skips one week of a repeat; the rule and every other week stay as they are (#59). */
+    public void skipRepeatWeek(UUID id,LocalDate week) throws IOException {
+        var rule=repeatRule(id);
+        if(RepeatChange.skip(week).equals(rule.changeOn(week))) return;
+        replaceRepeat(rule.withChange(week,RepeatChange.skip(week)));
+    }
+
+    /**
+     * Holds one week's block at another time, and on another day if need be,
+     * that week only (#59). Put back where the rule has it, the week simply
+     * follows the rule again rather than keeping a change that changes nothing.
+     */
+    public void changeRepeatWeek(UUID id,LocalDate week,LocalDate day,LocalTime start,LocalTime end) throws IOException {
+        var rule=repeatRule(id);
+        var change=new RepeatChange(week,Objects.requireNonNull(day),start,end);
+        boolean asRuled=day.equals(week)&&start.equals(rule.startTime())&&end.equals(rule.endTime());
+        var next=rule.withChange(week,asRuled?null:change);
+        if(next.equals(rule)) return;
+        replaceRepeat(next);
+    }
+
+    /** Puts one week back where the rule has it. A week already there writes nothing. */
+    public void restoreRepeatWeek(UUID id,LocalDate week) throws IOException {
+        var rule=repeatRule(id);
+        if(rule.changeOn(week)==null) return;
+        replaceRepeat(rule.withChange(week,null));
+    }
+
+    private RecurringBlock repeatRule(UUID id) {
+        return state.recurring().stream().filter(r->r.id().equals(id)).findFirst()
             .orElseThrow(()->new IllegalArgumentException("That repeating block no longer exists."));
-        next.set(next.indexOf(existing),new RecurringBlock(id,activityId,day,start,end));
+    }
+
+    private void replaceRepeat(RecurringBlock rule) throws IOException {
+        var next=new ArrayList<>(state.recurring());
+        next.replaceAll(r->r.id().equals(rule.id())?rule:r);
         commit(state.withRecurring(next));
     }
 

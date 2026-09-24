@@ -294,3 +294,32 @@ what "edit this occurrence" edits; finishing or skipping records it and moves
 the due date on, and when the rule runs out the task is simply done. A
 repeating task always has a due date. Older vaults arrive with nothing
 repeating. The export is format 9.
+
+## One week of a weekly repeat (schema 21, #59)
+
+Schema 21 lets one week of a weekly repeat differ from its rule without
+changing the rule: skipped, or held at another time — and, within six days of
+its own, on another day. Each `RecurringBlock` keeps a list of `RepeatChange`s,
+one a week at most and at most `RecurringBlock.MAX_CHANGES` (1,040), keyed by
+the date the rule would have put that week's block on. A change is that date,
+then either nothing (skipped) or the day it moved to and its start and end as
+local times, like the rule's own. The rule's dates are still worked out rather
+than stored (`Analytics.occurrences`): a changed week is left off its own day
+and drawn where it moved to, and a week moved across the edge of the week shown
+is drawn by the week it landed in.
+
+Overlaps are checked as the rules are, on each date a change reaches: the
+rules' blocks that day, less the weeks moved away or skipped, plus the weeks
+moved onto it. Changing a rule's time keeps its changed weeks; moving it to
+another day puts them back, since there is no block left on the dates they
+name, and the form says so first. A week put back where the rule has it keeps
+no change.
+
+In the vault the changes follow the task lists: for each rule, in the order the
+rules were written, a count and then each change (the date as an epoch day, a
+moved flag, and if moved the day and the two times as seconds of the day). An
+older vault arrives with every week following its rule; `LegacyVaultTest` opens
+a schema 20 vault written by the unmodified build. The portable export is
+format 10: `"changes"` on each repeat, with `"week"`, `"skipped"` and, when
+moved, `"day"`, `"startTime"` and `"endTime"`. A file without them reads with
+no changed weeks.

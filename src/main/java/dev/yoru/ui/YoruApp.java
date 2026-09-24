@@ -559,6 +559,11 @@ public final class YoruApp extends JPanel implements Shell {
                 if(existing!=null) perform(()->tracker.editSession(id,existing.activityId(),start,end));
             }
             public void open(UUID id,boolean recorded) { editOnGrid(id,recorded); }
+            public void moveRepeat(UUID ruleId,LocalDate week,Instant start,Instant end) {
+                RepeatWeek.moveOnGrid(YoruApp.this,ruleId,week,start,end);
+            }
+            public void openRepeat(UUID ruleId,LocalDate week) { RepeatWeek.open(YoruApp.this,ruleId,week); }
+            public boolean repeatsEditable() { return true; }
         });
         var frame=new JPanel(new BorderLayout());
         frame.setOpaque(true);
@@ -624,6 +629,12 @@ public final class YoruApp extends JPanel implements Shell {
         }
         p.add(list);
         gap(p,SPACE_LG);
+        // The weekly template's blocks for this week, each able to be skipped
+        // or moved on its own (#59) without the pointer.
+        if(!tracker.state().recurring().isEmpty()) {
+            p.add(RepeatWeek.card(this,week));
+            gap(p,SPACE_LG);
+        }
 
         var note=card();
         note.add(sectionHeader("PLANNED ≠ REQUIRED",GOLD));

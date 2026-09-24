@@ -156,6 +156,16 @@ public final class DialogPreview {
                 planner.repeat(english, java.time.DayOfWeek.FRIDAY,
                     java.time.LocalTime.of(11, 0), java.time.LocalTime.of(12, 0));
                 render(out, "weekly", new WeeklyTemplate(planner, () -> { }), new String[]{"Done"});
+                // One week of a repeat on its own (#59): the choice, and the form.
+                var rule = planner.state().recurring().getFirst();
+                var week = planner.state().settings().weekOf(java.time.LocalDate.of(2026, 10, 5))
+                    .with(java.time.temporal.TemporalAdjusters.nextOrSame(rule.dayOfWeek()));
+                planner.changeRepeatWeek(rule.id(), week, week, rule.startTime().plusHours(2), rule.endTime().plusHours(2));
+                var shell = new TestShell(planner, java.time.ZoneOffset.UTC);
+                rule = planner.state().recurring().getFirst();
+                render(out, "repeat-week", RepeatWeek.summary(shell, rule, week),
+                    RepeatWeek.choices(rule, week).toArray(String[]::new));
+                render(out, "repeat-week-change", new RepeatWeek.ChangeForm(shell, rule, week), new String[]{"Save", "Cancel"});
 
                 System.out.println("Rendered 16 dialogs to " + out);
             } catch (Exception e) {

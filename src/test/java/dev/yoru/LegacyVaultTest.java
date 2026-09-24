@@ -92,6 +92,20 @@ public final class LegacyVaultTest {
         "vgyH11gZldhTWCZJ6zpA4aX8KWonPkTgVqLk+umHPBOb93k0iqRzvXKXQAgfIC2EKb0wMp5m" +
         "0R76+b/f3fzXxWH/1+4Ly3oUq5nQshQhPiIy1Hs6lHxPJxBTN67xuZJWnLQEzxE=";
 
+    /**
+     * A vault written by the unmodified schema 20 build (main at 09c15c1, after
+     * 1.0.21): two invented weekly repeats and a planned block. Opened now,
+     * every week of each repeat follows its rule (#59).
+     */
+    private static final String WEEKLY_VAULT =
+        "WU9SVQAAAAGjO7HmGSR5OFWhVBfWyqtDl575AtLNGWFeaFKpLcwLKvHHGp0a9k7UXU9iAjVN" +
+        "dgz2AZ1bmTdSH4duhmCnykiy0g7JM8EzFeiasqoc1yDuhBn9gQrT9He4b9zfRXjeZVt+CDgu" +
+        "UjvkYxXUm5DWyKbvaAWJNDZ3aSapU6KgUe/9x9gSW3c/YyCvcixcp4MFDL4/hH4vPd1JikBa" +
+        "CwdeDKQ+YRgzhdwFv+m3/M9cN5GgvykOkz08MTfVV1RekXpP0WNqcAECCWYAPAQ4w4/pbomy" +
+        "BftuQvJ9PfjdMI6QbjopDnuKRX1ip9dLYHPJvpkNWmzZYuxYW0sx2wv/tPIXkpMfZti+gSLL" +
+        "+IXqwLi8teTcUVfv5Ebxhs5wYEwPGaedXzGH+9Ig85QeQruJVLpg+hAvN+F8qUjFzctxPKKr" +
+        "PH/IMmvUcB4TFAAKWfuiSDc0fDPFLcOXOgonq1U7Fhhw";
+
     public static void main(String[] args)throws Exception{
         Path dir=Files.createTempDirectory("yoru-legacy-");
         try {
@@ -159,6 +173,7 @@ public final class LegacyVaultTest {
         illustrated();
         beforePages();
         oneTag();
+        weekly();
         System.out.println("PASS: "+checks+" legacy vault checks (an older build's file still opens)");
     }
 
@@ -197,6 +212,40 @@ public final class LegacyVaultTest {
     }
 
     /** The 1.0.19 vault above: a tag each, becoming a list of tags each (#66). */
+    /** The schema 20 vault above: its repeats open unchanged, then keep a week changed on its own. */
+    private static void weekly() throws Exception {
+        Path dir=Files.createTempDirectory("yoru-weekly-");
+        try {
+            Path file=dir.resolve("weekly.vault");
+            Files.write(file,Base64.getDecoder().decode(WEEKLY_VAULT));
+            State loaded;
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){loaded=vault.load();}
+            check(loaded.activities().stream().map(Activity::name).toList().equals(List.of("Invented lecture","Invented lab")),
+                "A schema 20 vault keeps its activities");
+            check(loaded.recurring().size()==2,"and both weekly repeats");
+            var lecture=loaded.recurring().getFirst();
+            var lab=loaded.recurring().get(1);
+            check(lecture.dayOfWeek()==java.time.DayOfWeek.MONDAY&&lecture.startTime().equals(java.time.LocalTime.of(9,0))
+                &&lecture.endTime().equals(java.time.LocalTime.of(10,30)),"The lecture keeps its day and times");
+            check(lab.dayOfWeek()==java.time.DayOfWeek.THURSDAY&&lab.endTime().equals(java.time.LocalTime.of(16,0)),
+                "and so does the lab");
+            check(loaded.recurring().stream().allMatch(r->r.changes().isEmpty()),"Every week of each follows its rule (#59)");
+            check(loaded.blocks().size()==1,"The planned block after them is read where it was");
+
+            var monday=LocalDate.parse("2026-10-05");
+            var changed=loaded.withRecurring(List.of(lecture.withChange(monday,RepeatChange.skip(monday)),lab));
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){vault.save(changed);}
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){
+                check(vault.load().equals(changed),"A skipped week survives a save at the current schema and a reopen");
+            }
+            check(Files.exists(Path.of(file+".v20.bak")),"The schema 20 file is kept as a backup before the upgrade");
+        } finally {
+            try(var files=Files.walk(dir)){
+                for(var path:files.sorted(Comparator.reverseOrder()).toList())Files.delete(path);
+            }
+        }
+    }
+
     private static void oneTag() throws Exception {
         Path dir=Files.createTempDirectory("yoru-one-tag-");
         try {

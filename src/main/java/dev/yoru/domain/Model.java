@@ -266,7 +266,13 @@ public final class Model {
      * has both a lecture every Monday and a one-off exam next Thursday.
      */
     public record RecurringBlock(UUID id, UUID activityId, DayOfWeek dayOfWeek,
-                                 LocalTime startTime, LocalTime endTime) {
+                                 LocalTime startTime, LocalTime endTime, List<RepeatChange> changes) {
+        /** The most weeks one rule keeps changed on their own: twenty years of them. */
+        public static final int MAX_CHANGES = 1_040;
+        /** A rule no week of which has been changed on its own. */
+        public RecurringBlock(UUID id, UUID activityId, DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime) {
+            this(id, activityId, dayOfWeek, startTime, endTime, List.of());
+        }
         public RecurringBlock {
             Objects.requireNonNull(id);
             Objects.requireNonNull(activityId);
@@ -275,7 +281,71 @@ public final class Model {
             Objects.requireNonNull(endTime);
             if(!endTime.isAfter(startTime))
                 throw new IllegalArgumentException("A repeating block must end after it starts, on the same day.");
+            if(changes.size() > MAX_CHANGES) throw new IllegalArgumentException("Vault record limit reached.");
+            var byDate = new TreeMap<LocalDate, RepeatChange>();
+            for(var change : changes) {
+                Objects.requireNonNull(change);
+                // A change is to one of this rule's own weeks: a Monday rule has
+                // nothing on a Tuesday to skip or move.
+                if(change.date().getDayOfWeek() != dayOfWeek)
+                    throw new IllegalArgumentException("A repeat on " + day(dayOfWeek)
+                        + " has no block on " + change.date() + " to change.");
+                if(byDate.put(change.date(), change) != null)
+                    throw new IllegalArgumentException("That week is already changed on its own.");
+            }
+            changes = List.copyOf(byDate.values());
         }
+        /** The change to the week holding this date's block, or null when it follows the rule. */
+        public RepeatChange changeOn(LocalDate date) {
+            for(var change : changes) if(change.date().equals(date)) return change;
+            return null;
+        }
+        /** The same rule, its changed weeks and all, under another activity. */
+        public RecurringBlock withActivity(UUID next) {
+            return new RecurringBlock(id, next, dayOfWeek, startTime, endTime, changes);
+        }
+        /** The same rule with one week's change added, replaced or, given null, taken away. */
+        public RecurringBlock withChange(LocalDate date, RepeatChange change) {
+            var next = new ArrayList<RepeatChange>();
+            for(var c : changes) if(!c.date().equals(date)) next.add(c);
+            if(change != null) next.add(change);
+            return new RecurringBlock(id, activityId, dayOfWeek, startTime, endTime, next);
+        }
+        private static String day(DayOfWeek day) {
+            return day.getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH);
+        }
+    }
+
+    /**
+     * One week of a repeat that does not follow the rule (#59): skipped, or held
+     * at another time — and possibly another day — that week only.
+     *
+     * Keyed by the date the rule would have put the block on, so the rule and
+     * every other week stay exactly as they were, and taking the change away
+     * puts that week back where the rule says. A skipped week has no times.
+     *
+     * @param date    the day the rule puts this week's block on.
+     * @param movedTo the day it is held instead, or null when skipped.
+     */
+    public record RepeatChange(LocalDate date, LocalDate movedTo, LocalTime start, LocalTime end) {
+        /** The furthest a week's block may move from its own day: within the same fortnight either way. */
+        public static final int MAX_MOVE_DAYS = 6;
+        public RepeatChange {
+            Objects.requireNonNull(date);
+            if(movedTo == null) {
+                if(start != null || end != null) throw new IllegalArgumentException("A skipped week has no times.");
+            } else {
+                Objects.requireNonNull(start);
+                Objects.requireNonNull(end);
+                if(!end.isAfter(start))
+                    throw new IllegalArgumentException("This week's block must end after it starts, on the same day.");
+                if(Math.abs(movedTo.toEpochDay() - date.toEpochDay()) > MAX_MOVE_DAYS)
+                    throw new IllegalArgumentException("Move one week's block within six days of its own day;"
+                        + " further than that, skip it and plan a block.");
+            }
+        }
+        public static RepeatChange skip(LocalDate date) { return new RepeatChange(date, null, null, null); }
+        public boolean skipped() { return movedTo == null; }
     }
 
     /**
@@ -690,6 +760,7 @@ public final class Model {
                     .map(r -> new Interval(r.id(),
                         LocalDate.EPOCH.atTime(r.startTime()).toInstant(java.time.ZoneOffset.UTC),
                         LocalDate.EPOCH.atTime(r.endTime()).toInstant(java.time.ZoneOffset.UTC))).toList());
+            validateChangedWeeks(recurring);
             validateIntervals(sessions.stream().map(x -> new Interval(x.id(),x.start(),x.end())).toList());
             validateIntervals(blocks.stream().map(x -> new Interval(x.id(),x.start(),x.end())).toList());
             // Lists (#56): each once, each name once whatever its case, since
@@ -716,6 +787,40 @@ public final class Model {
             for (var p : notes.pages()) pageIds.add(p.id());
             for (var t : tasks) for (var page : t.pageIds())
                 if (!pageIds.contains(page)) throw new IllegalArgumentException("A task links to a page that does not exist.");
+        }
+        /**
+         * The days a changed week touches, checked the way the rules are (#59).
+         *
+         * The rules cannot clash on a weekday, but one week's block held at
+         * another time, or on another day, can land on a block that follows its
+         * rule. So every day a change reaches is laid out as it will be drawn —
+         * the rules' own blocks less the weeks moved away or skipped, plus the
+         * blocks moved onto it — and refused where two overlap, as a clash on
+         * the template is.
+         */
+        private static void validateChangedWeeks(List<RecurringBlock> recurring) {
+            int total = 0;
+            var days = new TreeSet<LocalDate>();
+            for (var r : recurring) {
+                total += r.changes().size();
+                for (var c : r.changes()) { days.add(c.date()); if (!c.skipped()) days.add(c.movedTo()); }
+            }
+            if (total > 10_000) throw new IllegalArgumentException("Vault record limit reached.");
+            for (var day : days) {
+                var held = new ArrayList<Interval>();
+                for (var r : recurring) {
+                    if (r.dayOfWeek() == day.getDayOfWeek() && r.changeOn(day) == null)
+                        held.add(onDay(r.startTime(), r.endTime()));
+                    for (var c : r.changes())
+                        if (!c.skipped() && c.movedTo().equals(day)) held.add(onDay(c.start(), c.end()));
+                }
+                validateIntervals(held);
+            }
+        }
+        /** A span of one day. Its own id: two weeks of one rule can both be moved onto the same day. */
+        private static Interval onDay(LocalTime start, LocalTime end) {
+            return new Interval(UUID.randomUUID(), LocalDate.EPOCH.atTime(start).toInstant(java.time.ZoneOffset.UTC),
+                LocalDate.EPOCH.atTime(end).toInstant(java.time.ZoneOffset.UTC));
         }
         /**
          * Removes one activity, keeping or deleting the time recorded under it.
@@ -767,7 +872,7 @@ public final class Model {
             var nextBlocks = blocks.stream().map(b -> b.activityId().equals(activityId)
                 ? new ScheduleBlock(b.id(), replacement, b.start(), b.end()) : b).toList();
             var nextRepeats = recurring.stream().map(r -> r.activityId().equals(activityId)
-                ? new RecurringBlock(r.id(), replacement, r.dayOfWeek(), r.startTime(), r.endTime()) : r).toList();
+                ? r.withActivity(replacement) : r).toList();
             var nextTasks = tasks.stream().map(t -> activityId.equals(t.activityId())
                 ? t.withActivity(replacement) : t).toList();
             return new State(kept, nextSessions, nextBlocks, nextRepeats, nextTasks, habits, tags,
