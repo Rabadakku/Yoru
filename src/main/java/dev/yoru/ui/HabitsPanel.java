@@ -28,8 +28,8 @@ final class HabitsPanel {
     static JPanel view(Tracker tracker,Runnable refresh) {
         var body=stack();
         body.add(YoruApp.pageHeaderFor("Habits","STREAKS · CONSISTENCY · TIME SINCE",
-            button("+ Daily check-off",()->create(tracker,refresh,HabitKind.DAILY,body)),
-            button("+ Time since",()->create(tracker,refresh,HabitKind.TIME_SINCE,body))));
+            named(button("+ Daily check-off",()->create(tracker,refresh,HabitKind.DAILY,body)),"habit.new.daily"),
+            named(button("+ Time since",()->create(tracker,refresh,HabitKind.TIME_SINCE,body)),"habit.new.since")));
         if(tracker.state().habits().isEmpty()) {
             body.add(ankiStreak(tracker));
             gap(body,SPACE_LG);
@@ -487,7 +487,7 @@ final class HabitsPanel {
         line.setName("habit.row."+habit.id());
         var zone=ZoneId.of(habit.zone());
         var left=stack();
-        left.add(shortenable(habit.name(),TYPE_BODY,TEXT));
+        left.add(named(shortenable(habit.name(),TYPE_BODY,TEXT),"habit.name."+habit.id()));
         // Gives way to the figures beside it like the name above it does, with
         // the whole of it in the tooltip.
         left.add(shortenable("since "+began(habit.starts().getLast(),zone),TYPE_CAPTION,MUTED));

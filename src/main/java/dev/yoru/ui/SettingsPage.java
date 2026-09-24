@@ -128,8 +128,8 @@ final class SettingsPage {
         gap(tracking,SPACE_SM);
         tracking.add(bodyLabel("Used by the week calendar and the task calendar."));
         gap(tracking,SPACE_LG);
-        tracking.add(button("Save tracking settings",()->shell.applySettings(s->new Settings(s.theme(),
-            (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem()))));
+        tracking.add(named(button("Save tracking settings",()->shell.applySettings(s->new Settings(s.theme(),
+            (Integer)goal.getValue(),(Integer)floor.getValue()*60,(DayOfWeek)weekStart.getSelectedItem()))),"settings.tracking.save"));
 
         var audio=card();
         audio.add(sectionHeader("TRACKING · STUDY MUSIC"));
@@ -190,7 +190,7 @@ final class SettingsPage {
         gap(reset,SPACE_SM);
         reset.add(bodyLabel("An encrypted backup is saved beside your vault before the reset."));
         gap(reset,SPACE_LG);
-        reset.add(button("Choose data to reset…",shell::chooseReset));
+        reset.add(named(button("Choose data to reset…",shell::chooseReset),"settings.reset"));
         // In the order a reader looks for them (#9): how Yoru looks, how it
         // tracks, what it connects to, then the vault, whose controls used to
         // sit on the Data page. Updates are about the app rather than the

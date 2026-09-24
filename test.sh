@@ -86,6 +86,7 @@ java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.TaskCalendarTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.FocusMixTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.UpdatesUiTest
 java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.ActivityUiTest
+java -Djava.awt.headless=true -ea -cp build/classes dev.yoru.ui.CrudCoverageTest
 
 
 
