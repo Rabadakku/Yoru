@@ -1,6 +1,6 @@
 # Yoru roadmap
 
-## In review — habit order and daily time zone (#59)
+## Habit order and daily time zone (#59, PR #105)
 
 `codex/habit-controls` adds Move up/down to both kinds of habit and Time zone
 to the daily habit menu. Each kind reorders only among its own neighbours; the
