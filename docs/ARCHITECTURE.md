@@ -49,7 +49,7 @@ clock.
 | `importer` | `NotionImport`. |
 | `update` | `ReleaseFeed`, `Download`, `Updates`, `MacInstall`, `Version`. |
 | `json` | `Json`, the bounded codec. |
-| `ai`, `plugins` | Kept for later integrations; not reachable in the app. |
+| `ai` | AI assistants over the Model Context Protocol (#47): `Mcp` (the protocol, no I/O), `WorkspaceTools` (the tools, run against `Tracker`), `Bridge` (the owner-only socket between `Yoru --mcp` and the running app), `McpMain` (the `--mcp` process) and `ClaudeSetup` (the command and Claude Desktop's settings). `OpenAiTasks` keeps the paste-a-reply task import. |
 | `ui` | Swing. `YoruApp` is the window: navigation, the ticker and the vault. Pages reach it through `Shell`. |
 
 ### The three rules that hold it together
@@ -151,6 +151,27 @@ transactional database behind the existing `Repository` port. Before any sync,
 design the conflict model, key recovery, deletion and ownership first — a local
 file is not a multi-user backend, and quietly adding a server would break the
 central promise of the app.
+
+## AI assistants
+
+Yoru has no AI client. An AI app starts `Yoru --mcp` (the same launcher, whose
+main class `dev.yoru.Yoru` has no Swing in it and checks its first argument
+before anything of the window loads) and talks JSON-RPC
+on standard input and output. That process answers the handshake and the tool
+list itself, and forwards each tool call over `Bridge` to the running app, one
+connection per call, so it survives the app being opened, closed or relocked.
+
+```
+AI app ⇄ stdio ⇄ McpMain ─ Bridge (Unix socket + token) ─▶ ui.Assistants ─▶ WorkspaceTools ─▶ Tracker
+```
+
+`ui.Assistants` owns the switches, the bridge's lifetime (with the vault, not
+the window, so a palette rebuild keeps it) and the host side of a change: tool
+calls run on the event thread with `invokeAndWait`, the page editor flushes
+first, a backup is taken before the first change in fifteen minutes, and the
+page on screen is rebuilt after. `WorkspaceTools` has no Swing and no sockets,
+so it is tested against an in-memory tracker; the tools only add and edit,
+through the same `Tracker` methods as the interface.
 
 ## Markdown workspace
 

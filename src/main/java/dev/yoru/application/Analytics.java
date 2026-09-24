@@ -139,7 +139,7 @@ public final class Analytics {
     }
 
     /**
-     * A duration as it is reported back rather than counted: "2h 15m", "45m", "0m".
+     * A duration as it is reported back rather than counted: "2h 15m", "2h", "45m", "0m".
      *
      * {@link #duration} is the clock form, for a figure you are watching tick.
      * This is the form for a figure you are reading — a total, a history, a
@@ -148,7 +148,8 @@ public final class Analytics {
      */
     public static String report(long seconds) {
         long minutes=Math.max(0,seconds)/60;
-        return minutes<60 ? minutes+"m" : minutes/60+"h "+minutes%60+"m";
+        // A whole hour is "2h": a chart of fourteen totals read "2h 0m" above every round one.
+        return minutes<60 ? minutes+"m" : minutes%60==0 ? minutes/60+"h" : minutes/60+"h "+minutes%60+"m";
     }
 
     /** Heat map tiers, including the over-goal one. */

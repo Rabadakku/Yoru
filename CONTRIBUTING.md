@@ -61,7 +61,7 @@ Compile tests into `build/classes` first:
 
 ```bash
 find src/test/java -name '*.java' > build/tests.txt
-javac --release 21 -encoding UTF-8 -cp build/classes -d build/classes @build/tests.txt
+javac --release 22 -encoding UTF-8 -cp build/classes -d build/classes @build/tests.txt
 ```
 
 For a native keyboard and clipboard check on a desktop, after compiling tests:
@@ -87,13 +87,20 @@ that bypass the theme helpers entirely.
 ## 3. Layout
 
 ```
-domain/       immutable records + validation
-application/  Tracker (the only mutation boundary), Analytics (derived views)
-persistence/  EncryptedVault (AES-256-GCM), LocalAccess (password-free key)
-collection/   Encounters (reward economy), Evolutions (species graph)
-ui/           Swing; YoruApp is the shell, one class per page
-ai/           optional OpenAI extraction, bring-your-own key
+domain/       Model: immutable records and their validation
+application/  Tracker (the only way the vault changes), Pages, TaskProperties,
+              Analytics, QuickAdd, Repeats, HabitStats and the Repository port
+persistence/  EncryptedVault (AES-256-GCM), VaultStore, PortableVault (JSON)
+pages/        Markdown, links, backlinks and search
+ai/           the Model Context Protocol server AI assistants use (--mcp)
+anki/         AnkiConnect, read only
+importer/     Notion CSV import
+update/       the release feed, verified downloads and the Mac installer swap
+json/         the bounded JSON codec
+ui/           Swing: YoruApp is the window, one class per page
 ```
+
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) says what each holds and why.
 
 ---
 
@@ -110,12 +117,14 @@ and say why.
 - **Store raw, derive rules.** Recorded facts are immutable history; product
   rules (a five-minute floor, a daily goal) are read-time functions over them.
   Baking a rule into storage turns every future tweak into a migration.
-- **No game assets in this repository.** Ever. See the README and the
-  [legal notice](NOTICE): Yoru bundles no game, BIOS, artwork or music, needs
-  the player's own legally obtained copy, and is not affiliated with Nintendo,
-  Game Freak or The Pokémon Company.
-- **Palette through `Theme`.** No hardcoded hex in a page. Four themes exist,
+- **Nothing is bundled.** No third-party code, fonts, images or audio; see the
+  [notice](NOTICE). Every picture is drawn at runtime.
+- **Palette through `Theme`.** No hardcoded hex in a page. Five themes exist,
   two of them light — a colour that only reads on dark is a bug.
+- **One clock.** Pages ask `Shell.now()` and `Shell.today()`, which read
+  `Tracker.now()`, never `Instant.now()` or `LocalDate.now()`, so tests can pin
+  time and every page agrees on what today is. Only the date fields, which have
+  no tracker, read the wall clock, to know what "tomorrow" means as it is typed.
 - **Dialogs through `Dialogs`.** Calling `JOptionPane` directly reintroduces the
   Java mascot icon and drifts the wording.
 
@@ -139,16 +148,22 @@ and say why.
 | Suite | Covers |
 |---|---|
 | `CoreTest` | timers, corrections, DST, analytics, the session floor, heat tiers, vault auth |
-| `SchemaTest` | schema 5 round trip, tag deletion, reset scoping |
-| `ExpansionTest` | encounter economy, task dedup, older-schema decode, AI response fixtures |
+| `SchemaTest`, `LegacyVaultTest` | the current schema's round trip, and a vault written by every older build still opening |
 | `HabitsTest` | streaks, timezones, restart history, password-free vaults |
 | `HabitHistoryTest`, `ui/HabitHistoryUiTest` | old daily corrections, retained beginning, missed restarts, paging, failures and persistence |
+| `QuickAddTest` | the quick-add grammar, phrase by phrase against a fixed date |
+| `ai/WorkspaceToolsTest`, `ai/BridgeTest` | every assistant tool against an invented vault; the owner-only socket end to end |
 | `ui/InputTest` | revert-on-invalid, DST gaps and overlaps, range clamping |
-| `ui/UiTest` | every page rendered headlessly at two widths |
+| `ui/TextFitTest`, `ui/ContrastTest` | every label fits at every text size; every palette is readable |
 | `ui/CrudCoverageTest` | every kind of record created, viewed, edited and deleted by the tracker and from named controls (#59) |
-| `ArtworkTest` | artwork naming, nested folders, zip import and path escapes |
-| `ReliabilityTest` | edits, evolution, shiny odds, vault reopen, backup failure and reset accounting |
-| `ui/RouteTest` | centered camera, pause/resume, resize and all four themes |
+| `ReliabilityTest` | edits, vault reopen, backup failure and reset accounting |
+| `PrivacyTest` | no personal data in any tracked file |
+
+Every `*Test.java` under `src/test/java` runs: `dev.yoru.TestMain` finds them,
+runs `IsolationTest` first, then the rest four at a time, each in a JVM with an
+empty home of its own. A test is a class with a `main` that throws, or exits
+non-zero, on failure and prints one `PASS:` line on success. Only
+`NativeDesktopTest`, which needs a real screen, is run by hand.
 
 Every new record must ship with create, view, edit and delete controls (#59),
 reachable by mouse and keyboard and named for accessibility. Cover the tracker
@@ -159,12 +174,32 @@ there, with the controls' names, in the change that adds the record.
 
 Add tests with the feature, not after. The features recovered from an
 interrupted session shipped with zero coverage and two of them had real bugs —
-a silently dropped party, and a reset that wiped settings it was not asked to
+a silently dropped record, and a reset that wiped settings it was not asked to
 touch.
 
 ---
 
-## 6. Commits
+## 6. Code style
+
+New and changed code is written in the conventional Java style the newer files
+use; older files in a denser style are converted when they are otherwise being
+changed, in commits of their own, never mixed with a behaviour change.
+
+- Four spaces, no tabs; braces on the same line; one statement per line.
+- Spaces around binary operators and after commas and keywords:
+  `if (count > 0) list.add(item);`, not `if(count>0)list.add(item);`.
+- `var` where the type is on the right-hand side; explicit types where it is
+  not obvious.
+- Comments say **why**. A comment that restates the next line is deleted.
+  Javadoc on every class and on any method whose contract is not its name.
+- Catch the specific exception. A catch that deliberately continues says why in
+  a comment, and nothing that saves data swallows an error.
+- User-facing text is written by Yoru, never a raw exception message or a path.
+- Build with `-Xlint:all` (`build.sh` does); CI fails on a new warning.
+
+---
+
+## 7. Commits
 
 Explain **why**, not what — the diff already says what. Note anything surprising
 you found, because the next agent will hit it too.

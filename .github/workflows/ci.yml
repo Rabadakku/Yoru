@@ -11,4 +11,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
+      # A new compiler warning fails the build here (#45); see build.sh.
       - run: ./test.sh
+        env:
+          YORU_WERROR: '1'

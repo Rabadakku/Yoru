@@ -130,6 +130,8 @@ public final class CrudCoverageTest {
             && t.state().activities().getFirst().targetMinutes() == 45, "An activity is renamed and retargeted");
         t.addActivity("Invented spare", 0);
         var spare = t.state().activities().get(1).id();
+        t.moveActivity(spare, -1);
+        check(t.state().activities().getFirst().id().equals(spare), "An activity is moved up the order");
         t.removeActivity(spare, false);
         check(t.state().activities().size() == 1, "An activity is deleted");
         failed(repo, t, () -> t.renameActivity(reading, "Never saved"));
@@ -177,6 +179,10 @@ public final class CrudCoverageTest {
         var tag = t.addTag("Invented course", 0x90D8DA);
         t.editTag(tag.id(), "Invented seminar", 0xE8B24C);
         check(t.state().tags().getFirst().name().equals("Invented seminar"), "A tag is renamed and recoloured");
+        var second = t.addTag("Invented lab", 0x6E8FD6);
+        t.moveTag(second.id(), -1);
+        check(t.state().tags().getFirst().id().equals(second.id()), "A tag is moved up the order");
+        t.deleteTag(second.id());
         var list = t.addList("Invented list", 0xA98BD4);
         t.editList(list.id(), "Invented errands", 0x90D8DA);
         check(t.state().lists().getFirst().name().equals("Invented errands"), "A list is renamed and recoloured");
@@ -399,6 +405,9 @@ public final class CrudCoverageTest {
         usable(app, "activity.rename." + activity, "Activities", "edit");
         usable(app, "activity.target." + activity, "Activities", "edit");
         usable(app, "activity.remove." + activity, "Activities", "delete");
+        // Their order (#108): the arrow at either end is off, so each end's inner arrow is the one to press.
+        usable(app, "activity.down." + state.activities().getFirst().id(), "Activities", "edit order");
+        usable(app, "activity.up." + state.activities().getLast().id(), "Activities", "edit order");
 
         // Sessions: the table on Data, one or several at a time.
         usable(app, "sessions.log", "Sessions", "create");
@@ -456,6 +465,8 @@ public final class CrudCoverageTest {
         usable(tags, "tag.rename." + tag, "Tags", "edit");
         usable(tags, "tag.colour." + tag, "Tags", "edit");
         usable(tags, "tag.delete." + tag, "Tags", "delete");
+        usable(tags, "tag.down." + state.tags().getFirst().id(), "Tags", "edit order");
+        usable(tags, "tag.up." + state.tags().getLast().id(), "Tags", "edit order");
         usable(board, "tasks.list.new", "Lists", "create");
         usable(board, "tasks.place." + ids.get("list"), "Lists", "view");
         var invented = tracker.state().lists().stream().filter(l -> l.id().equals(ids.get("list"))).findFirst().orElseThrow();
@@ -595,10 +606,7 @@ public final class CrudCoverageTest {
                 var failure = new Throwable[1];
                 SwingUtilities.invokeAndWait(() -> {
                     try {
-                        var constructor = YoruApp.class.getDeclaredConstructor(Tracker.class, Repository.class,
-                            VaultStore.class, String.class, char[].class);
-                        constructor.setAccessible(true);
-                        var app = constructor.newInstance(new Tracker(vault, Clock.systemUTC()), vault, store, "Windowed",
+                        var app = YoruApp.managed(new Tracker(vault, Clock.systemUTC()), vault, store, "Windowed",
                             "invented-password-2".toCharArray());
                         var card = app.vaultCard();
                         usable(card, "vault.new", "Vaults", "create");

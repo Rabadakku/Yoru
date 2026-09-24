@@ -456,15 +456,6 @@ public final class EncryptedVault implements Repository {
         VaultStore.forceDir(path.getParent());
     }
 
-    /**
-     * Reads any schema from 1 to 23.
-     *
-     * Every field older vaults lack arrives as a sensible empty, and everything
-     * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
-     * after the tasks, the practice-gym records after the tags, and the game's
-     * campaign, rewards and save — is read past so the records after it land at
-     * the right offset.
-     */
     /** Emerald writes 128 KiB; anything past a megabyte was never a save of its. */
     private static final int MAX_GAME_SAVE = 1_048_576;
 
@@ -510,6 +501,15 @@ public final class EncryptedVault implements Repository {
     /** Where an older vault's game save was written, or null. */
     public Path rescuedSave() { return rescued; }
 
+    /**
+     * Reads any schema from 1 to 23.
+     *
+     * Every field older vaults lack arrives as a sensible empty, and everything
+     * they hold that Yoru no longer keeps — the collection schemas 2 to 10 kept
+     * after the tasks, the practice-gym records after the tags, and the game's
+     * campaign, rewards and save — is read past so the records after it land at
+     * the right offset.
+     */
     private State decode(byte[] bytes)throws IOException {
         try(var in=new DataInputStream(new ByteArrayInputStream(bytes))) {
             int schema = in.readInt();

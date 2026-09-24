@@ -127,6 +127,6 @@ public final class ReliabilityTest {
         final var refusedPurge=new Tracker(purgeRepo,purgeClock);
         rejects(()->refusedPurge.purgeShortSessions());
         check(refusedPurge.state().sessions().size()==1,"a failed backup blocks the purge");
-        System.out.println("PASS: "+checks+" reliability checks (edits, encounters, campaign stability, reopen and reset backups)");
+        System.out.println("PASS: "+checks+" reliability checks (edits, failed saves, reopen, imports, purges and reset backups)");
     }
 }

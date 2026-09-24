@@ -1080,10 +1080,21 @@ final class Theme {
         label.setFont(labelFont().deriveFont(Font.BOLD));
         return label;
     }
-    private static String quietCase(String text) {
-        return text.length() > 1 && text.equals(text.toUpperCase(java.util.Locale.ROOT))
-            ? text.substring(0,1) + text.substring(1).toLowerCase(java.util.Locale.ROOT) : text;
+    static String quietCase(String text) {
+        if (text.length() <= 1 || !text.equals(text.toUpperCase(java.util.Locale.ROOT))) return text;
+        var out = new StringBuilder(text.substring(0,1) + text.substring(1).toLowerCase(java.util.Locale.ROOT));
+        // Names keep their capitals: sentence case made "INTEGRATIONS · ANKI" read "Integrations · anki".
+        var words = java.util.regex.Pattern.compile("\\p{L}+").matcher(text);
+        while (words.find()) {
+            String kept = PROPER.get(words.group());
+            if (kept != null) out.replace(words.start(), words.end(), kept);
+        }
+        return out.toString();
     }
+
+    /** Words an uppercase header keeps capitalised when it is set in sentence case. */
+    private static final java.util.Map<String, String> PROPER = java.util.Map.of(
+        "ANKI", "Anki", "AI", "AI", "CLAUDE", "Claude", "MCP", "MCP", "JSON", "JSON", "CSV", "CSV", "UTC", "UTC");
     /**
      * A card's signpost where the card is not the ordinary case (a caution, a promise).
      *
@@ -1091,7 +1102,7 @@ final class Theme {
      * saying "this one is different", never "make this unreadable". Both gold
      * roles are therefore accepted and the readable one is what gets drawn, so
      * the header that names an exception stays as legible as every other
-     * header — {@link #GOLD} stays what it is: a fill for chips and sprites.
+     * header — {@link #GOLD} stays what it is: a fill for chips.
      */
     static JLabel sectionHeader(String text, Color colour) {
         return label(quietCase(text), TYPE_SECTION, GOLD.equals(colour) ? GOLD_TEXT : colour);
@@ -1503,7 +1514,9 @@ final class Theme {
         }
         @Override public void setContentAreaFilled(boolean value) { filled=value; repaint(); }
         @Override protected void paintComponent(Graphics graphics) {
-            if(filled) {
+            // A quiet button that is off draws no fill: filled, the one control
+            // in a row that could not be pressed was the one that stood out.
+            if(filled && (isEnabled() || !Boolean.TRUE.equals(getClientProperty(QUIET)))) {
                 var g=(Graphics2D)graphics.create();
                 Color fill=!isEnabled() ? DISABLED_FILL
                     : getModel().isPressed() ? shade(getBackground(),DARK?-24:-30)
@@ -1518,7 +1531,7 @@ final class Theme {
             if(isEnabled()||getText()==null||getText().isEmpty()) { super.paintComponent(graphics); return; }
             // BasicButtonUI paints disabled text as getBackground().darker(),
             // ignoring Button.disabledText entirely. On a dark theme that lands
-            // *below* the fill it sits on: "Current buddy" measured 1.9:1 on
+            // *below* the fill it sits on: a disabled label measured 1.9:1 on
             // screen while the palette claimed 4.6. Painting it here is the only
             // way the palette actually reaches the pixels.
             var g=(Graphics2D)graphics.create();
@@ -1610,8 +1623,12 @@ final class Theme {
     static JButton ghost(JButton b) {
         b.setBackground(PANEL);
         b.setBorder(controlBorder(PANEL));
+        b.putClientProperty(QUIET, true);
         return b;
     }
+
+    /** Marks a {@link #ghost} button, whose disabled state is fainter text on no fill at all. */
+    static final String QUIET = "yoru.quiet";
 
     /**
      * The one selected treatment for a segmented choice: filled in the accent,

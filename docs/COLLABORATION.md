@@ -12,20 +12,21 @@ log.
 
 ## 0. Reference material already gathered
 
-Start with **[PRODUCT-GOALS.md](PRODUCT-GOALS.md)**. It records the owner's clarified
-September 10 direction and supersedes earlier product recommendations that
-conflict with the product goals in PRODUCT-GOALS.md.
+Start with **[PRODUCT-GOALS.md](PRODUCT-GOALS.md)**: what Yoru is and is not,
+as the owner confirmed it. It supersedes earlier directions, including the
+game, which was removed in #58.
 
 Some questions have been answered once already; re-deriving them costs a session
 and risks a different answer. Before researching, check:
 
-- **`docs/FOCUSPOMO-NOTES.md`** — FocusPomo 5.2.1 walked screen by screen on a real
-  install: structure, every dialog, the charts, what to copy, what is
-  a deliberate divergence, and how to drive the app yourself. It is the reference
-  for #6 and for any "how do other trackers do this" question.
-- **`docs/CAMPAIGN-EVALUATION.md`** — what the ROM actually contains (854
-  trainers, 354 moves) measured rather than guessed, and the two routes for #29.
-- **`docs/DATA-MODEL.md`** — the vault schema and every migration.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — the packages, the rules that hold
+  them together, and how AI assistants reach the running app.
+- **[DATA-MODEL.md](DATA-MODEL.md)** — the vault schema and every migration.
+- **[FOCUSPOMO-NOTES.md](FOCUSPOMO-NOTES.md)** — FocusPomo walked screen by
+  screen: the reference for the timer (#62) and for any "how do other trackers
+  do this" question.
+- **[history/](history/)** — how Yoru got here: the handoff log, the game-era
+  notes and old plans. Read it for context; do not take it as current.
 
 If you find one of these wrong, fix the document in the same commit as the code.
 A stale note is worse than no note, because it gets believed.
@@ -81,10 +82,11 @@ divide so you do not both edit these:
 | `domain/Model.java` | Any new field touches it. |
 | `persistence/EncryptedVault.java` | Always changes with `Model`. |
 | `ui/Theme.java` | Any palette or widget change. |
+| `application/Tracker.java` | Every change to the vault passes through it. |
 
 Safe to work on in parallel, because they are largely self-contained:
-`ui/TasksPanel`, `ui/HabitsPanel`, `ui/ScheduleGrid`, `ui/BuddyScene`,
-`ai/*`, `plugins/*`, and anything under `src/test`.
+`ui/TasksPanel`, `ui/HabitsPanel`, `ui/ScheduleGrid`, `ui/PagesPage`,
+`ai/*`, and anything under `src/test`.
 
 **If your change needs a new stored field, say so on the issue first.** Two
 agents adding fields to `Model` and `EncryptedVault` at once produces a schema

@@ -7,23 +7,24 @@ notes in one encrypted vault on your own machine. No account, no cloud sync.
 
 [Download](https://github.com/Rabadakku/Yoru/releases/latest) ·
 [Features](#features) · [Install](#install) · [Connect Anki](#connect-anki) ·
-[Build from source](#build-from-source)
+[Use Yoru with Claude](#use-yoru-with-claude) · [Build from source](#build-from-source)
 
 ![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/yoru-today-light.png)
 
-*Screenshots use invented sample data. The interface shown is from version 1.0.21.*
+*Screenshots use invented sample data. The interface shown is from version 1.0.21; 1.1.0 adds to it.*
 
-## What's new in 1.0.21
+## What's new in 1.1.0
 
-File tasks in lists (Chores, Personal, School) from a rail beside the board,
-give a task several tags and create new ones as you type, and make a task
-repeat — every weekday, on the last Friday, three days after you last did it.
-Today's timer can now be a pomodoro, with gentle sounds of its own at the end
-of each interval.
+Ask Claude about your week and have it plan with you: Yoru is now a tool for
+Claude Desktop, Claude Code and other MCP apps, with no API key, off until you
+switch it on, and never able to delete anything. Tasks gain priorities, your
+own statuses and properties; "Essay draft tomorrow 5pm #school !high" makes a
+whole task in one line; Cmd/Ctrl-K opens a command palette; and one week of a
+weekly repeat can be skipped or moved.
 
-See the [release notes](docs/RELEASE-1.0.21.md) or
-[all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/Yoru-1.0.21-previews.zip).
-Further interface refinements are tracked in the [roadmap](docs/ROADMAP.md).
+See the [release notes](docs/releases/RELEASE-1.1.0.md), or
+[everything that changed](CHANGELOG.md). Further work is tracked in the
+[roadmap](docs/ROADMAP.md).
 
 ## Features
 
@@ -46,14 +47,18 @@ before saving.
 
 Compare planned blocks with recorded time in a week grid. Drag to create,
 move or resize a plan, add weekly repeats and choose which day starts the week.
+Skip or move one week of a repeat without changing the rule.
 
 ### Tasks and habits
 
-Tasks have due dates, **To do → Doing → Done** status, several colour tags each,
+Tasks have due dates and times, **To do → Doing → Done** status with statuses
+of your own, priorities, several colour tags each, properties you define,
 search, manual ordering and a month calendar. File them in your own lists,
-make them repeat, and drag them between lists. Paste a task list or import a
-Notion export, then review it before adding anything. Link tasks to Markdown
-pages.
+make them repeat, and drag them between lists. Type a whole task in one line,
+"Essay draft tomorrow 5pm #school !high every monday", or press Cmd/Ctrl-K
+anywhere. Select several tasks to change or delete them together. Paste a task
+list or import a Notion export, then review it before adding anything. Link
+tasks to Markdown pages.
 
 Daily habits show their last seven days, streak and 30-day consistency on one
 line, with the full history a click away. Time-since trackers show how long
@@ -89,6 +94,19 @@ on other pages. Setup lives in **Settings → Integrations · Anki**.
 
 [Connect Anki](#connect-anki)
 
+### AI assistants
+
+Ask Claude what is due this week, have it plan your study blocks around your
+classes, or turn a syllabus or lecture notes into tasks and pages. Yoru works
+as a tool for Claude Desktop, Claude Code or any other app that supports the
+Model Context Protocol, using your own account with that app: Yoru needs no
+API key. Assistants can read your tasks, pages, schedule, time and habits;
+with a second switch they can add and edit them too. They can never delete
+anything. Both switches are off until you turn them on in **Settings →
+Integrations · AI assistants**.
+
+[Use Yoru with Claude](#use-yoru-with-claude)
+
 ### Appearance and navigation
 
 - Collapsible sidebar for Today, Tasks, Pages, Habits, Schedule, Data and Settings.
@@ -108,6 +126,10 @@ on other pages. Setup lives in **Settings → Integrations · Anki**.
 - **Explicit network access.** Checking for updates contacts GitHub; downloading
   an update retrieves its installer. Anki communication stays on your computer
   at `127.0.0.1:8765`. Yoru does not upload your workspace.
+- **AI on your terms.** Yoru never calls an AI service. When you switch
+  assistants on, an AI app on your computer can ask Yoru questions; what it
+  reads goes to that app's provider as part of your conversation, as anything
+  you paste into it would.
 
 Without a password, a random key is kept beside the vault: convenient, but not
 protection from someone who can read both files. [SECURITY.md](SECURITY.md)
@@ -181,6 +203,47 @@ study sessions. It does not store card content, answers or deck names.
 Closing the app preserves the saved summary and settings. Switching the
 integration off stops automatic reads; **Clear key** removes the saved API key.
 Custom ports and remote Anki instances are not supported.
+
+## Use Yoru with Claude
+
+1. In Yoru, open **Settings → Integrations · AI assistants** and switch it on.
+   Tick **Let assistants make changes** if you want Claude to add and edit
+   things, not only read them.
+2. **Claude Desktop:** choose **Add Yoru to Claude Desktop**, then quit and
+   reopen Claude Desktop. Yoru keeps everything else in Claude Desktop's
+   settings and leaves a copy of them as they were. To do it by hand instead,
+   choose **Copy settings** and paste into Claude Desktop's **Settings →
+   Developer → Edit Config**.
+3. **Claude Code:** choose **Copy command** and run it in a terminal. It is
+   `claude mcp add yoru -- <path to Yoru> --mcp`.
+4. Keep Yoru open with your vault unlocked while you chat. Claude asks before
+   each tool it uses, unless you tell it to always allow one.
+
+Try "What's due this week, and how much did I study?", "Plan tomorrow around
+my classes", or "Turn these lecture notes into a page and tasks".
+
+### What an assistant can do
+
+| Reads | Changes, with the second switch |
+|---|---|
+| Today at a glance: the timer, tracked time, what is due, habits | Add a task, or one from a quick-add line |
+| Tasks, filtered by status, list, tag, dates or words | Edit a task's fields, status and links |
+| Pages: search, list and read | Create a page, add to it, or replace a passage |
+| The schedule: plans, weekly repeats, recorded time | Plan a block, record time, start and stop the timer |
+| Time totals by activity and day, and streaks | Check off a habit |
+| Habits: streaks, consistency and the last week | |
+
+Nothing can be deleted by an assistant. The vault is backed up before an
+assistant's first change, and again every fifteen minutes of changes after
+that. **Settings** lists the changes assistants made while Yoru was open.
+
+### How it connects
+
+Claude's app starts a second copy of Yoru with `--mcp`. That copy opens no
+window and no vault: it passes each request to the Yoru you have open, through
+a socket in a folder only your account can open, with a key that changes every
+time Yoru starts. Nothing listens on the network. When Yoru is closed, locked,
+or has assistants switched off, Claude is told so and how to fix it.
 
 ## Build from source
 

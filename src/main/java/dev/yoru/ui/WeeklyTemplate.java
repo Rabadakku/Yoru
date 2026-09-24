@@ -14,7 +14,7 @@ import static dev.yoru.ui.Theme.*;
 /**
  * The weekly template: "every Monday, 9:00 AM to 10:30 AM" (#4).
  *
- * Like TagEditor and unlike PartyEditor this is not a draft — Tracker commits
+ * Like TagEditor this is not a draft — Tracker commits
  * each entry on its own, and State refuses an overlap on the same weekday, so
  * the refusal arrives while the dialog is still open and can be corrected.
  *

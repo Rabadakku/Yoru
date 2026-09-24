@@ -104,6 +104,9 @@ final class TasksPanel extends JPanel implements Scrollable {
     /** Set while the page puts a place's saved search back, so the field's own listener does not rebuild twice. */
     private boolean restoring;
 
+    /** Today by the tracker's clock, where this computer is. */
+    private LocalDate today() { return LocalDate.ofInstant(tracker.now(), java.time.ZoneId.systemDefault()); }
+
     TasksPanel(Tracker tracker, Runnable refresh, BooleanSupplier closed) {
         this(tracker,refresh,closed,new ViewState());
     }
@@ -223,7 +226,7 @@ final class TasksPanel extends JPanel implements Scrollable {
     }
 
     private List<Task> visible() {
-        var today=LocalDate.now();
+        var today=today();
         String place=state.scope;
         var filtered=tracker.state().tasks().stream().filter(t->TaskLists.holds(place,t)).filter(t->switch(view) {
             case ALL->true;
@@ -381,7 +384,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         nav.add(thisMonth);
         rows.add(nav);
 
-        var calendar=new TaskCalendar(tracker.state().withTasks(visible()),month,LocalDate.now(),new TaskCalendar.Edits() {
+        var calendar=new TaskCalendar(tracker.state().withTasks(visible()),month,today(),new TaskCalendar.Edits() {
             @Override public void reschedule(UUID taskId,LocalDate date) {
                 var task=tracker.state().tasks().stream().filter(t->t.id().equals(taskId)).findFirst().orElse(null);
                 if(task==null||Objects.equals(task.plannedFor(),date))return;
@@ -706,7 +709,7 @@ final class TasksPanel extends JPanel implements Scrollable {
         var l=label("",TYPE_CAPTION,MUTED);
         l.setName("task.due."+task.id());
         if(when==null) { l.getAccessibleContext().setAccessibleName("No date"); return l; }
-        var today=LocalDate.now();
+        var today=today();
         // Four steps of urgency, not three: overdue in danger, today in gold,
         // tomorrow in the body ink, and everything further out muted. Tomorrow
         // used to read exactly like a date a fortnight away, so the one date
@@ -788,14 +791,14 @@ final class TasksPanel extends JPanel implements Scrollable {
     /** What a typed line is read against: today, the week start, and the vault's tags and lists. */
     private dev.yoru.application.QuickAdd.Context quickContext() {
         var state=tracker.state();
-        return new dev.yoru.application.QuickAdd.Context(LocalDate.now(),state.settings().weekStartsOn(),
+        return new dev.yoru.application.QuickAdd.Context(today(),state.settings().weekStartsOn(),
             state.tags().stream().map(Tag::name).toList(),state.lists().stream().map(TaskList::name).toList());
     }
 
     /** Saves a typed line as a task in the place on screen, with the tags it names made in the same write. */
     void quickAdd(dev.yoru.application.QuickAdd.Result line) {
         try {
-            var draft=dev.yoru.application.QuickAdd.draft(line,tracker.state(),newTaskList(),LocalDate.now(),Instant.now(),TagEditor::paletteColour);
+            var draft=dev.yoru.application.QuickAdd.draft(line,tracker.state(),newTaskList(),today(),tracker.now(),TagEditor::paletteColour);
             tracker.properties().save(draft.task(),draft.newTags(),Map.of());
             quickAdd.clear();
             rebuildRows();
@@ -1026,7 +1029,7 @@ final class TasksPanel extends JPanel implements Scrollable {
     /** Today on this computer's clock and in its zone, which is the day a task is written down on. */
     static LocalDate today(Clock clock) { return LocalDate.now(clock); }
 
-    private void edit(Task existing) { edit(existing,today(Clock.systemDefaultZone())); }
+    private void edit(Task existing) { edit(existing,today()); }
 
     private void edit(Task existing,LocalDate day) {
         var title=new JTextField(existing==null?"":existing.title(),36);
@@ -1140,7 +1143,7 @@ final class TasksPanel extends JPanel implements Scrollable {
                 // Imported tasks land at the bottom of the manual order; the short
                 // constructor would give every one of them order 0, above the rest.
                 int order=nextOrder();
-                for(int i=0;i<rows.length;i++)if(Boolean.TRUE.equals(model.getValueAt(i,0))){String due=String.valueOf(model.getValueAt(i,2)).strip();selected.add(new Task(proposed.get(i).id(),activity.getSelectedItem() instanceof Activity a?a.id():null,null,String.valueOf(model.getValueAt(i,1)),String.valueOf(model.getValueAt(i,3)),due.isBlank()?null:DateText.parseDate(due,LocalDate.now()),TaskStatus.TODO,proposed.get(i).source(),Instant.now(),order++));}
+                for(int i=0;i<rows.length;i++)if(Boolean.TRUE.equals(model.getValueAt(i,0))){String due=String.valueOf(model.getValueAt(i,2)).strip();selected.add(new Task(proposed.get(i).id(),activity.getSelectedItem() instanceof Activity a?a.id():null,null,String.valueOf(model.getValueAt(i,1)),String.valueOf(model.getValueAt(i,3)),due.isBlank()?null:DateText.parseDate(due,today()),TaskStatus.TODO,proposed.get(i).source(),tracker.now(),order++));}
                 int count=tracker.addTasks(selected);Dialogs.info(this,count+" tasks added. Existing title/date/activity duplicates were skipped.");rebuildRows();return;
             }catch(Exception e){error(e);}
         }

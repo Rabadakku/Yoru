@@ -327,7 +327,7 @@ functional repairs over further theme design.
 
 ## Current direction — September 11, 2026
 
-The v1.0 release plan is pinned in [ROADMAP.md](ROADMAP.md) and tracked on
+The v1.0 release plan is pinned in [ROADMAP.md](../ROADMAP.md) and tracked on
 GitHub in issue #55 and the v1.0 milestone. `claude/collection-controls`
 (PR #24) carries the full game integration: the embedded game behind Play and
 Close (#42), two-way save sync (#43), the save as the collection with no

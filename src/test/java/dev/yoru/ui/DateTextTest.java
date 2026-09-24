@@ -47,6 +47,9 @@ public final class DateTextTest {
         check(DateText.date(LocalDate.of(2026, 9, 14)).equals("Sep 14, 2026"), "a date is written the Notion way");
         check(DateText.date(LocalDate.of(2027, 1, 3)).equals("Jan 3, 2027"), "without a leading zero");
         check(DateText.longDate(LocalDate.of(2026, 9, 14)).equals("September 14, 2026"), "and in full for a column");
+        check(DateText.span(LocalDate.of(2026, 9, 20), LocalDate.of(2026, 9, 26)).equals("Sep 20 – 26, 2026"), "a week in one month");
+        check(DateText.span(LocalDate.of(2026, 9, 28), LocalDate.of(2026, 10, 4)).equals("Sep 28 – Oct 4, 2026"), "a week across two months");
+        check(DateText.span(LocalDate.of(2026, 12, 28), LocalDate.of(2027, 1, 3)).equals("Dec 28, 2026 – Jan 3, 2027"), "a week across two years");
         check(DateText.time(LocalTime.of(11, 0)).equals("11:00 AM"), "a morning time");
         check(DateText.time(LocalTime.of(0, 5)).equals("12:05 AM"), "just after midnight");
         check(DateText.time(LocalTime.of(12, 30)).equals("12:30 PM"), "just after noon");

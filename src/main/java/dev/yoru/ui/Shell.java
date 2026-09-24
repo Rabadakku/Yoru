@@ -33,11 +33,20 @@ interface Shell {
     /** The zone study time is recorded and shown in. */
     java.time.ZoneId zone();
 
+    /** Now, by the tracker's clock: every page asks this rather than the wall, so they agree and tests can pin it. */
+    default java.time.Instant now() { return tracker().now(); }
+
+    /** Today in {@link #zone()}, by the tracker's clock. */
+    default java.time.LocalDate today() { return java.time.LocalDate.ofInstant(now(), zone()); }
+
     /** Opens the editor for a new logged session, or a planned block when {@code plan}. */
     void timeDialog(boolean plan);
 
     /** Opens the editor for a recorded or running session. */
     void editTime(dev.yoru.domain.Model.Session session);
+
+    /** Opens the editor for a planned block. */
+    void editBlock(dev.yoru.domain.Model.ScheduleBlock block);
 
     /** Asks for a new activity and adds it. */
     void addActivity();
@@ -56,6 +65,9 @@ interface Shell {
 
     /** The window's pomodoro (#61), or null where there is none, as in a page built on its own. */
     default PomodoroClock pomodoro() { return null; }
+
+    /** AI assistants' way into the open vault (#47), or null in a page built on its own. */
+    default Assistants assistants() { return null; }
 
     /** Follow this computer’s macOS appearance without changing the vault theme. */
     default void systemAppearance(boolean on) { }

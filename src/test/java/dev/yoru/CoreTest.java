@@ -149,6 +149,8 @@ public final class CoreTest {
         check(Analytics.heat(9*3600,4)==Analytics.HEAT_OVER_GOAL,"beating the goal stays at the top tier");
         check(Analytics.heat(2*3600,4)==3&&Analytics.heat(2*3600,8)==2,"the same time reads lower against a bigger goal");
         check(Analytics.heat(1,4)==1,"any recorded time clears the empty tier");
+        check(Analytics.report(0).equals("0m")&&Analytics.report(45*60+59).equals("45m"),"a report counts whole minutes");
+        check(Analytics.report(2*3600).equals("2h")&&Analytics.report(2*3600+15*60).equals("2h 15m"),"a whole hour drops its zero minutes");
         Path dir=Files.createTempDirectory("yoru-test-"),file=dir.resolve("test.vault");
         String password="test-only-password-123";
         byte[] first;
@@ -180,8 +182,8 @@ public final class CoreTest {
             }
         }
         ,"tampering rejected");
-        check(dev.yoru.ui.YoruApp.csv("=1+1").equals("\"'=1+1\""),"CSV formula neutralized");
-        check(dev.yoru.ui.YoruApp.csv("a\"b").equals("\"a\"\"b\""),"CSV quote escaped");
+        check(dev.yoru.application.SessionCsv.cell("=1+1").equals("\"'=1+1\""),"CSV formula neutralized");
+        check(dev.yoru.application.SessionCsv.cell("a\"b").equals("\"a\"\"b\""),"CSV quote escaped");
         Files.delete(file);
         Files.delete(Path.of(file+".lock"));
         Files.delete(dir);

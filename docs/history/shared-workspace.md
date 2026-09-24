@@ -2,7 +2,7 @@
 
 ## Product direction — September 10, 2026
 
-Read [docs/PRODUCT-GOALS.md](docs/PRODUCT-GOALS.md) before implementation.
+Read [docs/PRODUCT-GOALS.md](../PRODUCT-GOALS.md) before implementation.
 The owner wants the entire supported game playable **inside Yoru**, entered through
 a **Game** tab, with battles and progression matching the game. Study replaces
 encounter/training grinding, and the earned Pokémon must be playable in that

@@ -102,6 +102,17 @@ public final class ContrastTest {
         return ratio(best,fill);
     }
 
+    /** The ink furthest from the ground a picture holds: its text. */
+    private static int darkestOrBrightest(BufferedImage image,boolean darkTheme) {
+        int best=image.getRGB(0,0);
+        for(int y=0;y<image.getHeight();y++)
+            for(int x=0;x<image.getWidth();x++) {
+                int rgb=image.getRGB(x,y);
+                if(darkTheme?luminance(rgb)>luminance(best):luminance(rgb)<luminance(best)) best=rgb;
+            }
+        return best;
+    }
+
     public static void main(String[] args)throws Exception{
         for(var id:ThemeId.values()) {
             Theme.apply(id);
@@ -169,6 +180,21 @@ public final class ContrastTest {
             double rendered=renderedContrast(disabled,Theme.PANEL,palette.dark());
             check(rendered>=4.0,id+" renders disabled text at "+String.format("%.2f",rendered)
                 +":1 — the palette can promise more than the look-and-feel delivers");
+
+            // A quiet button that is off is fainter, not filled: filled, it was
+            // the one control in a row of them that looked chosen (#63).
+            var quiet=Theme.ghost(Theme.button("Delete",()->{}));
+            quiet.setEnabled(false);
+            quiet.setSize(quiet.getPreferredSize());
+            var plain=new BufferedImage(quiet.getWidth(),quiet.getHeight(),BufferedImage.TYPE_INT_RGB);
+            var pen=plain.createGraphics();
+            pen.setColor(Theme.PANEL);
+            pen.fillRect(0,0,plain.getWidth(),plain.getHeight());
+            quiet.paint(pen);
+            pen.dispose();
+            check(plain.getRGB(4,plain.getHeight()/2)==Theme.PANEL.getRGB(),id+" draws a disabled quiet button with no fill");
+            double faint=ratio(luminance(darkestOrBrightest(plain,palette.dark())),luminance(Theme.PANEL.getRGB()));
+            check(faint>=3.0,id+" still renders its text readably, at "+String.format("%.2f",faint)+":1");
 
             // An enabled control must not somehow be worse.
             var enabled=Theme.button("Nickname",()->{});

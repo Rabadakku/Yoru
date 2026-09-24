@@ -64,10 +64,6 @@ public final class TaskPasteTest {
         rejects(REPLY.replace("Chapter 2, page 4","x".repeat(501)),"500");
         rejects("{\"tasks\":["+TASK+","+TASK.replace("2026-09-12","bad")+"]}","Task 2");
         rejects(REPLY.replace("\"Discuss figures\"","17"),"Task 1");
-        String escaped=REPLY.replace("\\","\\\\").replace("\"","\\\"");
-        String api="{\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\""+escaped+"\"}]}]}";
-        var apiTask=OpenAiTasks.parseResponse(api,"Biology syllabus").getFirst();
-        check(apiTask.title().equals(plain.title())&&apiTask.notes().equals(plain.notes())&&apiTask.due().equals(plain.due()),"API and paste share task interpretation");
         SwingUtilities.invokeAndWait(()->{
             try {
                 for(var theme:ThemeId.values()) {

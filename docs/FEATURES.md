@@ -1,160 +1,123 @@
 # Feature status
 
-Every feature requested for Yoru, and whether it actually works. One line each,
-no hedging. Issue numbers link to
-[the tracker](https://github.com/Rabadakku/yoru/issues).
+What Yoru does today, and what is planned. One line each. Issue numbers link to
+[the tracker](https://github.com/Rabadakku/Yoru/issues); the order of the
+planned work is in [#65](https://github.com/Rabadakku/Yoru/issues/65).
 
-Legend: ✅ working · 🟡 partly working · ⬜ not started
+Legend: ✅ working · 🟡 partly working · ⬜ planned
 
 ---
 
-## Tracking
+## Time
 
 | Feature | Status | Notes |
 |---|---|---|
-| Open-ended clock in/out, no forced pomodoro | ✅ | Running timer survives closing the app |
-| Correct a forgotten clock-out | ✅ | |
-| Add time you never tracked | ✅ | |
-| Edit an existing session | ✅ | |
-| Time entry that cannot crash on bad input | ✅ | Reverts invalid text instead of throwing |
-| Sessions under 5 minutes don't count | ✅ | Still recorded; the floor is configurable |
-| Multiple activities, easy to add | ✅ | |
-| Streak heat map, per activity and combined | ✅ | |
-| Heat colours matched to a 4–5h daily goal | ✅ | Tiers scale to your goal, not a fixed ladder |
-| Rainbow tier for beating the goal | ✅ | Hue cycles by date |
-| Heated-titanium ramp | ✅ | Kept as the MIDNIGHT palette |
+| Open-ended timer per activity | ✅ | Keeps running when Yoru is closed; recovered when the vault opens |
+| Pomodoro mode | ✅ | Focus and break lengths of your own, with sounds drawn from tones (#61) |
+| Record time you did not time | ✅ | **Log time** on Today and Data |
+| Correct any session | ✅ | Edit one, or move, shift or delete several at once (#59) |
+| Minimum session length | ✅ | Configurable; shorter sessions do not count |
+| Activities with daily targets | ✅ | Create, rename, retarget, reorder and delete, choosing what happens to their time |
+| Daily goal and streak | ✅ | Today shows progress against the goal and the current streak |
+| 52-week heat map, 14-day chart, focus mix | ✅ | On Data, per activity or all together, scaled to your goal |
+| Anki study time | ✅ | Finished Anki sittings become tracked time through AnkiConnect, never counted twice |
+| Export sessions as CSV | ✅ | |
+| A new timer centrepiece on Today | ⬜ | Waits on the owner's choice of concept (#62) |
 
-## Schedule
+## The week
 
 | Feature | Status | Notes |
 |---|---|---|
-| Weekly calendar with time gridlines | ✅ | Hour rules, half-hour ticks, now-line |
-| Week starts on your chosen day | ✅ | Settings → Tracking; used by both calendars — [#26](https://github.com/Rabadakku/yoru/issues/26) |
-| Studied time shown as blocks | ✅ | Solid; planned blocks are outlines behind |
-| Click-drag to create | ✅ | Snaps to 15 minutes |
-| Drag to move, drag edges to resize | ✅ | Planned blocks only — recorded time is history |
-| Schedule efficiency / matched % | ✅ | |
-| One weekly schedule that repeats | ✅ | **Repeats weekly…** on the Schedule page; drawn dashed on the grid, kept alongside one-off blocks — [#4](https://github.com/Rabadakku/yoru/issues/4) |
-| Double-click to add | ⬜ | Part of [#4](https://github.com/Rabadakku/yoru/issues/4) |
+| Week grid: planned beside recorded | ✅ | Hour rules, a now-line and how much of each plan was matched |
+| Drag to plan, move and resize | ✅ | Snaps to 15 minutes; recorded time stays history |
+| Weekly repeats | ✅ | A template of blocks that repeat every week, drawn dashed |
+| Change one week of a repeat | ✅ | Skip it, move it or restore it without touching the rule (#59) |
+| Week starts on your chosen day | ✅ | Used by both calendars |
+| Today's schedule | ✅ | One-off blocks and weekly repeats together |
+| Drag tasks onto the week | ⬜ | #83 |
+| Google, iCloud and Outlook calendars | ⬜ | #84 |
 
 ## Tasks
 
 | Feature | Status | Notes |
 |---|---|---|
-| Task inbox with due dates and notes | ✅ | Deadline and planned day are separate fields — [#25](https://github.com/Rabadakku/yoru/issues/25) |
-| Status field (todo / doing / done) | ✅ | One click on the row chip cycles TODO → DOING → DONE |
-| Class/section tags with colours | ✅ | Create, rename, recolour, delete under **Tags…**; colour shown on each row — [#3](https://github.com/Rabadakku/yoru/issues/3) |
-| Sorting | ✅ | My order, due date, title, status — [#2](https://github.com/Rabadakku/yoru/issues/2) |
-| Views: due today / open / completed | ✅ | Due today includes overdue — [#2](https://github.com/Rabadakku/yoru/issues/2) |
-| Smaller, denser task cards | ✅ | One row per task: status / title / due / tag — [#2](https://github.com/Rabadakku/yoru/issues/2) |
-| Manual task ordering | ✅ | Drag a row, or use ↑/↓; unfiltered view under My order — [#23](https://github.com/Rabadakku/yoru/issues/23) |
-| Drag-and-drop task calendar | ✅ | Month view on the Tasks page; drag onto a day to reschedule, onto the strip to unschedule — [#5](https://github.com/Rabadakku/yoru/issues/5) |
+| Lists of your own, and an Inbox | ✅ | A rail beside the table; drag a task onto a list (#56) |
+| Several tags per task | ✅ | Made as you type (#66) |
+| Due date and time, planned day | ✅ | A new task is due the day it is written (#67) |
+| Repeating tasks | ✅ | One task with a history; every weekday, the last Friday, three days after done… (#57) |
+| Priority, your own statuses, custom properties | ✅ | Text, number, select, multi-select, date, checkbox, link, created and edited (#68) |
+| Quick add in plain language | ✅ | "Essay draft tomorrow 5pm #school !high every monday" (#74) |
+| Command palette | ✅ | Cmd/Ctrl-K: go anywhere, add a task, log time, plan a block |
+| Views, sorting and manual order | ✅ | All, due today, next five days, open, completed |
+| Month calendar | ✅ | Drag to reschedule; double-click a day for a new task |
+| Act on several tasks at once | ✅ | Status, list, dates, tags and delete (#59) |
+| Import from Notion, or from an AI chat's reply | ✅ | Reviewed before one all-or-nothing import |
+| Sub-tasks, checklists and dependencies | ⬜ | #70 |
+| Saved views with filters and grouping | ⬜ | #69 |
+| A task side panel with rich notes | ⬜ | #71 |
+| Projects, templates | ⬜ | #72, #73 |
+| Reminders and notifications | ⬜ | #76 |
 
 ## Habits
 
 | Feature | Status | Notes |
 |---|---|---|
-| Daily check-offs (chores, meds) with streaks | ✅ | |
-| Editable 28-day history | ✅ | |
-| "Time since" tracker for something quit | ✅ | |
-| Backdate the quit date | ✅ | |
-| Restart without losing prior periods | ✅ | |
+| Daily check-offs | ✅ | Streak, best run, consistency since the start and the last week (#53, #55) |
+| Time-since trackers | ✅ | "1y 2mo 3d 4h 5m", restarts kept as history (#50, #52) |
+| Correct history | ✅ | Any past day, missed restarts, paging and jump to a date (#59) |
+| Order and time zone per habit | ✅ | A habit's days follow its own zone (#59) |
+| Tick off from Today and Tasks | ✅ | From the keyboard too (#54) |
+| Automatic Anki streak | ✅ | Any day with reviews counts (#100) |
+| Counts, amounts, ratings, X times a week | ⬜ | #82 |
 
-## Collection
+## Pages
 
 | Feature | Status | Notes |
 |---|---|---|
-| Choose 1 of 3 starters | ✅ | Treecko, Torchic, Mudkip |
-| Full National Dex roster | ✅ | All 386 through Gen III |
-| Encounter per 30 minutes studied | ✅ | Short sessions accumulate |
-| Buddy shown beside the timer | ✅ | |
-| Time spent with buddy | ✅ | |
-| Evolution via time together | ✅ | Two recorded hours per stage |
-| Shiny encounters at boosted odds | ✅ | 10 in 8192, ten times the original |
-| Companion animates while studying | ✅ | Breathing, hop, shiny sparkle |
-| Party of six | ✅ | Collection card lists the party; **Manage party** reorders, adds and removes — [#12](https://github.com/Rabadakku/yoru/issues/12) |
-| Nicknames | ✅ | Per-card **Nickname** control; the species stays visible beside it — [#13](https://github.com/Rabadakku/yoru/issues/13) |
-| Encounter animation before the reveal | ✅ | 1.2-second grass reveal; reduced motion skips it; no rerolls — [#9](https://github.com/Rabadakku/yoru/issues/9) |
-| Pokémon in a battle-style box | ⬜ | [#8](https://github.com/Rabadakku/yoru/issues/8) — currently a field box |
-| Gym battles | ➖ | Removed 2026-09-11: the real game's gyms are played in the Game tab — [#19](https://github.com/Rabadakku/yoru/issues/19) |
-| Battle system like the original | ✅ | The original game itself, running in the Game tab — [#29](https://github.com/Rabadakku/yoru/issues/29) |
+| Markdown editor and reading view | ✅ | Styled as you type; callouts, tables, code (#46) |
+| Folders, tabs, trash and restore | ✅ | |
+| Links, backlinks and outline | ✅ | `[[Page]]` links follow renames |
+| Search and quick switcher | ✅ | |
+| Tasks linked to pages | ✅ | Each shows the other |
+| Import and export a Markdown folder | ✅ | Obsidian-compatible names |
+| Icons, emoji and covers | ⬜ | #78 |
+
+## AI
+
+| Feature | Status | Notes |
+|---|---|---|
+| Use Yoru from Claude Desktop, Claude Code or any MCP app | ✅ | No API key: your own account with that app; off until switched on (#47) |
+| Assistants read tasks, pages, schedule, time and habits | ✅ | 9 reading tools |
+| Assistants add and edit, behind a second switch | ✅ | 12 changing tools; none deletes; backed up first |
+| One-click setup for Claude Desktop | ✅ | Keeps everything else in its settings |
+| AI inside the page editor (rewrite a selection) | ⬜ | Needs a model Yoru can call itself; see #47 |
 
 ## Look and feel
 
 | Feature | Status | Notes |
 |---|---|---|
-| Terminal UI with Japanese/anime touches | ✅ | |
-| Linux-ricing direction | ✅ | Flat, self-painted widgets, monospace |
-| Four themes | ✅ | MIDNIGHT, EMBER, SAKURA (pink), LINEN (beige) |
-| Readable text everywhere | ✅ | Two contrast bugs found and fixed |
-| No Java mascot in dialogs | ✅ | |
-| Window resizes properly | ✅ | |
-| Less button padding | ✅ | |
-| Trainer walking animation | ✅ | Real Emerald sheets, walk and run |
-| Trainer separate from buddy, near the timer | ✅ | |
-| Nature on the route | ✅ | Local grass/shrub/rock sprites, distant pixel silhouettes, wider trail and fixed camera |
-| Day/night route lighting | ✅ | Follows local clock with gradual dawn/dusk and night stars |
-| Faster animations | ✅ | 70ms tick, 3px per frame |
-| People, bikes, legendary flybys | 🟡 | Rare legendary sprite flybys implemented; people/bikes and dedicated flight frames pending — [#10](https://github.com/Rabadakku/yoru/issues/10) |
-| Team Rocket cameos | ⬜ | [#11](https://github.com/Rabadakku/yoru/issues/11) |
-| Logo and app icon | ✅ | One drawn crescent: crisp pixels below 24px, antialiased above, on a night and a moonlight app icon in Apple's icon grid; exported to `.icns`, `.ico` and PNG — [#57](https://github.com/Rabadakku/yoru/issues/57) |
-| Study music from your own files | 🟡 | Plays while the timer runs; **WAV/AIFF/AU only** — the JDK ships no MP3 decoder — [#14](https://github.com/Rabadakku/yoru/issues/14) |
+| Sidebar navigation, native Mac menus, unified title bar | ✅ | Windows and Linux use an in-window menu bar (#63) |
+| Five themes, or follow macOS appearance | ✅ | Midnight, Ember, Sakura, Linen, Moonlight |
+| Text from 100% to 200% | ✅ | Every label is checked to fit at every size |
+| Keyboard-first, with copy, paste and undo everywhere | ✅ | A native-keyboard check on a real Mac is still open (#49) |
+| Study music from your own files | 🟡 | WAV, AIFF and AU; the JDK ships no MP3 decoder |
+| A new logo and app icon | ⬜ | #64 |
+| Owner sign-off on the redesign | ⬜ | #63 |
 
-## Data, setup and safety
+## Data and safety
 
 | Feature | Status | Notes |
 |---|---|---|
-| Local-only, no server to host | ✅ | |
-| Encrypted vault | ✅ | AES-256-GCM, PBKDF2 600k |
-| Optional password | ✅ | Chosen when the vault is made; the note beside the tick box says what going without one costs |
-| Remove a vault's password | ✅ | Welcome screen → *Rename or delete…*, or Data → Vaults. Re-encrypts under a key kept beside the vault; refuses and rolls back rather than leaving a vault nothing can open |
-| Vault reopens after creation | ✅ | |
-| Settings menu | ✅ | Appearance, tracking, artwork, integrations, reset |
-| Plugins | ⬜ | Not exposed in 1.0: the Integrations card says they are planned. Removed from the UI in #47, back with the adapters |
-| Reset all data, or specific parts | ✅ | Backs up first |
-| Drop in your own ROM art (folder or zip) | ✅ | Drag onto the window, or Settings → Artwork |
-| Data plan so updates don't break history | ✅ | [docs/DATA-MODEL.md](DATA-MODEL.md) |
-| JSON export/import | ✅ | Whole vault out and back in from the Data page; import applies as one transaction — [#1](https://github.com/Rabadakku/yoru/issues/1) |
-| Distribution build for classmates | ⬜ | [#16](https://github.com/Rabadakku/yoru/issues/16) |
+| One encrypted vault, no account or server | ✅ | AES-256-GCM; optional password |
+| Several vaults | ✅ | Create, switch, rename, remove a password, delete |
+| Backups before anything destructive | ✅ | Pruned automatically |
+| Every record can be created, viewed, edited and deleted | ✅ | Held row by row by `CrudCoverageTest` (#59) |
+| Export and import the whole vault as JSON | ✅ | Import is one transaction |
+| Reset everything, or chosen parts | ✅ | Backs up first |
+| Old vaults keep opening | ✅ | A vault from every released schema is tested |
+| In-app updates | ✅ | Checked by hand; installers verified by SHA-256 |
 
-## Integrations
+## Later, on the same rules
 
-| Feature | Status | Notes |
-|---|---|---|
-| AI reads class files and adds tasks | ⬜ | Removed from 1.0 (#47): the code is kept, but no build can reach it |
-| Use your existing ChatGPT plan | ❌ | **Not possible** — see below |
-| Paste-in workflow (free alternative) | ⬜ | [#15](https://github.com/Rabadakku/yoru/issues/15) |
-| Anki study time | ✅ | Since 1.0.15: finished Anki sittings become tracked sessions through AnkiConnect, never counted twice |
-| LeetCode import | ⬜ | Planned, not connected |
-| Apple Health / workouts | ⬜ | Planned, not connected |
-
-## Testing
-
-| Level | Status | Notes |
-|---|---|---|
-| Unit | ✅ | Domain, analytics, encounters, heat tiers, artwork naming |
-| Integration | ✅ | Tracker + vault, atomicity, reset scoping, schema round trip |
-| System | 🟡 | Every page renders headlessly; no full user-flow drive-through |
-| Acceptance | 🟡 | You. Findings become issues. |
-| Coverage gap | ⬜ | [#20](https://github.com/Rabadakku/yoru/issues/20) — evolution, shiny, buddy time, edit paths |
-
-**151 automated checks pass.**
-
----
-
-## Two things that will not work as originally asked
-
-**Using your existing ChatGPT plan for AI.** A ChatGPT Plus or Pro subscription
-and the OpenAI API are separate products with separate billing. The subscription
-grants zero API quota and there is no key that represents it. Workable instead:
-a pay-as-you-go key (well under a cent per syllabus, but a separate bill), the
-paste-in flow in [#15](https://github.com/Rabadakku/yoru/issues/15), or a local
-model.
-
-**A Java recreation of Emerald's battles.** Built as a prototype across
-[#17](https://github.com/Rabadakku/yoru/issues/17),
-[#18](https://github.com/Rabadakku/yoru/issues/18) and
-[#19](https://github.com/Rabadakku/yoru/issues/19), then removed on 2026-09-11
-at the owner's request: the original game now runs inside Yoru, so its battles
-are the real ones. Only the base-stat table survived, because placing a
-Pokémon in the party means writing the stats the game would calculate.
+A home dashboard (#75), weekly and monthly reviews (#80), goals (#81),
+collections of your own (#79), meal planning (#60) and LeetCode practice (#41).

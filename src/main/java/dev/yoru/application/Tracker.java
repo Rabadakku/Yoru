@@ -54,8 +54,12 @@ public final class Tracker {
         }
         return any?next.withTasks(tasks):next;
     }
-    /** The whole-vault backup a destructive change takes first. */
-    void backup() throws IOException {
+    /**
+     * The whole-vault backup a destructive change takes first. Public for the
+     * one caller outside this package that needs it: an AI assistant's first
+     * change in a while is backed up the same way (#47).
+     */
+    public void backup() throws IOException {
         repository.backup();
     }
     private final Pages pages=new Pages(this);
@@ -511,6 +515,19 @@ public final class Tracker {
         for (int i = 0; i < next.size(); i++) if (next.get(i).id().equals(task.id())) index = i;
         if (index < 0) next.add(task); else next.set(index, task);
         commit(state.withTags(tags).withTasks(next));
+    }
+
+    /**
+     * A task's edited fields and a new status, saved as one change (#47).
+     *
+     * The status goes through the same rule as a click on the task, so a
+     * repeating task marked done moves on to its next date. Saved once, so a
+     * status the rule refuses leaves the fields unsaved too, never half done.
+     */
+    public void saveTask(Task task, List<Tag> newTags, TaskStatus status, ZoneId zone) throws IOException {
+        var next = status == null || status == task.status() ? task
+            : TaskBatch.status(task, status, state, clock.instant(), zone);
+        saveTask(next, newTags);
     }
 
     public void updateTask(Task task) throws IOException {

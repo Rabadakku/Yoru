@@ -17,7 +17,7 @@ import java.util.*;
  * session: it starts when the sitting's first card went up and lasts as long
  * as the answer times added together, which is the figure Anki itself reports
  * as time studied. From then on it is tracked time like any other, so it
- * reaches the totals, the heat map, the daily goal and the encounters with no
+ * reaches the totals, the heat map and the daily goal with no
  * rule of its own.
  *
  * Every refresh works the sittings out again from Anki's log, and three things
