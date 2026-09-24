@@ -37,6 +37,7 @@ public final class TestMain {
     record Outcome(String test, int exit, String output, long millis) { }
 
     public static void main(String[] args) throws Exception {
+        if (args.length == 2 && args[0].equals("--one")) { one(args[1]); return; }
         var classes = Path.of(args[0]);
         var sources = Path.of(args[1]);
         var tests = discover(sources);
@@ -82,6 +83,26 @@ public final class TestMain {
         }
     }
 
+    /**
+     * Runs one test's main in this JVM, then ends the JVM either way.
+     *
+     * A test that fails with an exception leaves Swing's event thread running,
+     * so its JVM never ended and the runner waited out the whole timeout to
+     * learn it had failed. Ending here makes a failure as quick as a pass.
+     */
+    static void one(String test) {
+        try {
+            Class.forName(test).getMethod("main", String[].class).invoke(null, (Object) new String[0]);
+        } catch (java.lang.reflect.InvocationTargetException failed) {
+            failed.getCause().printStackTrace();
+            System.exit(1);
+        } catch (ReflectiveOperationException missing) {
+            missing.printStackTrace();
+            System.exit(2);
+        }
+        System.exit(0);
+    }
+
     static int jobs() {
         String asked = System.getenv("YORU_TEST_JOBS");
         if (asked != null && asked.matches("[1-9][0-9]?")) return Integer.parseInt(asked);
@@ -95,7 +116,7 @@ public final class TestMain {
             var java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
             var process = new ProcessBuilder(java, "-Duser.home=" + home,
                 "-Djava.util.prefs.PreferencesFactory=dev.yoru.ui.TestPreferencesFactory",
-                "-Djava.awt.headless=true", "-ea", "-cp", classes.toString(), test)
+                "-Djava.awt.headless=true", "-ea", "-cp", classes.toString(), TestMain.class.getName(), "--one", test)
                 .redirectErrorStream(true)
                 .start();
             process.getOutputStream().close();
