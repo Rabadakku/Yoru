@@ -36,7 +36,8 @@ own WAV, AIFF or AU music while the timer runs.
 
 **Today** brings together the timer, today's schedule, tasks, habits and Anki
 summary. **Data** holds the activity breakdown, 52-week heat map, recent totals
-and Anki history. Heat-map colours scale to your daily goal. Select several
+and Anki history. Heat-map colours scale to your daily goal. Put your activities
+in the order you want there, and your tags in the tag manager. Select several
 recorded sessions on Data to move them to an activity, shift their times by
 minutes, or delete them together. Changes are checked as a whole and backed up
 before saving.

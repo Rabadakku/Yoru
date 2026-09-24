@@ -9,7 +9,7 @@ import java.util.UUID;
 import static dev.yoru.ui.Theme.*;
 
 /**
- * Tag create, rename, recolour and delete (#3).
+ * Tag create, order, rename, recolour and delete (#3, #59).
  *
  * Unlike PartyEditor this is not a draft: Tracker commits each tag operation on
  * its own, so re-implementing a transaction here would only be able to get it
@@ -55,7 +55,8 @@ final class TagEditor extends JPanel {
         var tags=tracker.state().tags();
         add(sectionHeader("TAGS · "+tags.size()));gap(this,SPACE_SM);
         add(bodyLabel("Deleting a tag keeps its tasks and simply untags them."));gap(this,SPACE_MD);
-        for(var tag:tags) {
+        for(int at=0;at<tags.size();at++) {
+            var tag=tags.get(at);
             var line=new JPanel(new BorderLayout(12,0));line.setOpaque(false);line.setAlignmentX(0);
             var left=tightRow();
             // The hex code is a developer's string; it lives on the swatch's
@@ -64,6 +65,10 @@ final class TagEditor extends JPanel {
             left.add(label(tag.name(),TYPE_LABEL,TEXT));
             line.add(left,BorderLayout.CENTER);
             var actions=row();
+            // The order the tag field offers them in.
+            actions.add(Reorder.buttons(this,"tag",tag.id(),tag.name(),at,tags.size(),false,direction->{
+                tracker.moveTag(tag.id(),direction);done();
+            }));
             var rename=button("Rename",()->rename(tag));rename.setName("tag.rename."+tag.id());
             var recolour=button("Colour",()->recolour(tag));recolour.setName("tag.colour."+tag.id());
             var delete=button("Delete",()->delete(tag));delete.setName("tag.delete."+tag.id());

@@ -200,16 +200,18 @@ final class ActivityManager {
     }
 
     /**
-     * One activity's row in that grid: name, figures, then its controls
-     * (Target, Rename, Delete).
+     * One activity's row in that grid: name, figures, its place in the order,
+     * then its controls (Target, Rename, Delete).
      *
      * The figures take the slack ({@code weightx 1, fill HORIZONTAL}), which is
      * what holds the controls against the row's right edge on every row, and
      * every control is given the widest of their labels, so each column is one
-     * width whatever its label. The height is left alone, so the buttons stay
-     * on the control ladder.
+     * width whatever its label. The arrows keep a column of their own at their
+     * own width: two glyphs stretched to "Rename" read as two more buttons with
+     * nothing to say. The height is left alone, so the buttons stay on the
+     * control ladder.
      */
-    static void activityRow(JPanel table, int row, JComponent name, JComponent detail, JComponent... controls) {
+    static void activityRow(JPanel table, int row, JComponent name, JComponent detail, JComponent order, JComponent... controls) {
         int width = 0;
         for (var control : controls) width = Math.max(width, control.getPreferredSize().width);
         for (var control : controls) {
@@ -231,8 +233,10 @@ final class ActivityManager {
         table.add(detail, cell);
         cell.weightx = 0;
         cell.fill = GridBagConstraints.NONE;
+        cell.gridx = 2;
+        table.add(order, cell);
         for (int i = 0; i < controls.length; i++) {
-            cell.gridx = 2 + i;
+            cell.gridx = 3 + i;
             if (i == controls.length - 1) cell.insets = new Insets(SPACE_XS, 0, SPACE_XS, 0);
             table.add(controls[i], cell);
         }
@@ -249,15 +253,16 @@ final class ActivityManager {
         var box = card();
         box.add(sectionHeader("ACTIVITIES"));
         gap(box, SPACE_SM);
-        box.add(bodyLabel("Rename a label, or delete an activity and choose what happens to its recorded time."));
+        box.add(bodyLabel("Order, rename or delete activities. Deleting one asks what happens to its recorded time."));
         gap(box, SPACE_MD);
         if (tracker.state().activities().isEmpty()) {
             box.add(emptyState("No activities yet.","Create one to start a session.",null));
             return box;
         }
         var table = activityTable();
+        var all = tracker.state().activities();
         int row = 0;
-        for (var activity : tracker.state().activities()) {
+        for (var activity : all) {
             var usage = tracker.usage(activity.id());
             var name = shortenable(activity.name(), TYPE_PROSE, TEXT);
             var recorded = label(usage.sessions() + (usage.sessions() == 1 ? " session" : " sessions")
@@ -272,7 +277,12 @@ final class ActivityManager {
             boolean timing = !canRemove(tracker, activity.id());
             remove.setEnabled(!timing);
             remove.setToolTipText(timing ? "Clock out before deleting this activity" : "Delete this activity");
-            activityRow(table, row++, name, recorded, targetButton(parent, tracker, activity, changed), rename, remove);
+            // The order every picker, table and legend lists activities in.
+            var order = Reorder.buttons(parent, "activity", activity.id(), activity.name(), row, all.size(), true, direction -> {
+                tracker.moveActivity(activity.id(), direction);
+                changed.run();
+            });
+            activityRow(table, row++, name, recorded, order, targetButton(parent, tracker, activity, changed), rename, remove);
         }
         box.add(table);
         return box;

@@ -98,6 +98,23 @@ public final class ActivityUiTest {
                 check(((JLabel)find(app,"activity.recorded."+japanese)).getText().equals("1 session · 00:30:00"),
                     "and counts each activity separately");
 
+                // The order is the owner's (#59): arrows on each row, off at either end.
+                check(!button(app,"activity.up."+coding).isEnabled()&&button(app,"activity.down."+coding).isEnabled(),
+                    "the first activity can only move down");
+                check(button(app,"activity.up."+japanese).isEnabled()&&!button(app,"activity.down."+japanese).isEnabled(),
+                    "the last can only move up");
+                check("Move Coding down".equals(button(app,"activity.down."+coding).getAccessibleContext().getAccessibleName()),
+                    "each arrow says what it moves");
+                var sessionsBefore=tracker.state().sessions();
+                button(app,"activity.down."+coding).doClick();
+                check(tracker.state().activities().stream().map(Activity::id).toList().equals(List.of(japanese,coding)),
+                    "an arrow moves the activity");
+                check(tracker.state().sessions().equals(sessionsBefore),"and moves no session with it");
+                check(button(app,"activity.up."+coding).isEnabled()&&!button(app,"activity.down."+coding).isEnabled(),
+                    "the page is rebuilt in the new order");
+                button(app,"activity.up."+coding).doClick();
+                check(tracker.state().activities().getFirst().id().equals(coding),"and it moves back");
+
                 // What the dialogs say before a choice is made.
                 var moved=ActivityManager.summary("Coding",tracker.usage(coding));
                 check(moved.contains("2 recorded sessions")&&moved.contains("01:30:00"),
@@ -148,7 +165,7 @@ public final class ActivityUiTest {
                 // Closing stops the app's ticker, which is what keeps the JVM up
                 // once the pages have been rendered.
                 button(app,"Lock & close").doClick();
-                System.out.println("PASS: "+checks+" activity-manager checks (both pages, by identity, refusal while timing)");
+                System.out.println("PASS: "+checks+" activity-manager checks (both pages, by identity, order, refusal while timing)");
             } catch(Exception e) { throw new RuntimeException(e); }
         });
     }

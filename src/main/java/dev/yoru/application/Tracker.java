@@ -169,6 +169,29 @@ public final class Tracker {
     }
 
     /**
+     * Moves an activity one place up or down the order every picker, table and
+     * legend shows (#59). Sessions, blocks and tasks point at it by id, so only
+     * the order changes; nothing is written at either end. Backed up first, like
+     * the habit order.
+     */
+    public void moveActivity(UUID id,int direction) throws IOException {
+        var next=moved(state.activities(),activity(id),direction);
+        if(next==null) return;
+        repository.backup();
+        commit(state.withCore(next,state.sessions(),state.blocks()));
+    }
+
+    /** {@code items} with {@code item} one place along, or null when it is already at that end. */
+    private static <T> List<T> moved(List<T> items,T item,int direction) {
+        if(direction!=-1&&direction!=1) throw new IllegalArgumentException("Choose up or down.");
+        int from=items.indexOf(item),to=from+direction;
+        if(to<0||to>=items.size()) return null;
+        var next=new ArrayList<>(items);
+        Collections.swap(next,from,to);
+        return next;
+    }
+
+    /**
      * Removes an activity, keeping its recorded time under
      * {@link dev.yoru.domain.Model#UNCATEGORIZED} or deleting it along with the
      * activity.
@@ -718,6 +741,16 @@ public final class Tracker {
         if(next.stream().anyMatch(t->!t.id().equals(id)&&t.name().equalsIgnoreCase(name.strip())))
             throw new IllegalArgumentException("Another tag already has that name.");
         next.set(next.indexOf(old),new Tag(id,name,colour));
+        commit(state.withTags(next));
+    }
+
+    /** Moves a tag one place up or down the order the tag field offers them in; tasks keep it by id. */
+    public void moveTag(UUID id,int direction) throws IOException {
+        var tag=state.tags().stream().filter(t->t.id().equals(id)).findFirst()
+            .orElseThrow(()->new IllegalArgumentException("Tag no longer exists."));
+        var next=moved(state.tags(),tag,direction);
+        if(next==null) return;
+        repository.backup();
         commit(state.withTags(next));
     }
 

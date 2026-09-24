@@ -417,6 +417,19 @@ public final class TaskBoardTest {
         check(button(tags,"tag.delete."+jpn.id())!=null,"The tag manager offers delete");
         check(button(tags,"tag.add")!=null,"The tag manager offers a new tag");
 
+        // And an order of the owner's own (#59).
+        var errands=tracker.addTag("Errands",0x6FBF8B);
+        var ordered=new TagEditor(tracker,()->{});
+        check(!button(ordered,"tag.up."+jpn.id()).isEnabled()&&button(ordered,"tag.down."+jpn.id()).isEnabled(),"The first tag can only move down");
+        check(button(ordered,"tag.up."+errands.id()).isEnabled()&&!button(ordered,"tag.down."+errands.id()).isEnabled(),"The last tag can only move up");
+        check("Move Language II down".equals(button(ordered,"tag.down."+jpn.id()).getAccessibleContext().getAccessibleName()),"Each arrow says what it moves");
+        button(ordered,"tag.down."+jpn.id()).doClick();
+        check(tracker.state().tags().stream().map(Tag::id).toList().equals(List.of(errands.id(),jpn.id())),"An arrow moves the tag");
+        check(button(ordered,"tag.up."+jpn.id()).isEnabled()&&!button(ordered,"tag.down."+jpn.id()).isEnabled(),"The editor is rebuilt in the new order");
+        button(ordered,"tag.up."+jpn.id()).doClick();
+        tracker.deleteTag(errands.id());
+        check(tracker.state().tags().stream().map(Tag::id).toList().equals(List.of(jpn.id())),"The tags are back as they were");
+
         // The recolour grid paints the palette, not eight identical squares: a
         // dot whose colour cannot be seen before it is picked is a blind pick.
         var grid=TagEditor.palette(new int[]{-1});

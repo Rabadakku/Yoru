@@ -1,6 +1,22 @@
 # Yoru roadmap
 
-## Time-since in calendar units
+## Activity and tag order (#59)
+
+On `claude/reorder-activities-tags`. Each activity row on Data and each tag in
+the tag manager has ↑ and ↓ arrows, turned off at either end. `Tracker.moveActivity`
+and `Tracker.moveTag` swap an item with its neighbour, back up first, and write
+nothing at an end. Sessions, blocks and tasks refer to activities and tags by id,
+so only the order changes. After a move, focus returns to the same arrow on the
+item's new row (`ui.Reorder`), so an item can be moved several places from the
+keyboard. No stored fields or schema changes: the lists already kept their order.
+
+Validation: `ReorderTest` (23 checks: ends, refusals, failed saves and backups,
+both vault formats), plus arrow checks in `ActivityUiTest` and `TaskBoardTest`.
+The Data page was reviewed at 100% and 200% text, and the tag manager in
+`DialogPreview`. The rest of #59: skip or change one week of a weekly repeat
+(needs a stored exception, so a schema bump), and `CrudCoverageTest`.
+
+## Merged — time-since in calendar units (PR #107)
 
 On `claude/time-since-units`, carried over from uncommitted work on
 `codex/time-since-units` that never reached the remote. The owner asked for
