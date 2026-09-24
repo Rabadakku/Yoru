@@ -1,6 +1,6 @@
 # Yoru roadmap
 
-## In progress — correcting habit history (#59)
+## In review — correcting habit history (#59)
 
 `codex/habit-history-fixes` opens the daily history beyond four weeks with paging and
 a jump-to-date field. Old check-ins can be added or removed in place; corrections
@@ -12,6 +12,11 @@ Time-since history has Add missed restart, inserting a minute-aligned boundary
 without moving existing starts. Duplicate minutes and future starts are refused
 before backup/save. No stored fields or schema changes. Reordering and the other
 CRUD areas in #59 remain open.
+
+Validation: the complete isolated suite passed in a clean checkout, including
+30 history/persistence checks and 15 UI checks. All five themes and 200% text
+were reviewed; the history remains scrollable within a bounded dialog. Existing
+legacy vault fixtures and encrypted/portable roundtrips pass.
 
 ## Merged — automatic Anki streak (#100, PR #103)
 
