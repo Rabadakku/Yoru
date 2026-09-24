@@ -96,6 +96,12 @@ final class TaskBulkActions extends JPanel {
             menu.add(item);
         }
         menu.addSeparator();
+        // One priority for the whole selection (#68).
+        for (var priority : Priority.values())
+            menu.add(Menus.item(priority == Priority.NONE ? "Clear priority" : "Priority: " + priority.label,
+                "tasks.bulk.priority." + priority.name(), !selected.isEmpty(),
+                () -> apply(new TaskBatch.Prioritize(priority)), "Select tasks first"));
+        menu.addSeparator();
         menu.add(Menus.item("Move to list…", "tasks.bulk.move", !selected.isEmpty(),
             () -> edit(new MoveForm(tracker.state()), "Move selected tasks", "Move"), "Select tasks first"));
         menu.add(Menus.item("Change due date…", "tasks.bulk.due", !selected.isEmpty(),

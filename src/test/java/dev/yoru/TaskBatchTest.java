@@ -54,7 +54,9 @@ public final class TaskBatchTest {
         int writes = memory.writes, backups = memory.backups;
         tracker.editTasks(ids, new TaskBatch.Status(TaskStatus.DOING), ZONE);
         check(memory.writes == writes + 1 && memory.backups == backups + 1, "A whole batch saves once after one backup");
-        check(task(tracker, first.id()).equals(first.withStatus(TaskStatus.DOING)), "Status keeps every other property");
+        var moved = task(tracker, first.id());
+        check(moved.details().editedAt().equals(NOW), "A changed task is stamped as edited (#68)");
+        check(moved.withDetails(moved.details().withEdited(null)).equals(first.withStatus(TaskStatus.DOING)), "Status keeps every other property");
         check(task(tracker, other.id()).equals(other), "Unselected tasks stay byte-for-byte equivalent");
         var list = tracker.addList("Reading", 0x445566);
         tracker.editTasks(ids, new TaskBatch.Move(list.id()), ZONE);

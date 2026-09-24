@@ -45,9 +45,18 @@ public final class NotionImport {
     private static final int MAX_TAG = 40, MAX_TAGS_PER_ROW = 12;
     private static final String DEFAULT_SOURCE = "Notion export";
 
-    /** Which column feeds which field. A null header leaves that field out of the import. */
-    public record Mapping(String title, String status, String due, String tags) {
+    /**
+     * Which column feeds which field. A null header leaves that field out of the
+     * import. {@code properties} are the other columns kept as task properties
+     * of the owner's (#68), each under its own name.
+     */
+    public record Mapping(String title, String status, String due, String tags, String priority, List<String> properties) {
+        public Mapping { properties = properties == null ? List.of() : List.copyOf(new LinkedHashSet<>(properties)); }
+        /** The four fields a task always had, and nothing kept as a property. */
+        public Mapping(String title, String status, String due, String tags) { this(title, status, due, tags, null, List.of()); }
         public static Mapping none() { return new Mapping(null, null, null, null); }
+        public Mapping withProperties(List<String> next) { return new Mapping(title, status, due, tags, priority, next); }
+        public Mapping withPriority(String next) { return new Mapping(title, status, due, tags, next, properties); }
     }
 
     /** One data row: its cells by header, the page Markdown belonging to it, and its number from 1. */
@@ -66,12 +75,23 @@ public final class NotionImport {
 
     /** A row with the mapping applied: what the review screen shows before anything is written. */
     public record Candidate(int row, String title, String notes, LocalDate due,
-                            TaskStatus status, List<String> tags) {
-        public Candidate { tags = List.copyOf(tags); }
+                            TaskStatus status, List<String> tags, Priority priority, Map<String, String> cells) {
+        public Candidate {
+            tags = List.copyOf(tags);
+            priority = priority == null ? Priority.NONE : priority;
+            cells = cells == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(cells));
+        }
+        public Candidate(int row, String title, String notes, LocalDate due, TaskStatus status, List<String> tags) {
+            this(row, title, notes, due, status, tags, Priority.NONE, Map.of());
+        }
     }
 
-    /** What an accepted import writes: the tags that do not exist yet, and their tasks. */
-    public record Batch(List<Tag> newTags, List<Task> tasks) { }
+    /**
+     * What an accepted import writes: the tags that do not exist yet, their
+     * tasks, and the task database with the properties and options the kept
+     * columns need (#68).
+     */
+    public record Batch(List<Tag> newTags, List<Task> tasks, TaskDatabase database) { }
 
     /**
      * Reads the zip Notion downloaded, or the CSV inside it.
@@ -91,8 +111,21 @@ public final class NotionImport {
     /** The usual Notion columns, guessed from the headers so the preview opens ready to accept. */
     public static Mapping autoMap(List<String> headers) {
         var claimed = new HashSet<String>();
-        return new Mapping(pick(headers, TITLE_WORDS, claimed), pick(headers, STATUS_WORDS, claimed),
-            pick(headers, DUE_WORDS, claimed), pick(headers, TAG_WORDS, claimed));
+        var title = pick(headers, TITLE_WORDS, claimed);
+        var status = pick(headers, STATUS_WORDS, claimed);
+        var due = pick(headers, DUE_WORDS, claimed);
+        var tags = pick(headers, TAG_WORDS, claimed);
+        var priority = pick(headers, PRIORITY_WORDS, claimed);
+        // Every other column is kept as a property of its own name, except the
+        // times and people Notion stamps on every row, which Yoru keeps itself.
+        var kept = headers.stream().filter(h -> !claimed.contains(h) && !stamped(h)).toList();
+        return new Mapping(title, status, due, tags, priority, kept);
+    }
+
+    /** Notion's own bookkeeping columns: when a row was made or edited, and by whom. */
+    private static boolean stamped(String header) {
+        var lower = header.strip().toLowerCase(Locale.ROOT);
+        return lower.contains("created") || lower.contains("edited") || lower.equals("last updated");
     }
 
     /**
@@ -110,6 +143,8 @@ public final class NotionImport {
         require(sheet, mapping.status(), "status");
         require(sheet, mapping.due(), "due date");
         require(sheet, mapping.tags(), "class or tag");
+        require(sheet, mapping.priority(), "priority");
+        for (var header : mapping.properties()) require(sheet, header, "property");
         var out = new ArrayList<Candidate>();
         for (var row : sheet.rows()) {
             // The page is matched on the whole title, not the shortened one: a
@@ -118,8 +153,14 @@ public final class NotionImport {
             String whole = printable(row.cell(mapping.title()));
             String title = bound(whole, MAX_TITLE);
             if (title.isEmpty()) continue;
+            var cells = new LinkedHashMap<String, String>();
+            for (var header : mapping.properties()) {
+                var cell = row.cell(header);
+                if (!cell.isEmpty()) cells.put(header, cell);
+            }
             out.add(new Candidate(row.number(), title, body(row.page(), whole, sheet.headers()),
-                due(row, mapping), status(row.cell(mapping.status())), tagNames(row.cell(mapping.tags()))));
+                due(row, mapping), status(row.cell(mapping.status())), tagNames(row.cell(mapping.tags())),
+                priority(row.cell(mapping.priority())), cells));
         }
         return List.copyOf(out);
     }
@@ -135,6 +176,20 @@ public final class NotionImport {
      * names.
      */
     public static Batch prepare(List<Candidate> chosen, State current, String source) throws IOException {
+        return prepare(chosen, current, source, Map.of());
+    }
+
+    /**
+     * The same, with the columns kept as properties (#68): each column is the
+     * owner's property of that name if there is one — its type decides how the
+     * cells are read — or a new one of the type {@link #kinds} found. Options
+     * are matched by name and made when missing, with ids derived from the
+     * names as a tag's are, so importing the same export twice makes nothing
+     * twice. A cell its property cannot hold is left out rather than failing
+     * the import.
+     */
+    public static Batch prepare(List<Candidate> chosen, State current, String source,
+                                Map<String, PropertyType> kinds) throws IOException {
         Objects.requireNonNull(chosen, "Choose what to import.");
         Objects.requireNonNull(current);
         if (chosen.size() > MAX_ROWS) throw new IOException("Import at most " + MAX_ROWS + " tasks at once.");
@@ -148,6 +203,20 @@ public final class NotionImport {
         for (var tag : current.tags()) byId.put(tag.id(), tag);
         var newTags = new ArrayList<Tag>();
         var accepted = new ArrayList<Task>();
+        var properties = new ArrayList<>(current.database().properties());
+        var byHeader = new LinkedHashMap<String, Integer>();
+        for (var kept : kinds.entrySet()) {
+            String name = bound(printable(kept.getKey()), 60);
+            if (name.isEmpty()) continue;
+            int at = -1;
+            for (int i = 0; i < properties.size(); i++)
+                if (properties.get(i).name().equalsIgnoreCase(name) || properties.get(i).id().equals(propertyId(name))) at = i;
+            if (at < 0) {
+                properties.add(new Property(propertyId(name), name, kept.getValue(), List.of(), null, false));
+                at = properties.size() - 1;
+            }
+            byHeader.put(kept.getKey(), at);
+        }
         var known = new ArrayList<Task>(current.tasks());
         int order = current.tasks().stream().mapToInt(Task::order).max().orElse(-1) + 1;
         var createdAt = Instant.now();
@@ -167,13 +236,169 @@ public final class NotionImport {
                 tags.put(key, tag);
                 tagIds.add(tag.id());
             }
+            var values = new HashMap<UUID, Value>();
+            for (var cell : candidate.cells().entrySet()) {
+                var at = byHeader.get(cell.getKey());
+                if (at == null) continue;
+                var property = properties.get(at);
+                var read = read(property, cell.getValue());
+                if (read == null) continue;
+                properties.set(at, read.property());
+                values.put(property.id(), read.value());
+            }
             var task = new Task(UUID.randomUUID(), null, tagIds, candidate.title(), candidate.notes(),
-                candidate.due(), candidate.status(), label, createdAt, order++, null, List.of());
+                candidate.due(), candidate.status(), label, createdAt, order++, null, List.of())
+                .withDetails(new Details(candidate.priority(), null, values, null));
             if (known.stream().anyMatch(existing -> existing.sameImportEntryAs(task))) continue;
             known.add(task);
             accepted.add(task);
         }
-        return new Batch(List.copyOf(newTags), List.copyOf(accepted));
+        return new Batch(List.copyOf(newTags), List.copyOf(accepted), current.database().withProperties(properties));
+    }
+
+    /** The same id for the same property name, so re-importing cannot make a column a second property. */
+    static UUID propertyId(String name) {
+        return UUID.nameUUIDFromBytes(("yoru/property/" + name.toLowerCase(Locale.ROOT)).getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** And for an option of one. */
+    static UUID optionId(UUID property, String name) {
+        return UUID.nameUUIDFromBytes(("yoru/option/" + property + "/" + name.toLowerCase(Locale.ROOT)).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private record Read(Property property, Value value) { }
+
+    /** A cell as its property holds it, with any option it names made; null when the property cannot hold it. */
+    private static Read read(Property property, String cell) {
+        String text = printable(cell);
+        if (text.isEmpty()) return null;
+        try {
+            return switch (property.type()) {
+                case TEXT -> new Read(property, new Value.Text(bound(cell.strip(), Value.Text.MAX)));
+                case URL -> text.contains(" ") ? null : new Read(property, new Value.Text(bound(text, Value.Text.MAX)));
+                case NUMBER -> {
+                    var number = number(text);
+                    yield number == null ? null : new Read(property, new Value.Amount(number));
+                }
+                case DATE -> {
+                    var date = date(text);
+                    yield date == null ? null : new Read(property, new Value.Day(date));
+                }
+                case CHECKBOX -> CHECKED.contains(text.toLowerCase(Locale.ROOT)) ? new Read(property, new Value.Tick()) : null;
+                case SELECT -> {
+                    var options = new ArrayList<>(property.options());
+                    var id = option(property.id(), options, bound(text, 40));
+                    yield id == null ? null : new Read(property.withOptions(options), new Value.Choice(id));
+                }
+                case MULTI_SELECT -> {
+                    var options = new ArrayList<>(property.options());
+                    var ids = new ArrayList<UUID>();
+                    for (var name : tagNames(cell)) {
+                        var id = option(property.id(), options, bound(name, 40));
+                        if (id != null && !ids.contains(id)) ids.add(id);
+                    }
+                    yield ids.isEmpty() ? null : new Read(property.withOptions(options), new Value.Choices(ids));
+                }
+                case CREATED, EDITED -> null;
+            };
+        } catch (IllegalArgumentException unreadable) {
+            return null;
+        }
+    }
+
+    /** The option of this name, made when missing; null when a property already has all it may. */
+    private static UUID option(UUID property, List<PropertyOption> options, String name) {
+        for (var o : options) if (o.name().equalsIgnoreCase(name)) return o.id();
+        if (options.size() >= Property.MAX_OPTIONS) return null;
+        var made = new PropertyOption(optionId(property, name), name, colourFor(name));
+        options.add(made);
+        return made.id();
+    }
+
+    private static final Set<String> CHECKED = Set.of("yes", "true", "checked", "✓", "x", "1");
+    private static final Set<String> UNCHECKED = Set.of("no", "false", "unchecked", "0", "");
+
+    /** A number as Notion writes one: grouping commas, a currency sign or a percent sign around it. */
+    private static java.math.BigDecimal number(String text) {
+        var clean = text.replace(",", "").replace("$", "").replace("€", "").replace("£", "").replace("%", "").strip();
+        if (clean.isEmpty()) return null;
+        try { return new java.math.BigDecimal(clean); } catch (NumberFormatException e) { return null; }
+    }
+
+    /** A date in any form Notion writes, or null. */
+    private static LocalDate date(String value) {
+        String text = value;
+        int arrow = text.indexOf('→');
+        if (arrow < 0) arrow = text.indexOf("->");
+        if (arrow >= 0) text = text.substring(0, arrow).strip();
+        int time = text.indexOf('T');
+        if (time > 0) text = text.substring(0, time).strip();
+        text = TIME_OF_DAY.matcher(text).replaceFirst("").strip();
+        for (var format : DATE_FORMATS)
+            try { return LocalDate.parse(text, format); } catch (DateTimeParseException ignored) { }
+        return null;
+    }
+
+    /**
+     * The type each kept column's cells read as (#68), judged on every
+     * non-blank cell: all numbers, all Notion checkbox words, all dates or all
+     * links make that type; comma lists of a few repeated names a multi-select;
+     * a few names repeated across rows a select; anything else text.
+     */
+    public static Map<String, PropertyType> kinds(Sheet sheet, List<String> headers) {
+        var out = new LinkedHashMap<String, PropertyType>();
+        for (var header : headers) {
+            var cells = sheet.rows().stream().map(r -> r.cell(header)).filter(c -> !c.isBlank()).map(String::strip).toList();
+            out.put(header, kind(cells));
+        }
+        return out;
+    }
+
+    private static PropertyType kind(List<String> cells) {
+        if (cells.isEmpty()) return PropertyType.TEXT;
+        if (cells.stream().allMatch(c -> CHECKED.contains(c.toLowerCase(Locale.ROOT)) || UNCHECKED.contains(c.toLowerCase(Locale.ROOT))))
+            return PropertyType.CHECKBOX;
+        if (cells.stream().allMatch(c -> number(c) != null)) return PropertyType.NUMBER;
+        if (cells.stream().allMatch(c -> date(c) != null)) return PropertyType.DATE;
+        if (cells.stream().allMatch(c -> c.matches("(?i)(https?://|mailto:)\\S+"))) return PropertyType.URL;
+        // A select's or multi-select's values are short names that come back
+        // row after row; a comment with a comma in it is neither.
+        var rows = new HashMap<String, Integer>();
+        boolean lists = false, names = true;
+        for (var c : cells) {
+            var parts = tagNames(c);
+            if (parts.size() > 1) lists = true;
+            for (var part : parts) {
+                rows.merge(part.toLowerCase(Locale.ROOT), 1, Integer::sum);
+                if (!shortName(part)) names = false;
+            }
+        }
+        boolean repeats = rows.values().stream().anyMatch(n -> n > 1);
+        if (names && lists && repeats && rows.size() <= 40) return PropertyType.MULTI_SELECT;
+        var wholes = new HashSet<String>();
+        for (var c : cells) wholes.add(c.toLowerCase(Locale.ROOT));
+        if (cells.stream().allMatch(NotionImport::shortName) && wholes.size() < cells.size() && wholes.size() <= 20)
+            return PropertyType.SELECT;
+        return PropertyType.TEXT;
+    }
+
+    /** A name an option could have: at most forty characters and four words. */
+    private static boolean shortName(String value) {
+        var clean = value.strip();
+        return !clean.isEmpty() && clean.length() <= 40 && clean.split("\\s+").length <= 4;
+    }
+
+    private static final List<String> PRIORITY_WORDS = List.of("priority", "prio", "importance", "urgency");
+
+    /** Notion's priority words, or a P0 to P3 scale. Anything else is no priority. */
+    private static Priority priority(String value) {
+        String word = value.strip().toLowerCase(Locale.ROOT);
+        if (word.isEmpty()) return Priority.NONE;
+        if (Set.of("urgent", "critical", "highest", "p0", "asap").contains(word)) return Priority.URGENT;
+        if (Set.of("high", "p1", "important").contains(word)) return Priority.HIGH;
+        if (Set.of("medium", "normal", "p2", "mid", "moderate").contains(word)) return Priority.MEDIUM;
+        if (Set.of("low", "p3", "lowest", "minor").contains(word)) return Priority.LOW;
+        return Priority.NONE;
     }
 
     /** The same id for the same tag name, so re-importing cannot rename a tag into a second one. */

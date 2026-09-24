@@ -183,8 +183,16 @@ public final class Preview {
             java.time.LocalTime.of(9, 0), java.time.LocalTime.of(10, 30));
         tracker.repeat(activities.get(2).id(), java.time.DayOfWeek.WEDNESDAY,
             java.time.LocalTime.of(14, 15), java.time.LocalTime.of(15, 45));
-        tracker.repeat(activities.get(1).id(), java.time.DayOfWeek.FRIDAY,
+        var friday = tracker.repeat(activities.get(1).id(), java.time.DayOfWeek.FRIDAY,
             java.time.LocalTime.of(13, 0), java.time.LocalTime.of(14, 0));
+        // One week changed on its own (#59): this week's Friday is held on
+        // Thursday afternoon, so the grid and the list under it show a moved week.
+        var fridayThisWeek = tracker.state().settings().weekOf(today)
+            .with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.FRIDAY));
+        if (fridayThisWeek.isAfter(tracker.state().settings().weekOf(today).plusDays(6)))
+            fridayThisWeek = fridayThisWeek.minusWeeks(1);
+        tracker.changeRepeatWeek(friday.id(), fridayThisWeek, fridayThisWeek.minusDays(1),
+            java.time.LocalTime.of(16, 0), java.time.LocalTime.of(17, 0));
         tracker.plan(activities.get(1).id(), today.atTime(14, 0).atZone(zone).toInstant(),
             today.atTime(15, 30).atZone(zone).toInstant());
 
@@ -219,6 +227,38 @@ public final class Preview {
         for (var task : tracker.state().tasks()) {
             if (task.title().equals("Order textbook") || task.title().equals("Return library books")) tracker.moveTask(task.id(), home.id());
             else if (!task.title().equals("Ask about open lab hours")) tracker.moveTask(task.id(), classes.id());
+        }
+
+        // Tasks as a database (#68): two statuses of the owner's, a priority on
+        // a few tasks, and properties the table shows as columns, one of them
+        // kept for the Classes list.
+        var props = tracker.properties();
+        var waiting = props.addStatus("Waiting", TaskStatus.TODO);
+        props.addStatus("Review", TaskStatus.DOING);
+        var effort = props.addProperty("Effort", PropertyType.NUMBER, null);
+        var difficulty = props.addProperty("Difficulty", PropertyType.SELECT, null);
+        var easy = props.addOption(difficulty.id(), "Easy");
+        var hard = props.addOption(difficulty.id(), "Hard");
+        var graded = props.addProperty("Graded", PropertyType.CHECKBOX, classes.id());
+        props.addProperty("Syllabus link", PropertyType.URL, null);
+        for (var task : tracker.state().tasks()) {
+            switch (task.title()) {
+                case "Finish lab 3" -> {
+                    props.setPriority(task.id(), Priority.URGENT);
+                    props.setValue(task.id(), effort.id(), new Value.Amount(java.math.BigDecimal.valueOf(3)));
+                    props.setValue(task.id(), difficulty.id(), new Value.Choice(hard.id()));
+                    props.setValue(task.id(), graded.id(), new Value.Tick());
+                }
+                case "Read chapter 4" -> {
+                    props.setPriority(task.id(), Priority.HIGH);
+                    props.setValue(task.id(), effort.id(), new Value.Amount(new java.math.BigDecimal("1.5")));
+                    props.setValue(task.id(), difficulty.id(), new Value.Choice(easy.id()));
+                }
+                case "Ask about open lab hours" -> props.setStatus(task.id(),
+                    new dev.yoru.application.TaskProperties.StatusChoice(TaskStatus.TODO, waiting), zone);
+                case "Practice quiz" -> props.setPriority(task.id(), Priority.LOW);
+                default -> { }
+            }
         }
 
         var folder = tracker.pages().createFolder(null, "Notebook");

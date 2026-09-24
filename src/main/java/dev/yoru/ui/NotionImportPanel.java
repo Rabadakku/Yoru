@@ -28,7 +28,7 @@ import static dev.yoru.ui.Theme.*;
 final class NotionImportPanel extends JPanel {
     /** A column of the export the user is choosing for a role. */
     enum Role {
-        TITLE("Title"), STATUS("Status or checkbox"), DUE("Due date"), TAGS("Class / tag");
+        TITLE("Title"), STATUS("Status or checkbox"), DUE("Due date"), TAGS("Classes / tags"), PRIORITY("Priority");
         final String label;
         Role(String label) { this.label = label; }
     }
@@ -49,9 +49,16 @@ final class NotionImportPanel extends JPanel {
     private final JTable table = new JTable(model);
     private final JTextArea message = new JTextArea(3,58);
     private Sheet sheet;
+    /** The columns left over from the roles, each kept as a task property when ticked (#68). */
+    private final JPanel others = new JPanel(new WrapFlowLayout(FlowLayout.LEFT, SPACE_MD, SPACE_XS));
+    private final Map<String, JCheckBox> kept = new LinkedHashMap<>();
+    /** Ticks set by hand, by column, so a remap never re-ticks a column the user left out. */
+    private final Map<String, Boolean> keptChoices = new HashMap<>();
+    private Map<String, dev.yoru.domain.Model.PropertyType> kinds = Map.of();
     private List<Candidate> shown = List.of();
     private String defaultSource = "";
     private boolean loading;
+    private boolean refreshingOthers;
 
     NotionImportPanel(Tracker tracker) {
         this.tracker = tracker;
@@ -84,6 +91,9 @@ final class NotionImportPanel extends JPanel {
             grid.add(combo);
         }
         form.add(grid); gap(form,SPACE_MD);
+        form.add(label("OTHER COLUMNS · KEPT AS PROPERTIES",TYPE_CAPTION,MUTED)); gap(form,SPACE_SM);
+        others.setOpaque(false); others.setAlignmentX(0); others.setName("notion.properties");
+        form.add(others); gap(form,SPACE_MD);
         form.add(label("ROWS TO ADD",TYPE_CAPTION,MUTED)); gap(form,SPACE_SM);
         table.setName("notion.rows"); plainTable(table); table.setFont(bodyFont());
         table.setBackground(PANEL); table.setForeground(TEXT);
@@ -102,7 +112,7 @@ final class NotionImportPanel extends JPanel {
         message.setLineWrap(true); message.setWrapStyleWord(true); message.setEditable(false); message.setFocusable(false);
         message.setOpaque(false); message.setFont(proseFont()); message.setForeground(MUTED);
         message.setName("notion.message");
-        message.setText("Choose the export Notion downloaded. A task carries one tag; the first of a row's classes is used.");
+        message.setText("Choose the export Notion downloaded. Every class or tag a row names comes with it.");
         form.add(message);
         add(form,BorderLayout.CENTER);
     }
@@ -113,6 +123,9 @@ final class NotionImportPanel extends JPanel {
         var mapping = NotionImport.autoMap(parsed.headers());
         sheet = parsed;
         choices.clear();
+        keptChoices.clear();
+        for (var header : parsed.headers()) keptChoices.put(header, mapping.properties().contains(header));
+        kinds = NotionImport.kinds(parsed, parsed.headers());
         loading = true;
         try {
             for (var role : Role.values()) fill(role,parsed.headers(),headerFor(mapping,role));
@@ -153,12 +166,42 @@ final class NotionImportPanel extends JPanel {
         return switch (role) {
             case TITLE -> mapping.title(); case STATUS -> mapping.status();
             case DUE -> mapping.due(); case TAGS -> mapping.tags();
+            case PRIORITY -> mapping.priority();
         };
     }
 
     /** The mapping as the combos currently stand: what the next preview will be built from. */
     Mapping mapping() {
-        return new Mapping(header(Role.TITLE),header(Role.STATUS),header(Role.DUE),header(Role.TAGS));
+        var roles = new Mapping(header(Role.TITLE),header(Role.STATUS),header(Role.DUE),header(Role.TAGS)).withPriority(header(Role.PRIORITY));
+        var properties = new ArrayList<String>();
+        for (var e : kept.entrySet()) if (e.getValue().isSelected()) properties.add(e.getKey());
+        return roles.withProperties(properties);
+    }
+
+    /**
+     * The columns no role took, each a box to keep it as a property of that
+     * name, with the type its cells read as. A column taken by a role leaves
+     * the list, and one it gives back returns with the tick it had.
+     */
+    private void others() {
+        others.removeAll();
+        kept.clear();
+        if (sheet == null) return;
+        var taken = new HashSet<String>();
+        for (var role : Role.values()) { var h = header(role); if (h != null) taken.add(h); }
+        for (var header : sheet.headers()) {
+            if (taken.contains(header)) continue;
+            var kind = kinds.get(header);
+            var box = new JCheckBox(header + " · " + (kind == null ? "Text" : kind.label), keptChoices.getOrDefault(header, false));
+            box.setOpaque(false); box.setForeground(TEXT); box.setFont(labelFont());
+            box.setName("notion.property." + header);
+            box.getAccessibleContext().setAccessibleName("Keep " + header + " as a property");
+            box.addActionListener(e -> { keptChoices.put(header, box.isSelected()); refresh(); });
+            kept.put(header, box);
+            others.add(box);
+        }
+        if (kept.isEmpty()) others.add(label("Every column is used above.", TYPE_CAPTION, MUTED));
+        others.revalidate(); others.repaint();
     }
 
     private String header(Role role) {
@@ -169,6 +212,7 @@ final class NotionImportPanel extends JPanel {
     /** Re-reads the rows under the current mapping. Nothing is written, so this is safe on every keystroke. */
     private void refresh() {
         if (sheet == null || loading) return;
+        if (!refreshingOthers) { refreshingOthers = true; try { others(); } finally { refreshingOthers = false; } }
         try {
             shown = NotionImport.preview(sheet,mapping());
             refreshing = true;
@@ -204,7 +248,10 @@ final class NotionImportPanel extends JPanel {
             if (Boolean.TRUE.equals(model.getValueAt(i,0))) ticked.add(shown.get(i).row());
         var chosen = live.stream().filter(candidate -> ticked.contains(candidate.row())).toList();
         if (chosen.isEmpty()) throw new IOException("No rows are ticked, so there is nothing to import.");
-        return NotionImport.prepare(chosen,tracker.state(),sourceLabel());
+        var mapping = mapping();
+        var types = new LinkedHashMap<String, dev.yoru.domain.Model.PropertyType>();
+        for (var header : mapping.properties()) types.put(header, kinds.getOrDefault(header, dev.yoru.domain.Model.PropertyType.TEXT));
+        return NotionImport.prepare(chosen,tracker.state(),sourceLabel(),types);
     }
 
     void showError(String text) {
@@ -232,13 +279,14 @@ final class NotionImportPanel extends JPanel {
         if (withNotes > 0) text.append(" · ").append(withNotes).append(" with page notes");
         var known = new HashSet<String>();
         for (var tag : tracker.state().tags()) known.add(tag.name().toLowerCase(Locale.ROOT));
+        // Every tag a row names comes with it (#66), so every one is counted.
         var fresh = new LinkedHashSet<String>();
-        for (var candidate : shown) {
-            if (candidate.tags().isEmpty()) continue;
-            String name = candidate.tags().getFirst();
-            if (!known.contains(name.toLowerCase(Locale.ROOT))) fresh.add(name.toLowerCase(Locale.ROOT));
-        }
+        for (var candidate : shown)
+            for (var name : candidate.tags())
+                if (!known.contains(name.toLowerCase(Locale.ROOT))) fresh.add(name.toLowerCase(Locale.ROOT));
         text.append(" · ").append(fresh.size()).append(fresh.size()==1 ? " new tag" : " new tags");
+        int properties = mapping().properties().size();
+        if (properties > 0) text.append(" · ").append(properties).append(properties==1 ? " column kept as a property" : " columns kept as properties");
         return text.toString();
     }
 
@@ -247,10 +295,9 @@ final class NotionImportPanel extends JPanel {
         return candidate.tags().isEmpty() ? null : candidate.tags().getFirst();
     }
 
-    /** Only the first class is imported, because that is all a Yoru task has room for. */
+    /** Every class a row names, since a task carries them all (#66). */
     private static String tagLabel(List<String> tags) {
-        if (tags.isEmpty()) return "";
-        return tags.size() == 1 ? tags.getFirst() : tags.getFirst()+" (+"+(tags.size()-1)+" more)";
+        return String.join(", ", tags);
     }
 
     private static String firstLine(String notes) {

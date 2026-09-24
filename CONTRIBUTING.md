@@ -145,6 +145,7 @@ and say why.
 | `HabitHistoryTest`, `ui/HabitHistoryUiTest` | old daily corrections, retained beginning, missed restarts, paging, failures and persistence |
 | `ui/InputTest` | revert-on-invalid, DST gaps and overlaps, range clamping |
 | `ui/UiTest` | every page rendered headlessly at two widths |
+| `ui/CrudCoverageTest` | every kind of record created, viewed, edited and deleted by the tracker and from named controls (#59) |
 | `ArtworkTest` | artwork naming, nested folders, zip import and path escapes |
 | `ReliabilityTest` | edits, evolution, shiny odds, vault reopen, backup failure and reset accounting |
 | `ui/RouteTest` | centered camera, pause/resume, resize and all four themes |
@@ -153,6 +154,8 @@ Every new record must ship with create, view, edit and delete controls (#59),
 reachable by mouse and keyboard and named for accessibility. Cover the tracker
 operations and actual UI controls, including failed saves; take a backup before
 destructive changes. No record should require editing the vault by hand.
+`ui/CrudCoverageTest` holds every kind of record to this, row by row: add a row
+there, with the controls' names, in the change that adds the record.
 
 Add tests with the feature, not after. The features recovered from an
 interrupted session shipped with zero coverage and two of them had real bugs —

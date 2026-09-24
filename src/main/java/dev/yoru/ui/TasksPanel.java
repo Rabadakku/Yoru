@@ -34,20 +34,13 @@ final class TasksPanel extends JPanel implements Scrollable {
     }
     /** Manual order is the default; any other sort overrides it. */
     private enum Sort {
-        MANUAL("My order"), DUE("Due date"), TITLE("Title"), STATUS("Status");
+        MANUAL("My order"), DUE("Due date"), TITLE("Title"), STATUS("Status"), PRIORITY("Priority");
         final String label; Sort(String label){this.label=label;}
         @Override public String toString(){return label;}
     }
 
-    /**
-     * Column widths shared by the header and every row: done, status, title,
-     * tags, due, menu. The title's 0 takes the rest. The tags column has room
-     * for two short tags side by side (#66); more than fit are counted in "+n".
-     */
-    private static final int[] COLUMNS={SPACE_XL,SPACE_XXL*2+SPACE_MD,0,SPACE_XXL*4+SPACE_LG,SPACE_XXL*5,SPACE_XXL};
-    private static final int TITLE_COLUMN=2;
-    /** Marks a label that is a pill, which keeps its own width instead of filling its column. */
-    private static final String PILL="yoru.pill";
+    /** The columns of the table on screen (#68): the fixed ones, then priority and this place's properties. */
+    private List<TaskTable.Column> columns=List.of();
 
     private final Tracker tracker;
     private final Runnable refresh;
@@ -79,7 +72,18 @@ final class TasksPanel extends JPanel implements Scrollable {
         }
     }
     private final ViewState state;
+    /** What a property or priority cell does when used (#68). */
+    private final TaskTable.Edits cellEdits=new TaskTable.Edits() {
+        @Override public void priority(Task task) { choosePriority(task); }
+        @Override public void value(Task task,Property property) { editValue(task,property); }
+        @Override public void tick(Task task,Property property,boolean on) {
+            try{tracker.properties().setValue(task.id(),property.id(),on?new Value.Tick():null);rebuildRows();}catch(Exception e){error(e);}
+        }
+        @Override public void open(String link) { openLink(link); }
+    };
     private final JTextField search=styleInput(new JTextField(24));
+    /** The table's last line: a whole task typed on one line (#74). Kept across rebuilds, so it keeps its focus. */
+    private final QuickAddField quickAdd=new QuickAddField(this::quickContext,this::quickAdd,()->edit(null));
     private final JButton clearSearch=button("Clear",()->search.setText(""));
     private View view=View.ALL;
     private Sort sort=Sort.MANUAL;
@@ -159,12 +163,15 @@ final class TasksPanel extends JPanel implements Scrollable {
         sortControls.add(order);
         var tags=button("Tags",()->TagEditor.open(this,tracker,this::rebuildRows));
         tags.setName("task.tags");
+        var properties=button("Properties",()->PropertyManager.open(this,tracker,this::rebuildRows));
+        properties.setName("task.properties");
+        properties.setToolTipText("Your own properties and statuses");
         var importer=button("Import ▾",()->{});
         importer.setName("task.import");
         importer.addActionListener(e->importMenu().show(importer,0,importer.getHeight()));
         var left=new JPanel(new WrapFlowLayout(FlowLayout.LEFT,SPACE_SM,SPACE_XS));
         left.setOpaque(false);
-        left.add(sortControls);left.add(tags);left.add(importer);left.add(selectTasks);
+        left.add(sortControls);left.add(tags);left.add(properties);left.add(importer);left.add(selectTasks);
         var find=new JPanel(new BorderLayout(SPACE_SM,0));
         find.setOpaque(false);
         var caption=label("Search",TYPE_LABEL,MUTED);
@@ -235,7 +242,10 @@ final class TasksPanel extends JPanel implements Scrollable {
             case DUE->Comparator.comparing((Task t)->t.workOn()==null?LocalDate.MAX:t.workOn())
                 .thenComparing(t->t.title().toLowerCase(Locale.ROOT));
             case TITLE->Comparator.comparing(t->t.title().toLowerCase(Locale.ROOT));
-            case STATUS->Comparator.comparing((Task t)->t.status().ordinal())
+            case STATUS->Comparator.comparing((Task t)->statusRank(t))
+                .thenComparing(t->t.workOn()==null?LocalDate.MAX:t.workOn());
+            // Most urgent first; no priority last, then by date as the due sort does (#68).
+            case PRIORITY->Comparator.comparing((Task t)->t.priority()==Priority.NONE?Integer.MAX_VALUE:-t.priority().ordinal())
                 .thenComparing(t->t.workOn()==null?LocalDate.MAX:t.workOn());
         };
         String query=search.getText().strip().toLowerCase(Locale.ROOT);
@@ -250,7 +260,29 @@ final class TasksPanel extends JPanel implements Scrollable {
     private boolean matches(Task task,String query) {
         if(query.isEmpty())return true;
         String tags=String.join("\n",tagsOf(task).stream().map(Tag::name).toList());
-        return (task.title()+"\n"+task.notes()+"\n"+tags).toLowerCase(Locale.ROOT).contains(query);
+        return (task.title()+"\n"+task.notes()+"\n"+tags+"\n"+valuesText(task)).toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    /** A task's property values as words, so a search finds a task by what its properties hold (#68). */
+    private String valuesText(Task task) {
+        var out=new StringBuilder();
+        var database=tracker.state().database();
+        for(var entry:task.values().entrySet()) {
+            var property=database.property(entry.getKey());
+            if(property==null) continue;
+            switch(entry.getValue()) {
+                case Value.Choice c->{ var o=property.option(c.option()); if(o!=null) out.append(o.name()).append('\n'); }
+                case Value.Choices cs->{ for(var id:cs.options()){ var o=property.option(id); if(o!=null) out.append(o.name()).append('\n'); } }
+                case Value.Tick ignored->{ }
+                default->out.append(TaskTable.text(entry.getValue())).append('\n');
+            }
+        }
+        return out.toString();
+    }
+
+    /** Where a task's status falls in the order the status button steps through. */
+    private int statusRank(Task task) {
+        return tracker.properties().statusChoices().indexOf(tracker.properties().statusOf(task));
     }
 
     private boolean reorderable() { return sort==Sort.MANUAL&&view==View.ALL&&search.getText().isBlank(); }
@@ -308,8 +340,9 @@ final class TasksPanel extends JPanel implements Scrollable {
             +(view==View.CALENDAR?" · drag a task onto a day to move it"
                 :reorderable()?"":" · reorder in All with search cleared"));
         if(view==View.CALENDAR) { buildCalendar(); return; }
+        columns=TaskTable.columns(tracker.state().database(),tasks,TaskLists.listOf(place));
         var table=table();
-        table.add(headerRow());
+        table.add(TaskTable.header(columns));
         if(tasks.isEmpty()) {
             var headline=switch(view) {
                 case ALL->"No tasks yet.";
@@ -408,15 +441,6 @@ final class TasksPanel extends JPanel implements Scrollable {
         return table;
     }
 
-    /** One line of the table in the shared columns, never taller than its cells need. */
-    private static JPanel tableRow() {
-        var line=new JPanel(new Columns()) {
-            @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE,getPreferredSize().height); }
-        };
-        line.setOpaque(false);
-        line.setAlignmentX(0);
-        return line;
-    }
 
     /**
      * Lights a row while the pointer is over it.
@@ -446,18 +470,11 @@ final class TasksPanel extends JPanel implements Scrollable {
         line.addMouseListener(over);
     }
 
-    private static JPanel headerRow() {
-        var header=tableRow();
-        header.setName("task.header");
-        header.setBorder(listRow());
-        for(String heading:new String[]{"","Status","Task","Tags","Due",""}) header.add(label(heading,TYPE_CAPTION,MUTED));
-        return header;
-    }
 
     private JPanel taskRow(List<Task> tasks,int index) {
         var task=tasks.get(index);
         boolean done=task.status()==TaskStatus.DONE;
-        var line=tableRow();
+        var line=TaskTable.row(columns);
         lightOnHover(line);
         line.setBorder(restingBorder());
 
@@ -479,15 +496,18 @@ final class TasksPanel extends JPanel implements Scrollable {
         }
         line.add(check);
 
-        var status=button(task.status().label,()->cycle(task));
+        // The owner's own status inside the group, or the group's (#68).
+        var own=tracker.properties().statusOf(task);
+        var status=button(own.label(),()->cycle(task));
         status.setName("task.status."+task.id());
         status.setEnabled(!bulk.active());
-        status.setBackground(TagChips.wash(switch(task.status()){case TODO->MUTED;case DOING->GOLD;case DONE->CYAN;}));
+        status.setBackground(TagChips.wash(own.option()!=null?new Color(own.option().colour())
+            :switch(task.status()){case TODO->MUTED;case DOING->GOLD;case DONE->CYAN;}));
         status.setForeground(TEXT);
         status.setFont(captionFont());
         status.setBorder(new EmptyBorder(RING,SPACE_SM,RING,SPACE_SM));
         status.setToolTipText("Click to move this task to its next status");
-        status.getAccessibleContext().setAccessibleName("Status: "+task.status().label+". Activate for the next status");
+        status.getAccessibleContext().setAccessibleName("Status: "+own.label()+". Activate for the next status");
         line.add(status);
 
         var title=new JTextArea(task.title());
@@ -516,6 +536,11 @@ final class TasksPanel extends JPanel implements Scrollable {
         tags.setName("task.tags."+task.id());
         line.add(tags);
         line.add(due(task));
+        // Priority and the place's properties, in the table's own columns (#68).
+        for(var column:columns) {
+            if(column.kind()==TaskTable.Kind.PRIORITY) line.add(TaskTable.priority(task,cellEdits));
+            else if(column.kind()==TaskTable.Kind.PROPERTY) line.add(TaskTable.cell(task,column.property(),cellEdits,ZoneId.systemDefault()));
+        }
 
         var more=button("⋯",()->{});
         more.setName("task.menu."+task.id());
@@ -546,66 +571,6 @@ final class TasksPanel extends JPanel implements Scrollable {
             var check = selectionChecks.get(id);
             if (check != null) check.requestFocusInWindow();
         });
-    }
-
-    /** Lays a row's cells into the shared column widths; the title column takes what is left. */
-    static final class Columns implements LayoutManager {
-        /** The width assumed before a row has one, so a first measurement is a sensible one. */
-        private static final int UNSIZED=SPACE_XXL*30;
-
-        @Override public void addLayoutComponent(String name,Component cell) { }
-        @Override public void removeLayoutComponent(Component cell) { }
-
-        static int[] widths(int inner) {
-            // The fixed columns hold text, so they grow with the text size (#31).
-            var out=COLUMNS.clone();
-            for(int i=0;i<out.length;i++) out[i]=grow(out[i]);
-            int fixed=Arrays.stream(out).sum();
-            out[TITLE_COLUMN]=Math.max(grow(48),inner-fixed-SPACE_MD*(COLUMNS.length-1));
-            return out;
-        }
-
-        private static int inner(Container row) {
-            var insets=row.getInsets();
-            return (row.getWidth()>0?row.getWidth():UNSIZED)-insets.left-insets.right;
-        }
-
-        /** A wrapping title is as tall as its text at this width; anything else is its preferred height. */
-        private static int height(Component cell,int width) {
-            if(cell instanceof JTextArea wrapping) {
-                wrapping.setSize(width,Short.MAX_VALUE);
-                return wrapping.getPreferredSize().height;
-            }
-            return cell.getPreferredSize().height;
-        }
-
-        private static boolean fills(Component cell) {
-            return cell instanceof JTextArea||cell instanceof JLabel l&&l.getClientProperty(PILL)==null;
-        }
-
-        @Override public Dimension preferredLayoutSize(Container row) {
-            var insets=row.getInsets();
-            int[] w=widths(inner(row));
-            int tallest=0;
-            for(int i=0;i<Math.min(w.length,row.getComponentCount());i++) tallest=Math.max(tallest,height(row.getComponent(i),w[i]));
-            return new Dimension(Arrays.stream(w).sum()+SPACE_MD*(w.length-1)+insets.left+insets.right,
-                tallest+insets.top+insets.bottom);
-        }
-
-        @Override public Dimension minimumLayoutSize(Container row) { return new Dimension(0,preferredLayoutSize(row).height); }
-
-        @Override public void layoutContainer(Container row) {
-            var insets=row.getInsets();
-            int[] w=widths(inner(row));
-            int tallest=row.getHeight()-insets.top-insets.bottom, x=insets.left;
-            for(int i=0;i<Math.min(w.length,row.getComponentCount());i++) {
-                var cell=row.getComponent(i);
-                int width=fills(cell)?w[i]:Math.min(cell.getPreferredSize().width,w[i]);
-                int height=Math.min(tallest,height(cell,w[i]));
-                cell.setBounds(x,insets.top+Math.max(0,(tallest-height)/2),width,height);
-                x+=w[i]+SPACE_MD;
-            }
-        }
     }
 
     private static javax.swing.border.Border restingBorder() {
@@ -757,10 +722,13 @@ final class TasksPanel extends JPanel implements Scrollable {
         // A planned day that is not the deadline gets a marker, because the two
         // being different is the thing worth noticing.
         if(task.plannedFor()!=null&&task.due()!=null&&!task.plannedFor().equals(task.due())) text="→ "+text;
+        // The time it is due, when it has one (#74).
+        if(task.dueTime()!=null&&(task.plannedFor()==null||task.plannedFor().equals(task.due()))) text=text+", "+DateText.time(task.dueTime());
         // A repeating task says so where its date is, since the date is what repeats (#57).
         if(task.repeats()) text="↻ "+text;
         l.setText(text);
         l.setForeground(colour);
+        if(task.dueTime()!=null) l.setToolTipText("Due "+DateText.date(task.due())+" at "+DateText.time(task.dueTime()));
         if(task.scheduledLate())
             l.setToolTipText("Planned for "+DateText.date(task.plannedFor())+", but due "+DateText.date(task.due()));
         else if(task.plannedFor()!=null&&task.due()!=null)
@@ -773,7 +741,7 @@ final class TasksPanel extends JPanel implements Scrollable {
                 +(dev.yoru.application.Repeats.streak(history)>1?", "+dev.yoru.application.Repeats.streak(history)+" in a row":"");
             String before=l.getToolTipText();
             l.setToolTipText((before==null?"":before+" · ")+RepeatField.describe(task.repeat())+record);
-            l.getAccessibleContext().setAccessibleName(text.replace("↻ ","")+", repeats "+RepeatField.describe(task.repeat()).toLowerCase(Locale.ROOT));
+            l.getAccessibleContext().setAccessibleName(text.replace("↻ ","")+", repeats "+RepeatField.inSentence(task.repeat()));
         }
         return l;
     }
@@ -802,22 +770,41 @@ final class TasksPanel extends JPanel implements Scrollable {
         }
     }
 
-    /** The last line of the table, as in Notion: a quiet way to add a task right where the list ends. */
+    /**
+     * The last line of the table, as in Notion: a task typed where the list
+     * ends, its date, tags, list, priority and repeat read from the line (#74),
+     * with the full form a button away.
+     */
     private JComponent newRow() {
-        var add=button("+  New task",()->edit(null));
-        add.setName("task.newRow");
-        add.setBackground(PANEL);
-        add.setForeground(MUTED);
-        add.setHorizontalAlignment(SwingConstants.LEFT);
-        add.setBorder(new EmptyBorder(SPACE_SM,SPACE_MD,SPACE_SM,SPACE_MD));
         var slot=new JPanel(new BorderLayout()) {
             @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE,getPreferredSize().height); }
         };
         slot.setOpaque(false);
         slot.setAlignmentX(0);
-        slot.add(add,BorderLayout.CENTER);
+        slot.add(quickAdd,BorderLayout.CENTER);
         return slot;
     }
+
+    /** What a typed line is read against: today, the week start, and the vault's tags and lists. */
+    private dev.yoru.application.QuickAdd.Context quickContext() {
+        var state=tracker.state();
+        return new dev.yoru.application.QuickAdd.Context(LocalDate.now(),state.settings().weekStartsOn(),
+            state.tags().stream().map(Tag::name).toList(),state.lists().stream().map(TaskList::name).toList());
+    }
+
+    /** Saves a typed line as a task in the place on screen, with the tags it names made in the same write. */
+    void quickAdd(dev.yoru.application.QuickAdd.Result line) {
+        try {
+            var draft=dev.yoru.application.QuickAdd.draft(line,tracker.state(),newTaskList(),LocalDate.now(),Instant.now(),TagEditor::paletteColour);
+            tracker.properties().save(draft.task(),draft.newTags(),Map.of());
+            quickAdd.clear();
+            rebuildRows();
+            SwingUtilities.invokeLater(()->quickAdd.field().requestFocusInWindow());
+        } catch(Exception e){error(e);}
+    }
+
+    /** The quick-add line, for the tests and the command palette. */
+    QuickAddField quickAddField() { return quickAdd; }
 
     void pageOpener(java.util.function.Consumer<UUID> opener) { this.openPage = opener; }
 
@@ -845,6 +832,7 @@ final class TasksPanel extends JPanel implements Scrollable {
             true, () -> selectTask(id), null));
         menu.add(Menus.item("Track time","task.track."+id,task.activityId()!=null&&!done,()->track(task),
             task.activityId()==null?"Assign an activity to time this task":"This task is finished"));
+        menu.add(Menus.item("Priority…","task.priority.choose."+id,true,()->choosePriority(task),null));
         menu.addSeparator();
         menu.add(Menus.item("Link a page…", "task.linkPage." + id, true, () -> linkPage(task), null));
         menu.add(Menus.item("New page for task", "task.newPage." + id, true, () -> {
@@ -909,10 +897,53 @@ final class TasksPanel extends JPanel implements Scrollable {
         try{tracker.taskStatus(task.id(),next);rebuildRows();}catch(Exception e){error(e);}
     }
 
+    /** The next status in the order the owner keeps them, their own inside each group (#68). */
     private void cycle(Task task) {
-        status(task,switch(task.status()) {
-            case TODO->TaskStatus.DOING; case DOING->TaskStatus.DONE; case DONE->TaskStatus.TODO;
-        });
+        try{tracker.properties().setStatus(task.id(),tracker.properties().nextStatus(task),ZoneId.systemDefault());rebuildRows();}
+        catch(Exception e){error(e);}
+    }
+
+    /** A task's priority, chosen from the five (#68). */
+    void choosePriority(Task task) {
+        var chosen=Dialogs.select(this,"Priority for “"+task.title()+"”","Priority",List.of(Priority.values()));
+        if(chosen==null) return;
+        try{tracker.properties().setPriority(task.id(),chosen);rebuildRows();}catch(Exception e){error(e);}
+    }
+
+    /** One property's value on one task, in the control its type has; reopened on a refusal with what was typed (#68). */
+    void editValue(Task task,Property property) {
+        var current=tracker.state().tasks().stream().filter(t->t.id().equals(task.id())).findFirst().orElse(task);
+        var editor=PropertyEditors.of(property,current.values().get(property.id()));
+        var form=stack();
+        form.add(label(current.title(),TYPE_CAPTION,MUTED));
+        gap(form,SPACE_SM);
+        form.add(editor.component());
+        while(Dialogs.confirm(this,form,property.name(),"Save")) {
+            try{
+                var entry=editor.entry();
+                if(entry!=null) tracker.properties().set(task.id(),property.id(),entry);
+                rebuildRows();
+                return;
+            }catch(Exception e){error(e);}
+        }
+    }
+
+    /**
+     * Opens a link a URL property holds, in the browser. Only a web or mail
+     * address: a link to a program or a file on the disk is not opened from a
+     * cell someone may click without reading.
+     */
+    private void openLink(String link) {
+        try {
+            var uri=java.net.URI.create(link.strip());
+            var scheme=uri.getScheme()==null?"":uri.getScheme().toLowerCase(Locale.ROOT);
+            if(!Set.of("http","https","mailto").contains(scheme))
+                throw new IllegalArgumentException("Only web and mail links open from here: "+link);
+            if(!java.awt.Desktop.isDesktopSupported()) throw new IllegalArgumentException("This computer cannot open links from Yoru.");
+            var desktop=java.awt.Desktop.getDesktop();
+            if(scheme.equals("mailto")) desktop.mail(uri); else desktop.browse(uri);
+        } catch(IllegalArgumentException e) { error(e); }
+        catch(Exception e) { error(new IllegalArgumentException("That link could not be opened: "+e.getMessage())); }
     }
 
     private void move(List<Task> tasks,int index,int delta) {
@@ -960,7 +991,17 @@ final class TasksPanel extends JPanel implements Scrollable {
             existing==null?listForNew:existing.listId(),
             // Its rule is set by the form's own field; the occurrences behind it always stay (#57).
             existing==null?null:existing.repeat(),
-            existing==null?List.of():existing.history());
+            existing==null?List.of():existing.history(),
+            // Priority, properties and when it was edited stay (#68); the owner's
+            // status stays while the group does, since it belongs to one group.
+            existing==null?Details.NONE
+                :carried(existing,status,due));
+    }
+
+    /** What an edit keeps of a task's details: its status of the owner's while the group stays, its time while it has a date. */
+    private static Details carried(Task existing,TaskStatus status,LocalDate due) {
+        var kept=status==existing.status()?existing.details():existing.details().withStatus(null);
+        return due==null?kept.withDueTime(null):kept;
     }
 
     /** A new task lands at the bottom of the manual order, not on top of row one. */
@@ -991,20 +1032,36 @@ final class TasksPanel extends JPanel implements Scrollable {
         var title=new JTextField(existing==null?"":existing.title(),36);
         var notes=new JTextArea(existing==null?"":existing.notes(),5,36);notes.setLineWrap(true);notes.setWrapStyleWord(true);
         var due=dueField(existing,day);
+        // The time on the due date, or none (#74).
+        var dueTime=styleInput(new JTextField(existing==null||existing.dueTime()==null?"":DateText.time(existing.dueTime()),10));
+        dueTime.setName("task.form.dueTime");
+        dueTime.getAccessibleContext().setAccessibleName("Due time, optional");
         var activity=plainCombo(new JComboBox<Object>());activity.addItem("Unassigned");tracker.state().activities().forEach(activity::addItem);
         if(existing!=null&&existing.activityId()!=null)for(int i=1;i<activity.getItemCount();i++)if(((Activity)activity.getItemAt(i)).id().equals(existing.activityId()))activity.setSelectedIndex(i);
-        var status=plainCombo(new JComboBox<>(TaskStatus.values()));
-        status.setSelectedItem(existing==null?TaskStatus.TODO:existing.status());
+        // Every status the owner keeps, their own inside each group (#68).
+        var choices=tracker.properties().statusChoices();
+        var status=plainCombo(new JComboBox<>(choices.toArray(dev.yoru.application.TaskProperties.StatusChoice[]::new)));
+        status.setSelectedItem(existing==null?choices.getFirst():tracker.properties().statusOf(existing));
+        status.setName("task.form.status");
+        status.getAccessibleContext().setAccessibleName("Status");
+        var priority=plainCombo(new JComboBox<>(Priority.values()));
+        priority.setSelectedItem(existing==null?Priority.NONE:existing.priority());
+        priority.setName("task.form.priority");
+        priority.getAccessibleContext().setAccessibleName("Priority");
+        var fields=new PropertyEditors.Section(tracker.state().database(),existing,existing==null?newTaskList():existing.listId());
         // Tags are typed, and a new one is made right here (#66).
         var tags=new TagField(tracker.state().tags(),existing==null?List.of():existing.tagIds());
         var planned=new DateField(existing==null?null:existing.plannedFor(),"Plan for",true);
         planned.setName("task.plannedFor");
         var repeat=new RepeatField(existing==null?null:existing.repeat(),tracker.state().settings().weekStartsOn());
         var form=stack();form.add(new JLabel("Title"));form.add(title);gap(form,SPACE_MD);form.add(new JLabel("Notes"));form.add(new JScrollPane(notes));gap(form,SPACE_MD);
-        form.add(new JLabel("Due · the deadline"));form.add(due);gap(form,SPACE_MD);
+        form.add(new JLabel("Due · the deadline"));form.add(due);gap(form,SPACE_SM);
+        form.add(new JLabel("Due time · optional, like 5pm or 17:00"));form.add(dueTime);gap(form,SPACE_MD);
         form.add(new JLabel("Plan for · the day you mean to do it · blank to use the deadline"));form.add(planned);gap(form,SPACE_MD);
         form.add(new JLabel("Repeat · from the due date"));form.add(repeat);gap(form,SPACE_MD);
-        form.add(new JLabel("Activity"));form.add(activity);gap(form,SPACE_MD);form.add(new JLabel("Status"));form.add(status);gap(form,SPACE_MD);form.add(new JLabel("Tags · type to find or create"));form.add(tags);
+        form.add(new JLabel("Activity"));form.add(activity);gap(form,SPACE_MD);form.add(new JLabel("Status"));form.add(status);gap(form,SPACE_MD);
+        form.add(new JLabel("Priority"));form.add(priority);gap(form,SPACE_MD);form.add(new JLabel("Tags · type to find or create"));form.add(tags);
+        if(!fields.isEmpty()){gap(form,SPACE_MD);form.add(label("PROPERTIES",TYPE_CAPTION,MUTED));gap(form,SPACE_XS);form.add(fields);}
         // Reopened on a refusal with everything as typed, rather than closed with it lost.
         while(Dialogs.confirm(this,form,existing==null?"New task":"Edit task","Save")) {
             try {
@@ -1012,13 +1069,17 @@ final class TasksPanel extends JPanel implements Scrollable {
                 var rule=repeat.value(deadline);
                 // A repeat comes back on a date: with none given, it starts today.
                 if(rule!=null&&deadline==null) deadline=rule.start();
+                var chosen=(dev.yoru.application.TaskProperties.StatusChoice)status.getSelectedItem();
                 var task=merged(existing,
                     activity.getSelectedItem() instanceof Activity a?a.id():null,
                     tags.tagIds(),
                     title.getText(),notes.getText(),deadline,
-                    (TaskStatus)status.getSelectedItem(),nextOrder(),planned.value(),newTaskList()).withRepeat(rule);
-                // The task and the tags made for it are one write.
-                tracker.saveTask(task,tags.newTags());
+                    chosen.group(),nextOrder(),planned.value(),newTaskList()).withRepeat(rule);
+                var time=dueTime.getText().isBlank()?null:DateText.parseTime(dueTime.getText());
+                if(time!=null&&task.due()==null) throw new IllegalArgumentException("Choose a due date for the due time, or clear the time.");
+                task=task.withDetails(task.details().withPriority((Priority)priority.getSelectedItem()).withStatus(chosen.id()).withDueTime(time));
+                // The task, the tags made for it and its property values are one write (#68).
+                tracker.properties().save(task,tags.newTags(),fields.entries());
                 rebuildRows();
                 return;
             }catch(Exception e){error(e);}
@@ -1045,7 +1106,7 @@ final class TasksPanel extends JPanel implements Scrollable {
             if(closed.getAsBoolean())return;
             try {
                 var batch=form.batch();
-                int added=tracker.importTasks(batch.newTags(),batch.tasks());
+                int added=tracker.importTasks(batch.newTags(),batch.tasks(),batch.database());
                 int skipped=batch.tasks().size()-added;
                 Dialogs.info(this,"Import complete",added+" task"+(added==1?"":"s")+" imported from the Notion export."
                     +(skipped>0?" "+skipped+" already existed and were skipped.":""));

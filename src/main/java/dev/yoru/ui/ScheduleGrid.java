@@ -111,17 +111,34 @@ final class ScheduleGrid extends JPanel {
         default void updateSession(UUID sessionId,Instant start,Instant end) { }
         /** Double-click: open the full editor, where it can also be deleted. */
         default void open(UUID id,boolean recorded) { }
+        /**
+         * A weekly repeat's box was dragged: that week alone moves (#59). The
+         * week is the day its rule puts the block on, which names it even when
+         * the block was already moved to another.
+         */
+        default void moveRepeat(UUID ruleId,LocalDate week,Instant start,Instant end) { }
+        /** Double-click on a weekly repeat's box: skip, change or restore that week. */
+        default void openRepeat(UUID ruleId,LocalDate week) { }
+        /** Whether weekly repeats can be picked up at all; a grid that only draws leaves them inert. */
+        default boolean repeatsEditable() { return false; }
     }
 
     private enum Mode { NONE, CREATE, MOVE, RESIZE_TOP, RESIZE_BOTTOM }
     private Mode mode=Mode.NONE;
     private UUID activeId;
+    private LocalDate activeWeek;
     private int activeDay, anchorMinute, dragMinute, grabOffset, heldLength;
     private boolean activeRecorded;
+    private boolean repeatsEditable;
 
-    /** One drawable span, already clipped to a single day. */
+    /**
+     * One drawable span, already clipped to a single day. A weekly repeat's
+     * span also carries the week it belongs to, and whether that week was
+     * changed on its own.
+     */
     private record Segment(int day,int fromMinute,int toMinute,String label,Color colour,
-                           boolean planned,boolean running,boolean repeating,UUID id) { }
+                           boolean planned,boolean running,boolean repeating,UUID id,
+                           LocalDate week,boolean changed) { }
 
     private final ZoneId zone;
     private final LocalDate weekStart;
@@ -154,12 +171,13 @@ final class ScheduleGrid extends JPanel {
         for(var block:state.blocks())
             add(block.start(),block.end(),name(activities,block.activityId()),
                 colour(indexOf(activities,block.activityId())),true,false,block.id());
-        // The weekly template, expanded onto this week's dates. Derived, so these
-        // are drawn but never dragged: moving one would have to edit the rule for
-        // every week, which is a different action from nudging one Thursday.
+        // The weekly template, expanded onto this week's dates. Dragging one
+        // moves that week alone (#59): the rule, and every other week, is
+        // changed from the weekly template, not by nudging one Thursday.
         for(var occurrence:Analytics.occurrences(state,weekStart,zone))
             add(occurrence.start(),occurrence.end(),name(activities,occurrence.activityId()),
-                colour(indexOf(activities,occurrence.activityId())),true,false,true,occurrence.recurringId());
+                colour(indexOf(activities,occurrence.activityId())),true,false,true,occurrence.recurringId(),
+                occurrence.week(),occurrence.changed());
 
         // Frame the day around what is actually there, with a sane default window.
         int earliest=8, latest=18;
@@ -189,13 +207,14 @@ final class ScheduleGrid extends JPanel {
      *
      * Recorded time used to be inert here, on the reasoning that history is not a
      * plan. In use that was wrong — you notice a session is wrong while looking
-     * at the week, and then had to go somewhere else to fix it (#33). Repeating
-     * occurrences stay inert, because dragging one would edit every week, and a
-     * running session stays inert because its end has not happened yet.
+     * at the week, and then had to go somewhere else to fix it (#33). A weekly
+     * repeat can be picked up where the page lets one week change on its own
+     * (#59), and a running session stays inert because its end has not
+     * happened yet.
      */
     private Segment editableAt(Point at) {
         for(var s:segments)
-            if(!s.repeating()&&!s.running()&&boundsOf(s).contains(at)) return s;
+            if((!s.repeating()||repeatsEditable)&&!s.running()&&boundsOf(s).contains(at)) return s;
         return null;
     }
 
@@ -214,14 +233,29 @@ final class ScheduleGrid extends JPanel {
         return null;
     }
 
+    /** Only for tests: the middle of one week's box of a weekly repeat. */
+    Point pointOn(UUID ruleId,LocalDate week) {
+        for(var s:segments) if(s.repeating()&&s.id().equals(ruleId)&&s.week().equals(week)) {
+            var box=boundsOf(s);
+            return new Point(box.x+box.width/2,box.y+box.height/2);
+        }
+        return null;
+    }
+
     private void install(Edits edits) {
+        repeatsEditable=edits.repeatsEditable();
         var handler=new java.awt.event.MouseAdapter() {
             @Override public void mousePressed(java.awt.event.MouseEvent e) {
                 var hit=editableAt(e.getPoint());
-                if(hit!=null&&e.getClickCount()>=2) { edits.open(hit.id(),!hit.planned()); return; }
+                if(hit!=null&&e.getClickCount()>=2) {
+                    if(hit.repeating()) edits.openRepeat(hit.id(),hit.week());
+                    else edits.open(hit.id(),!hit.planned());
+                    return;
+                }
                 if(hit!=null) {
                     var box=boundsOf(hit);
                     activeId=hit.id();
+                    activeWeek=hit.week();
                     activeRecorded=!hit.planned();
                     activeDay=hit.day();
                     heldLength=hit.toMinute()-hit.fromMinute();
@@ -248,13 +282,16 @@ final class ScheduleGrid extends JPanel {
                 var span=provisional();
                 var finished=mode;
                 var id=activeId;
+                var week=activeWeek;
                 boolean recorded=activeRecorded;
                 int day=activeDay;
                 mode=Mode.NONE;
                 activeId=null;
+                activeWeek=null;
                 activeRecorded=false;
                 if(span!=null&&span[1]>span[0]) {
                     if(finished==Mode.CREATE) edits.create(instantAt(day,span[0]),instantAt(day,span[1]));
+                    else if(id!=null&&week!=null) edits.moveRepeat(id,week,instantAt(day,span[0]),instantAt(day,span[1]));
                     else if(id!=null&&recorded) edits.updateSession(id,instantAt(day,span[0]),instantAt(day,span[1]));
                     else if(id!=null) edits.update(id,instantAt(day,span[0]),instantAt(day,span[1]));
                 } else repaint();
@@ -287,10 +324,11 @@ final class ScheduleGrid extends JPanel {
 
     /** Splits a span at local midnight so each piece belongs to exactly one column. */
     private void add(Instant from,Instant to,String label,Color colour,boolean planned,boolean running,UUID id) {
-        add(from,to,label,colour,planned,running,false,id);
+        add(from,to,label,colour,planned,running,false,id,null,false);
     }
 
-    private void add(Instant from,Instant to,String label,Color colour,boolean planned,boolean running,boolean repeating,UUID id) {
+    private void add(Instant from,Instant to,String label,Color colour,boolean planned,boolean running,boolean repeating,UUID id,
+                     LocalDate week,boolean changed) {
         var cursor=from;
         while(cursor.isBefore(to)) {
             var day=cursor.atZone(zone).toLocalDate();
@@ -302,7 +340,7 @@ final class ScheduleGrid extends JPanel {
                 int fromMinute=localFrom.getHour()*60+localFrom.getMinute();
                 int toMinute=fromMinute+(int)Duration.between(cursor,slice).toMinutes();
                 segments.add(new Segment(index,fromMinute,Math.min(24*60,Math.max(toMinute,fromMinute+1)),
-                    label,colour,planned,running,repeating,id));
+                    label,colour,planned,running,repeating,id,week,changed));
             }
             cursor=slice;
         }
@@ -383,11 +421,15 @@ final class ScheduleGrid extends JPanel {
             String from=String.format("%02d:%02d",s.fromMinute()/60,s.fromMinute()%60);
             String to=String.format("%02d:%02d",s.toMinute()/60,s.toMinute()%60);
             long minutes=s.toMinute()-s.fromMinute();
-            return (s.repeating()?"Every "+weekStart.plusDays(s.day()).getDayOfWeek().getDisplayName(
-                        java.time.format.TextStyle.FULL,java.util.Locale.ENGLISH)+" · "
+            String hint=s.running()||s.repeating()&&!repeatsEditable?""
+                :s.repeating()?"  ·  drag to move this week only, double-click to skip or change it"
+                :"  ·  drag to move, double-click to edit or delete";
+            return (s.repeating()?(s.changed()?"This week only, moved from every "
+                        +s.week().getDayOfWeek().getDisplayName(java.time.format.TextStyle.FULL,java.util.Locale.ENGLISH)
+                    :"Every "+weekStart.plusDays(s.day()).getDayOfWeek().getDisplayName(
+                        java.time.format.TextStyle.FULL,java.util.Locale.ENGLISH))+" · "
                     :s.planned()?"Planned · ":s.running()?"Running · ":"Recorded · ")
-                +s.label()+"  "+from+"–"+to+"  ("+minutes+"m)"
-                +(s.repeating()||s.running()?"":"  ·  drag to move, double-click to edit or delete");
+                +s.label()+"  "+from+"–"+to+"  ("+minutes+"m)"+hint;
         }
         return null;
     }
@@ -521,7 +563,8 @@ final class ScheduleGrid extends JPanel {
             g.setFont(Theme.captionFont());
             g.setColor(Theme.MUTED);
             if(box.height>=titleRoom())
-                g.drawString(s.repeating()?"weekly":"planned",box.x+6,box.y+caption().getAscent()+Theme.SPACE_XS);
+                g.drawString(clip(g,s.repeating()?s.changed()?"moved":"weekly":"planned",box.width-8),
+                    box.x+6,box.y+caption().getAscent()+Theme.SPACE_XS);
             return;
         }
         g.setColor(s.colour());
@@ -606,7 +649,7 @@ final class ScheduleGrid extends JPanel {
     private String spoken(Segment s) {
         String day=weekStart.plusDays(s.day()).getDayOfWeek()
             .getDisplayName(java.time.format.TextStyle.FULL,java.util.Locale.ENGLISH);
-        String kind=s.repeating()?"Every "+day:s.planned()?"Planned, "+day
+        String kind=s.repeating()?(s.changed()?"This week only, "+day:"Every "+day):s.planned()?"Planned, "+day
             :s.running()?"Running, "+day:"Recorded, "+day;
         return kind+", "+String.format("%02d:%02d",s.fromMinute()/60,s.fromMinute()%60)
             +" to "+String.format("%02d:%02d",s.toMinute()/60,s.toMinute()%60);

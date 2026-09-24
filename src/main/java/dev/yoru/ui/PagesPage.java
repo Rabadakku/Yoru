@@ -85,7 +85,7 @@ final class PagesPage {
         documents.setOpaque(true);
         documents.setBackground(PANEL);
         empty = emptyState("No page open.", "Choose a page on the left, or make a new one.",
-            button("New page", () -> newPage(explorer.targetFolder())));
+            named(button("New page", () -> newPage(explorer.targetFolder())), "pages.new"));
         empty.setOpaque(false);
         documents.add(empty, "none");
 

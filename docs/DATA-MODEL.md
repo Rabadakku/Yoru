@@ -294,3 +294,90 @@ what "edit this occurrence" edits; finishing or skipping records it and moves
 the due date on, and when the rule runs out the task is simply done. A
 repeating task always has a due date. Older vaults arrive with nothing
 repeating. The export is format 9.
+
+## One week of a weekly repeat (schema 21, #59)
+
+Schema 21 lets one week of a weekly repeat differ from its rule without
+changing the rule: skipped, or held at another time — and, within six days of
+its own, on another day. Each `RecurringBlock` keeps a list of `RepeatChange`s,
+one a week at most and at most `RecurringBlock.MAX_CHANGES` (1,040), keyed by
+the date the rule would have put that week's block on. A change is that date,
+then either nothing (skipped) or the day it moved to and its start and end as
+local times, like the rule's own. The rule's dates are still worked out rather
+than stored (`Analytics.occurrences`): a changed week is left off its own day
+and drawn where it moved to, and a week moved across the edge of the week shown
+is drawn by the week it landed in.
+
+Overlaps are checked as the rules are, on each date a change reaches: the
+rules' blocks that day, less the weeks moved away or skipped, plus the weeks
+moved onto it. Changing a rule's time keeps its changed weeks; moving it to
+another day puts them back, since there is no block left on the dates they
+name, and the form says so first. A week put back where the rule has it keeps
+no change.
+
+In the vault the changes follow the task lists: for each rule, in the order the
+rules were written, a count and then each change (the date as an epoch day, a
+moved flag, and if moved the day and the two times as seconds of the day). An
+older vault arrives with every week following its rule; `LegacyVaultTest` opens
+a schema 20 vault written by the unmodified build. The portable export is
+format 10: `"changes"` on each repeat, with `"week"`, `"skipped"` and, when
+moved, `"day"`, `"startTime"` and `"endTime"`. A file without them reads with
+no changed weeks.
+
+## Tasks as a database (schema 22, #68)
+
+Schema 22 gives every task a `Details` part and the vault a `TaskDatabase`
+part. Later database features (views, sub-tasks, projects, templates) add to
+these two rather than to `Task`'s and `State`'s own arguments.
+
+`Details` is a task's `Priority` (none, low, medium, high, urgent), the id of
+one of the owner's `StatusOption`s or null for its group's own status, the
+values of its properties keyed by property id, and `editedAt`. A value is one
+of `Value.Text` (text and links), `Value.Amount` (an exact decimal, compared
+with trailing zeros stripped, so 2.50 is 2.5), `Value.Choice`, `Value.Choices`,
+`Value.Day` or `Value.Tick`; an empty value is no entry, and an unticked
+checkbox is not stored. `editedAt` is a raw fact stamped by `Tracker.commit`
+on every task whose content changed — not its place in the manual order, not
+a task just added, and not a whole-vault import, which keeps the times it
+carries. A task from before it was kept reads its creation time.
+
+`TaskDatabase` holds the owner's `StatusOption`s (a name and colour inside one
+of the three `TaskStatus` groups; names unique, the groups' own "To do",
+"Doing" and "Done" included) and `Property` definitions: a name, a
+`PropertyType`, the options of a select or multi-select, the list it belongs to
+or null for every task, and whether it is hidden from the table. The two
+`PropertyType`s CREATED and EDITED hold no values; they read the task's times.
+State refuses a status in the wrong group, a value its property does not
+accept, a value for a property that is gone, and a property for a list that is
+gone. Deleting a list gives its properties to every task, and resetting lists
+does the same; resetting "Task properties and statuses" clears the database
+and the values and statuses on tasks, leaving priorities.
+
+In the vault each task's details follow its history: the priority's name, the
+status id (flagged), `editedAt` (flagged), and the values as a count of
+property id, a kind byte and that kind's payload, in id order. The statuses
+and properties follow the repeat changes of schema 21. `LegacyVaultTest`
+opens a schema 21 vault written by `610a59d`. The portable export is format
+11: `"statuses"` and `"properties"` at the top level, and on each task
+`"priority"`, `"statusId"`, `"editedAt"` and `"values"`, each value an object
+naming its kind (`"text"`, `"number"` as a string, `"option"`, `"options"`,
+`"date"`, `"checked"`). A file without them reads with no database.
+
+## A time of day on the due date (schema 23, #74)
+
+Schema 23 adds `dueTime` to a task's `Details`: a `LocalTime` to the minute,
+or null. It only means something beside a due date, so `Task` refuses a time
+without one, and clearing the date clears the time. A repeating task keeps its
+time as it moves on to its next date, and resetting task properties leaves due
+times, since, like the priority, the time is the task's own.
+
+In the vault the time follows a task's property values: a flag, then the
+second of the day. `LegacyVaultTest` opens a schema 22 vault written by
+`31c3fe1`. The portable export is format 12, with `"dueTime"` as `"HH:mm"` on
+a task that has one; a file without it reads with no times.
+
+Quick add (`application.QuickAdd`) is where most times come from. It reads a
+typed line into a title, due date and time, tags, a list, a priority and a
+repeat, and its rules are written at the top of the class: a bare weekday is
+the next one after today, "at 1" to "at 7" mean the afternoon, the first date
+and the first time win, and nothing is taken if it would leave no title.

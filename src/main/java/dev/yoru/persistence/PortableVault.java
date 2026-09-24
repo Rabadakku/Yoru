@@ -31,9 +31,14 @@ public final class PortableVault {
      * day a habit began. Format 7 gave a task a list of tags, "tagIds", where
      * it had room for one "tagId". Format 8 added task lists, "lists", and the
      * list each task is filed in, "listId". Format 9 added how a task repeats,
-     * "repeat", and the occurrences behind it, "history".
+     * "repeat", and the occurrences behind it, "history". Format 10 added the
+     * weeks of a repeat changed on their own, "changes" (#59). Format 11 made
+     * tasks a database (#68): "statuses" and "properties" at the top level,
+     * and on each task its "priority", own "statusId", "editedAt" and the
+     * "values" of its properties. Format 12 added the time a task is due on
+     * its due date, "dueTime" (#74).
      */
-    public static final int FORMAT = 9;
+    public static final int FORMAT = 12;
     /** A whole vault is far larger than the API response Json defaults to. */
     private static final int READ_LIMIT = 64_000_000;
 
@@ -58,6 +63,8 @@ public final class PortableVault {
         out.put("folders", state.notes().folders().stream().map(PortableVault::folder).toList());
         out.put("pages", state.notes().pages().stream().map(PortableVault::page).toList());
         out.put("anki", anki(state.anki()));
+        out.put("statuses", state.database().statuses().stream().map(PortableVault::statusOption).toList());
+        out.put("properties", state.database().properties().stream().map(PortableVault::property).toList());
         return Json.pretty(out);
     }
 
@@ -124,6 +131,20 @@ public final class PortableVault {
         m.put("dayOfWeek", r.dayOfWeek().name());
         m.put("startTime", r.startTime().toString());
         m.put("endTime", r.endTime().toString());
+        m.put("changes", r.changes().stream().map(PortableVault::repeatChange).toList());
+        return m;
+    }
+
+    /** One week changed on its own: moved, with its times, or skipped, with none. */
+    private static Map<String, Object> repeatChange(RepeatChange c) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("week", c.date().toString());
+        m.put("skipped", c.skipped());
+        if (!c.skipped()) {
+            m.put("day", c.movedTo().toString());
+            m.put("startTime", c.start().toString());
+            m.put("endTime", c.end().toString());
+        }
         return m;
     }
 
@@ -195,6 +216,54 @@ public final class PortableVault {
         m.put("order", t.order());
         m.put("plannedFor", t.plannedFor() == null ? null : t.plannedFor().toString());
         m.put("pageIds", t.pageIds().stream().map(UUID::toString).toList());
+        m.put("priority", t.priority().name());
+        m.put("statusId", t.statusId() == null ? null : t.statusId().toString());
+        m.put("editedAt", t.details().editedAt() == null ? null : t.details().editedAt().toString());
+        m.put("dueTime", t.dueTime() == null ? null : t.dueTime().toString());
+        var values = new LinkedHashMap<String, Object>();
+        for (var value : new TreeMap<>(t.values()).entrySet()) values.put(value.getKey().toString(), value(value.getValue()));
+        m.put("values", values);
+        return m;
+    }
+
+    /** One property value, named by its kind so the file reads without the property beside it. */
+    private static Map<String, Object> value(Value value) {
+        var m = new LinkedHashMap<String, Object>();
+        switch (value) {
+            case Value.Text t -> m.put("text", t.text());
+            // A string, not a JSON number: an exact decimal survives the round trip.
+            case Value.Amount a -> m.put("number", a.amount().toPlainString());
+            case Value.Choice c -> m.put("option", c.option().toString());
+            case Value.Choices cs -> m.put("options", cs.options().stream().map(UUID::toString).toList());
+            case Value.Day d -> m.put("date", d.date().toString());
+            case Value.Tick ignored -> m.put("checked", true);
+        }
+        return m;
+    }
+
+    private static Map<String, Object> statusOption(StatusOption s) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("id", s.id().toString());
+        m.put("name", s.name());
+        m.put("group", s.group().name());
+        m.put("colour", String.format("#%06X", s.colour()));
+        return m;
+    }
+
+    private static Map<String, Object> property(Property p) {
+        var m = new LinkedHashMap<String, Object>();
+        m.put("id", p.id().toString());
+        m.put("name", p.name());
+        m.put("type", p.type().name());
+        m.put("options", p.options().stream().map(o -> {
+            var option = new LinkedHashMap<String, Object>();
+            option.put("id", o.id().toString());
+            option.put("name", o.name());
+            option.put("colour", String.format("#%06X", o.colour()));
+            return option;
+        }).toList());
+        m.put("listId", p.listId() == null ? null : p.listId().toString());
+        m.put("hidden", p.hidden());
         return m;
     }
 
@@ -272,7 +341,10 @@ public final class PortableVault {
             // Before format 5 there was no stored integration: it reads as off.
             root.get("anki") == null ? Anki.off() : readAnki(Json.object(root.get("anki"))),
             // Before format 8 there were no lists: every task is in the Inbox.
-            root.get("lists") == null ? List.of() : list(root, "lists", PortableVault::readTaskList));
+            root.get("lists") == null ? List.of() : list(root, "lists", PortableVault::readTaskList),
+            // Before format 11 there were no statuses or properties of the owner's.
+            new TaskDatabase(root.get("statuses") == null ? List.of() : list(root, "statuses", PortableVault::readStatus),
+                root.get("properties") == null ? List.of() : list(root, "properties", PortableVault::readProperty)));
     }
 
     private static Anki readAnki(Map<?, ?> m) {
@@ -312,6 +384,15 @@ public final class PortableVault {
     private static RecurringBlock readRecurring(Map<?, ?> m) {
         return new RecurringBlock(id(m, "id"), id(m, "activityId"),
             enumeration(java.time.DayOfWeek.class, text(m, "dayOfWeek")),
+            localTime(m, "startTime"), localTime(m, "endTime"),
+            // Before format 10 no week was changed on its own.
+            m.get("changes") == null ? List.of() : list(m, "changes", PortableVault::readRepeatChange));
+    }
+
+    private static RepeatChange readRepeatChange(Map<?, ?> m) {
+        var week = java.time.LocalDate.parse(text(m, "week"));
+        if (bool(m, "skipped")) return RepeatChange.skip(week);
+        return new RepeatChange(week, java.time.LocalDate.parse(text(m, "day")),
             localTime(m, "startTime"), localTime(m, "endTime"));
     }
 
@@ -330,7 +411,47 @@ public final class PortableVault {
             // Before format 9 no task repeated.
             m.get("repeat") == null ? null : readRepeat(Json.object(m.get("repeat"))),
             m.get("history") == null ? List.of() : list(m, "history", h -> new Occurrence(
-                java.time.LocalDate.parse(text(h, "due")), instant(h, "at"), bool(h, "skipped"))));
+                java.time.LocalDate.parse(text(h, "due")), instant(h, "at"), bool(h, "skipped"))),
+            // Before format 11 a task had no database details.
+            readDetails(m));
+    }
+
+    private static Details readDetails(Map<?, ?> m) {
+        if (m.get("priority") == null && m.get("values") == null && m.get("statusId") == null && m.get("dueTime") == null) return Details.NONE;
+        var values = new HashMap<UUID, Value>();
+        if (m.get("values") != null) for (var entry : Json.object(m.get("values")).entrySet()) {
+            UUID property;
+            try { property = UUID.fromString(String.valueOf(entry.getKey())); }
+            catch (IllegalArgumentException e) { throw new IllegalArgumentException("A task's \"values\" names something that is not a property."); }
+            values.put(property, readValue(Json.object(entry.getValue())));
+        }
+        return new Details(m.get("priority") == null ? Priority.NONE : enumeration(Priority.class, text(m, "priority")),
+            optionalId(m, "statusId"), values, optionalInstant(m, "editedAt"),
+            // Before format 12 no task had a due time.
+            m.get("dueTime") == null ? null : localTime(m, "dueTime"));
+    }
+
+    private static Value readValue(Map<?, ?> m) {
+        if (m.get("text") != null) return new Value.Text(text(m, "text"));
+        if (m.get("number") != null) {
+            try { return new Value.Amount(new java.math.BigDecimal(text(m, "number"))); }
+            catch (NumberFormatException e) { throw new IllegalArgumentException("A property value is not a number."); }
+        }
+        if (m.get("option") != null) return new Value.Choice(id(m, "option"));
+        if (m.get("options") != null) return new Value.Choices(optionalIds(m, "options"));
+        if (m.get("date") != null) return new Value.Day(java.time.LocalDate.parse(text(m, "date")));
+        if (Boolean.TRUE.equals(m.get("checked"))) return new Value.Tick();
+        throw new IllegalArgumentException("A property value is none of text, number, option, options, date or checked.");
+    }
+
+    private static StatusOption readStatus(Map<?, ?> m) {
+        return new StatusOption(id(m, "id"), text(m, "name"), enumeration(TaskStatus.class, text(m, "group")), colour(text(m, "colour")));
+    }
+
+    private static Property readProperty(Map<?, ?> m) {
+        return new Property(id(m, "id"), text(m, "name"), enumeration(PropertyType.class, text(m, "type")),
+            m.get("options") == null ? List.of() : list(m, "options", o -> new PropertyOption(id(o, "id"), text(o, "name"), colour(text(o, "colour")))),
+            optionalId(m, "listId"), m.get("hidden") != null && bool(m, "hidden"));
     }
 
     /** A list of identifiers that older files leave out entirely. */

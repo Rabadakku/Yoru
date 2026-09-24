@@ -266,7 +266,13 @@ public final class Model {
      * has both a lecture every Monday and a one-off exam next Thursday.
      */
     public record RecurringBlock(UUID id, UUID activityId, DayOfWeek dayOfWeek,
-                                 LocalTime startTime, LocalTime endTime) {
+                                 LocalTime startTime, LocalTime endTime, List<RepeatChange> changes) {
+        /** The most weeks one rule keeps changed on their own: twenty years of them. */
+        public static final int MAX_CHANGES = 1_040;
+        /** A rule no week of which has been changed on its own. */
+        public RecurringBlock(UUID id, UUID activityId, DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime) {
+            this(id, activityId, dayOfWeek, startTime, endTime, List.of());
+        }
         public RecurringBlock {
             Objects.requireNonNull(id);
             Objects.requireNonNull(activityId);
@@ -275,7 +281,71 @@ public final class Model {
             Objects.requireNonNull(endTime);
             if(!endTime.isAfter(startTime))
                 throw new IllegalArgumentException("A repeating block must end after it starts, on the same day.");
+            if(changes.size() > MAX_CHANGES) throw new IllegalArgumentException("Vault record limit reached.");
+            var byDate = new TreeMap<LocalDate, RepeatChange>();
+            for(var change : changes) {
+                Objects.requireNonNull(change);
+                // A change is to one of this rule's own weeks: a Monday rule has
+                // nothing on a Tuesday to skip or move.
+                if(change.date().getDayOfWeek() != dayOfWeek)
+                    throw new IllegalArgumentException("A repeat on " + day(dayOfWeek)
+                        + " has no block on " + change.date() + " to change.");
+                if(byDate.put(change.date(), change) != null)
+                    throw new IllegalArgumentException("That week is already changed on its own.");
+            }
+            changes = List.copyOf(byDate.values());
         }
+        /** The change to the week holding this date's block, or null when it follows the rule. */
+        public RepeatChange changeOn(LocalDate date) {
+            for(var change : changes) if(change.date().equals(date)) return change;
+            return null;
+        }
+        /** The same rule, its changed weeks and all, under another activity. */
+        public RecurringBlock withActivity(UUID next) {
+            return new RecurringBlock(id, next, dayOfWeek, startTime, endTime, changes);
+        }
+        /** The same rule with one week's change added, replaced or, given null, taken away. */
+        public RecurringBlock withChange(LocalDate date, RepeatChange change) {
+            var next = new ArrayList<RepeatChange>();
+            for(var c : changes) if(!c.date().equals(date)) next.add(c);
+            if(change != null) next.add(change);
+            return new RecurringBlock(id, activityId, dayOfWeek, startTime, endTime, next);
+        }
+        private static String day(DayOfWeek day) {
+            return day.getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH);
+        }
+    }
+
+    /**
+     * One week of a repeat that does not follow the rule (#59): skipped, or held
+     * at another time — and possibly another day — that week only.
+     *
+     * Keyed by the date the rule would have put the block on, so the rule and
+     * every other week stay exactly as they were, and taking the change away
+     * puts that week back where the rule says. A skipped week has no times.
+     *
+     * @param date    the day the rule puts this week's block on.
+     * @param movedTo the day it is held instead, or null when skipped.
+     */
+    public record RepeatChange(LocalDate date, LocalDate movedTo, LocalTime start, LocalTime end) {
+        /** The furthest a week's block may move from its own day: within the same fortnight either way. */
+        public static final int MAX_MOVE_DAYS = 6;
+        public RepeatChange {
+            Objects.requireNonNull(date);
+            if(movedTo == null) {
+                if(start != null || end != null) throw new IllegalArgumentException("A skipped week has no times.");
+            } else {
+                Objects.requireNonNull(start);
+                Objects.requireNonNull(end);
+                if(!end.isAfter(start))
+                    throw new IllegalArgumentException("This week's block must end after it starts, on the same day.");
+                if(Math.abs(movedTo.toEpochDay() - date.toEpochDay()) > MAX_MOVE_DAYS)
+                    throw new IllegalArgumentException("Move one week's block within six days of its own day;"
+                        + " further than that, skip it and plan a block.");
+            }
+        }
+        public static RepeatChange skip(LocalDate date) { return new RepeatChange(date, null, null, null); }
+        public boolean skipped() { return movedTo == null; }
     }
 
     /**
@@ -289,7 +359,8 @@ public final class Model {
      */
     public record Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
                        LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
-                       LocalDate plannedFor, List<UUID> pageIds, UUID listId, Repeat repeat, List<Occurrence> history) {
+                       LocalDate plannedFor, List<UUID> pageIds, UUID listId, Repeat repeat, List<Occurrence> history,
+                       Details details) {
         /** The most occurrences a repeating task keeps behind it: years of a daily task. */
         public static final int MAX_HISTORY = 10_000;
         /** A task in the Inbox: every task before lists (#56), and every one made outside a list. */
@@ -303,6 +374,12 @@ public final class Model {
                     LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
                     LocalDate plannedFor, List<UUID> pageIds, UUID listId) {
             this(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,null,List.of());
+        }
+        /** A task with none of the database's details (#68): every task before them, and every new one until it is given some. */
+        public Task(UUID id, UUID activityId, List<UUID> tagIds, String title, String notes,
+                    LocalDate due, TaskStatus status, String source, Instant createdAt, int order,
+                    LocalDate plannedFor, List<UUID> pageIds, UUID listId, Repeat repeat, List<Occurrence> history) {
+            this(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history,Details.NONE);
         }
         /** The most pages one task may link to. */
         public static final int MAX_PAGES = 100;
@@ -347,7 +424,21 @@ public final class Model {
             if (history.size() > MAX_HISTORY) throw new IllegalArgumentException("History limit reached.");
             if (repeat != null && due == null) throw new IllegalArgumentException("A repeating task needs a due date.");
             if (pageIds.size() > MAX_PAGES) throw new IllegalArgumentException("A task can link to at most " + MAX_PAGES + " pages.");
+            details = details == null ? Details.NONE : details;
+            if (details.dueTime() != null && due == null) throw new IllegalArgumentException("A due time needs a due date.");
         }
+        /** The time of day it is due, or null for any time on its due date (#74). */
+        public LocalTime dueTime() { return details.dueTime(); }
+        public Priority priority() { return details.priority(); }
+        public UUID statusId() { return details.statusId(); }
+        public Map<UUID, Value> values() { return details.values(); }
+        /** When it last changed, or when it was made for a task from before that was kept. */
+        public Instant edited() { return details.editedAt() == null ? createdAt : details.editedAt(); }
+        public Task withDetails(Details next) {
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history,next);
+        }
+        public Task withPriority(Priority next) { return withDetails(details.withPriority(next)); }
+        public Task withValue(UUID property, Value value) { return withDetails(details.withValue(property, value)); }
         public boolean done() { return status==TaskStatus.DONE; }
         /**
          * Whether another task is the same entry: same title, same deadline, the
@@ -380,30 +471,36 @@ public final class Model {
         // constructor, which is where a forgotten field used to go missing.
         /** Both task dates changed, with every unrelated property preserved. */
         public Task withDates(LocalDate deadline, LocalDate planned) {
-            return new Task(id,activityId,tagIds,title,notes,deadline,status,source,createdAt,order,planned,pageIds,listId,repeat,history);
+            // No deadline, no time on it (#74).
+            var kept=deadline==null?details.withDueTime(null):details;
+            return new Task(id,activityId,tagIds,title,notes,deadline,status,source,createdAt,order,planned,pageIds,listId,repeat,history,kept);
         }
+        /** Another group; the owner's status inside the old one does not come along (#68). */
         public Task withStatus(TaskStatus next) {
-            return new Task(id,activityId,tagIds,title,notes,due,next,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
+            var kept=next==status?details:details.withStatus(null);
+            return new Task(id,activityId,tagIds,title,notes,due,next,source,createdAt,order,plannedFor,pageIds,listId,repeat,history,kept);
         }
         public Task withActivity(UUID next) {
-            return new Task(id,next,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
+            return new Task(id,next,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history,details);
         }
         public Task withTags(List<UUID> next) {
-            return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history);
+            return new Task(id,activityId,next,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,repeat,history,details);
         }
         /** The same task filed in another list, or in the Inbox for null (#56). */
         public Task withList(UUID next) {
-            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,next,repeat,history);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,next,repeat,history,details);
         }
         /** The same task with another rule, or none (#57); its history stays. */
         public Task withRepeat(Repeat next) {
-            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,next,history);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,pageIds,listId,next,history,details);
         }
         /** The same task moved on: the occurrence behind it recorded, the next one due. */
         public Task advanced(Occurrence behind, LocalDate nextDue, TaskStatus nextStatus) {
             var kept = new ArrayList<>(history);
             kept.add(behind);
-            return new Task(id,activityId,tagIds,title,notes,nextDue,nextStatus,source,createdAt,order,null,pageIds,listId,repeat,kept);
+            // The next occurrence starts at its group's own status (#68).
+            return new Task(id,activityId,tagIds,title,notes,nextDue,nextStatus,source,createdAt,order,null,pageIds,listId,repeat,kept,
+                details.withStatus(null));
         }
         public boolean repeats() { return repeat != null; }
         /** The same task without one tag, which is what deleting a tag does to it. */
@@ -411,10 +508,250 @@ public final class Model {
             return withTags(tagIds.stream().filter(t -> !t.equals(tag)).toList());
         }
         public Task withOrder(int next) {
-            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,next,plannedFor,pageIds,listId,repeat,history);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,next,plannedFor,pageIds,listId,repeat,history,details);
         }
         public Task withPages(List<UUID> next) {
-            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,next,listId,repeat,history);
+            return new Task(id,activityId,tagIds,title,notes,due,status,source,createdAt,order,plannedFor,next,listId,repeat,history,details);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Tasks as a database (#68): priority, the owner's own statuses, and
+    // properties of their own, as Notion keeps them.
+
+    /** How much a task matters, as a flag on its row. NONE is no flag at all. */
+    public enum Priority {
+        NONE("No priority"), LOW("Low"), MEDIUM("Medium"), HIGH("High"), URGENT("Urgent");
+        public final String label;
+        Priority(String label) { this.label = label; }
+        @Override public String toString() { return label; }
+    }
+
+    /**
+     * What a task carries beyond its fixed fields (#68): its priority, which of
+     * the owner's statuses it has inside its group, the values of the
+     * properties the owner defined, and when it was last changed.
+     *
+     * One part rather than four more constructor arguments: later database
+     * features add to this, not to every place a task is rebuilt.
+     *
+     * @param statusId one of the vault's {@link StatusOption}s, in the group the
+     *                 task's {@link TaskStatus} names, or null for the group's
+     *                 own status ("To do", "Doing", "Done").
+     * @param editedAt when the task last changed, stamped by the tracker; null
+     *                 for a task from before this was kept, which reads as its
+     *                 creation.
+     * @param dueTime  the time of day it is due, on its due date, or null for
+     *                 any time that day (#74).
+     */
+    public record Details(Priority priority, UUID statusId, Map<UUID, Value> values, Instant editedAt, LocalTime dueTime) {
+        /** The most property values one task keeps. */
+        public static final int MAX_VALUES = 200;
+        public static final Details NONE = new Details(Priority.NONE, null, Map.of(), null, null);
+        /** Details with no due time: every task before #74. */
+        public Details(Priority priority, UUID statusId, Map<UUID, Value> values, Instant editedAt) {
+            this(priority, statusId, values, editedAt, null);
+        }
+        public Details {
+            priority = priority == null ? Priority.NONE : priority;
+            values = values == null ? Map.of() : Map.copyOf(values);
+            if (values.size() > MAX_VALUES) throw new IllegalArgumentException("A task can hold at most " + MAX_VALUES + " property values.");
+            for (var value : values.values()) Objects.requireNonNull(value);
+            if (editedAt != null) requireTime(editedAt);
+        }
+        public Details withPriority(Priority next) { return new Details(next, statusId, values, editedAt, dueTime); }
+        public Details withStatus(UUID next) { return new Details(priority, next, values, editedAt, dueTime); }
+        public Details withEdited(Instant next) { return new Details(priority, statusId, values, next, dueTime); }
+        /** Due at this time on the due date, or any time that day with null. Seconds are not kept. */
+        public Details withDueTime(LocalTime next) {
+            return new Details(priority, statusId, values, editedAt, next == null ? null : next.withSecond(0).withNano(0));
+        }
+        /** The same details with one property's value set, or cleared by null. */
+        public Details withValue(UUID property, Value value) {
+            var next = new HashMap<>(values);
+            if (value == null) next.remove(Objects.requireNonNull(property)); else next.put(Objects.requireNonNull(property), value);
+            return new Details(priority, statusId, next, editedAt, dueTime);
+        }
+    }
+
+    /**
+     * One property value on one task. An empty value is no value: a task
+     * without one simply has no entry, and an unticked checkbox is not stored.
+     */
+    public sealed interface Value permits Value.Text, Value.Amount, Value.Choice, Value.Choices, Value.Day, Value.Tick {
+        /** Text, or a link: one line or several, never blank. */
+        record Text(String text) implements Value {
+            public static final int MAX = 2_000;
+            public Text {
+                text = Objects.requireNonNull(text).strip();
+                if (text.isEmpty() || text.length() > MAX) throw new IllegalArgumentException("Use text of 1–" + MAX + " characters.");
+            }
+        }
+        /** A number, kept exactly as typed rather than as a binary fraction. */
+        record Amount(java.math.BigDecimal amount) implements Value {
+            private static final java.math.BigDecimal LIMIT = new java.math.BigDecimal("1e15");
+            public Amount {
+                Objects.requireNonNull(amount);
+                if (amount.abs().compareTo(LIMIT) >= 0 || amount.stripTrailingZeros().scale() > 10)
+                    throw new IllegalArgumentException("Use a number under a thousand trillion, with at most ten decimals.");
+                // 2.50 and 2.5 are the same number, and must compare as one.
+                amount = amount.signum() == 0 ? java.math.BigDecimal.ZERO : amount.stripTrailingZeros();
+            }
+        }
+        /** One option of a select property. */
+        record Choice(UUID option) implements Value {
+            public Choice { Objects.requireNonNull(option); }
+        }
+        /** Some options of a multi-select property, in the order they were chosen. */
+        record Choices(List<UUID> options) implements Value {
+            public Choices {
+                options = List.copyOf(new LinkedHashSet<>(options));
+                if (options.isEmpty() || options.size() > Property.MAX_OPTIONS)
+                    throw new IllegalArgumentException("Choose between one and " + Property.MAX_OPTIONS + " options.");
+            }
+        }
+        /** A date. */
+        record Day(LocalDate date) implements Value {
+            public Day {
+                Objects.requireNonNull(date);
+                if (date.getYear() < 1900 || date.getYear() > 2199) throw new IllegalArgumentException("Choose a date between 1900 and 2199.");
+            }
+        }
+        /** A ticked checkbox. */
+        record Tick() implements Value { }
+    }
+
+    /** The kinds of property a task can have. The last two are read from the task, never typed in. */
+    public enum PropertyType {
+        TEXT("Text"), NUMBER("Number"), SELECT("Select"), MULTI_SELECT("Multi-select"), DATE("Date"),
+        CHECKBOX("Checkbox"), URL("URL"), CREATED("Created time"), EDITED("Edited time");
+        public final String label;
+        PropertyType(String label) { this.label = label; }
+        @Override public String toString() { return label; }
+        /** Whether a task holds a value for it, rather than it being read from the task. */
+        public boolean stored() { return this != CREATED && this != EDITED; }
+        public boolean hasOptions() { return this == SELECT || this == MULTI_SELECT; }
+    }
+
+    /** One choice of a select or multi-select property. Colour is 24-bit RGB. */
+    public record PropertyOption(UUID id, String name, int colour) {
+        public PropertyOption {
+            Objects.requireNonNull(id);
+            // As long as a tag's name, which is how an option is drawn.
+            name = requireName(name, 40, "option name");
+            requireColour(colour);
+        }
+    }
+
+    /**
+     * A property the owner defined for tasks (#68): its name, its type, the
+     * options a select offers, and whether it belongs to one list or to every
+     * task. Its place among the others is its place in the vault's list.
+     *
+     * @param listId the list whose tasks show it, or null for every task.
+     * @param hidden kept out of the table's columns; still on the task.
+     */
+    public record Property(UUID id, String name, PropertyType type, List<PropertyOption> options, UUID listId, boolean hidden) {
+        public static final int MAX_OPTIONS = 100;
+        public Property {
+            Objects.requireNonNull(id);
+            name = requireName(name, 60, "property name");
+            Objects.requireNonNull(type);
+            options = options == null ? List.of() : List.copyOf(options);
+            if (!type.hasOptions() && !options.isEmpty()) throw new IllegalArgumentException("Only a select property has options.");
+            if (options.size() > MAX_OPTIONS) throw new IllegalArgumentException("A property can offer at most " + MAX_OPTIONS + " options.");
+            var ids = new HashSet<UUID>();
+            var names = new HashSet<String>();
+            for (var option : options) {
+                if (!ids.add(option.id())) throw new IllegalArgumentException("Duplicate option.");
+                if (!names.add(option.name().toLowerCase(Locale.ROOT)))
+                    throw new IllegalArgumentException("\"" + name + "\" already offers \"" + option.name() + "\".");
+            }
+        }
+        /** Whether a task may hold this value for this property. */
+        public boolean accepts(Value value) {
+            return switch (type) {
+                case TEXT -> value instanceof Value.Text;
+                case URL -> value instanceof Value.Text text && !text.text().contains("\n") && text.text().chars().noneMatch(Character::isWhitespace);
+                case NUMBER -> value instanceof Value.Amount;
+                case SELECT -> value instanceof Value.Choice choice && option(choice.option()) != null;
+                case MULTI_SELECT -> value instanceof Value.Choices choices && choices.options().stream().allMatch(o -> option(o) != null);
+                case DATE -> value instanceof Value.Day;
+                case CHECKBOX -> value instanceof Value.Tick;
+                case CREATED, EDITED -> false;
+            };
+        }
+        public PropertyOption option(UUID id) {
+            for (var option : options) if (option.id().equals(id)) return option;
+            return null;
+        }
+        /** Whether it shows on a task filed in this list, or in the Inbox for null. */
+        public boolean appliesTo(UUID taskList) { return listId == null || listId.equals(taskList); }
+        public Property withName(String next) { return new Property(id, next, type, options, listId, hidden); }
+        public Property withOptions(List<PropertyOption> next) { return new Property(id, name, type, next, listId, hidden); }
+        public Property withList(UUID next) { return new Property(id, name, type, options, next, hidden); }
+        public Property withHidden(boolean next) { return new Property(id, name, type, options, listId, next); }
+        public Property withType(PropertyType next, List<PropertyOption> nextOptions) { return new Property(id, name, next, nextOptions, listId, hidden); }
+    }
+
+    /**
+     * One of the owner's own statuses (#68), inside one of the three groups
+     * every task board knows: "Waiting" inside To do, "Review" inside Doing.
+     * The group's own status ("To do", "Doing", "Done") is always there too,
+     * as the task with no status of its own.
+     */
+    public record StatusOption(UUID id, String name, TaskStatus group, int colour) {
+        public StatusOption {
+            Objects.requireNonNull(id);
+            name = requireName(name, 40, "status name");
+            Objects.requireNonNull(group);
+            requireColour(colour);
+        }
+        public StatusOption withName(String next) { return new StatusOption(id, next, group, colour); }
+        public StatusOption withColour(int next) { return new StatusOption(id, name, group, next); }
+    }
+
+    /**
+     * How the owner has set up their tasks as a database (#68): their own
+     * statuses and the properties tasks carry. Views, templates and projects
+     * join this rather than each becoming another part of the vault's state.
+     */
+    public record TaskDatabase(List<StatusOption> statuses, List<Property> properties) {
+        public static final TaskDatabase EMPTY = new TaskDatabase(List.of(), List.of());
+        public static final int MAX_STATUSES = 60, MAX_PROPERTIES = 200;
+        public TaskDatabase {
+            statuses = statuses == null ? List.of() : List.copyOf(statuses);
+            properties = properties == null ? List.of() : List.copyOf(properties);
+            if (statuses.size() > MAX_STATUSES) throw new IllegalArgumentException("A vault can keep at most " + MAX_STATUSES + " statuses.");
+            if (properties.size() > MAX_PROPERTIES) throw new IllegalArgumentException("A vault can keep at most " + MAX_PROPERTIES + " properties.");
+            var ids = new HashSet<UUID>();
+            var names = new HashSet<String>();
+            for (var group : TaskStatus.values()) names.add(group.label.toLowerCase(Locale.ROOT));
+            for (var status : statuses) {
+                if (!ids.add(status.id())) throw new IllegalArgumentException("Duplicate status.");
+                if (!names.add(status.name().toLowerCase(Locale.ROOT)))
+                    throw new IllegalArgumentException("Another status is already called \"" + status.name() + "\".");
+            }
+            var propertyNames = new HashSet<String>();
+            for (var property : properties) {
+                if (!ids.add(property.id())) throw new IllegalArgumentException("Duplicate property.");
+                if (!propertyNames.add(property.name().toLowerCase(Locale.ROOT)))
+                    throw new IllegalArgumentException("Another property is already called \"" + property.name() + "\".");
+            }
+        }
+        public StatusOption status(UUID id) {
+            for (var status : statuses) if (status.id().equals(id)) return status;
+            return null;
+        }
+        public Property property(UUID id) {
+            for (var property : properties) if (property.id().equals(id)) return property;
+            return null;
+        }
+        public TaskDatabase withStatuses(List<StatusOption> next) { return new TaskDatabase(next, properties); }
+        public TaskDatabase withProperties(List<Property> next) { return new TaskDatabase(statuses, next); }
+        /** What a task in this group can be set to: the group's own status first, then the owner's, in order. */
+        public List<StatusOption> statusesIn(TaskStatus group) {
+            return statuses.stream().filter(s -> s.group() == group).toList();
         }
     }
 
@@ -651,12 +988,13 @@ public final class Model {
      */
     public record State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks,
                         List<RecurringBlock> recurring, List<Task> tasks, List<Habit> habits, List<Tag> tags,
-                        Settings settings, Notes notes, Anki anki, List<TaskList> lists) {
+                        Settings settings, Notes notes, Anki anki, List<TaskList> lists, TaskDatabase database) {
         /** The time-tracking core alone, with everything else empty. */
         public State(List<Activity> activities, List<Session> sessions, List<ScheduleBlock> blocks) {
             this(activities, sessions, blocks, List.of(), List.of(), List.of(), List.of(), Settings.defaults(),
-                Notes.empty(), Anki.off(), List.of());
+                Notes.empty(), Anki.off(), List.of(), TaskDatabase.EMPTY);
         }
+
         public State {
             activities = List.copyOf(activities);
             sessions = List.copyOf(sessions);
@@ -669,6 +1007,7 @@ public final class Model {
             Objects.requireNonNull(settings);
             Objects.requireNonNull(anki);
             Objects.requireNonNull(notes);
+            database = database == null ? TaskDatabase.EMPTY : database;
             if(habits.stream().map(Habit::id).distinct().count()!=habits.size()) throw new IllegalArgumentException("Duplicate habit.");
             if(tags.stream().map(Tag::id).distinct().count()!=tags.size()) throw new IllegalArgumentException("Duplicate tag.");
             if (recurring.size()>1_000) throw new IllegalArgumentException("Vault record limit reached.");
@@ -690,6 +1029,7 @@ public final class Model {
                     .map(r -> new Interval(r.id(),
                         LocalDate.EPOCH.atTime(r.startTime()).toInstant(java.time.ZoneOffset.UTC),
                         LocalDate.EPOCH.atTime(r.endTime()).toInstant(java.time.ZoneOffset.UTC))).toList());
+            validateChangedWeeks(recurring);
             validateIntervals(sessions.stream().map(x -> new Interval(x.id(),x.start(),x.end())).toList());
             validateIntervals(blocks.stream().map(x -> new Interval(x.id(),x.start(),x.end())).toList());
             // Lists (#56): each once, each name once whatever its case, since
@@ -716,6 +1056,60 @@ public final class Model {
             for (var p : notes.pages()) pageIds.add(p.id());
             for (var t : tasks) for (var page : t.pageIds())
                 if (!pageIds.contains(page)) throw new IllegalArgumentException("A task links to a page that does not exist.");
+            // The database (#68): a property belongs to a list that exists, a
+            // task's own status is one of the vault's and in the task's group,
+            // and every value is one its property accepts.
+            for (var property : database.properties())
+                if (property.listId() != null && !listIds.contains(property.listId()))
+                    throw new IllegalArgumentException("A property belongs to a list that does not exist.");
+            for (var t : tasks) {
+                if (t.statusId() != null) {
+                    var own = database.status(t.statusId());
+                    if (own == null) throw new IllegalArgumentException("A task has a status that does not exist.");
+                    if (own.group() != t.status())
+                        throw new IllegalArgumentException("\"" + own.name() + "\" is not a " + t.status().label + " status.");
+                }
+                for (var value : t.values().entrySet()) {
+                    var property = database.property(value.getKey());
+                    if (property == null) throw new IllegalArgumentException("A task has a value for a property that does not exist.");
+                    if (!property.accepts(value.getValue()))
+                        throw new IllegalArgumentException("\"" + property.name() + "\" cannot hold that value.");
+                }
+            }
+        }
+        /**
+         * The days a changed week touches, checked the way the rules are (#59).
+         *
+         * The rules cannot clash on a weekday, but one week's block held at
+         * another time, or on another day, can land on a block that follows its
+         * rule. So every day a change reaches is laid out as it will be drawn —
+         * the rules' own blocks less the weeks moved away or skipped, plus the
+         * blocks moved onto it — and refused where two overlap, as a clash on
+         * the template is.
+         */
+        private static void validateChangedWeeks(List<RecurringBlock> recurring) {
+            int total = 0;
+            var days = new TreeSet<LocalDate>();
+            for (var r : recurring) {
+                total += r.changes().size();
+                for (var c : r.changes()) { days.add(c.date()); if (!c.skipped()) days.add(c.movedTo()); }
+            }
+            if (total > 10_000) throw new IllegalArgumentException("Vault record limit reached.");
+            for (var day : days) {
+                var held = new ArrayList<Interval>();
+                for (var r : recurring) {
+                    if (r.dayOfWeek() == day.getDayOfWeek() && r.changeOn(day) == null)
+                        held.add(onDay(r.startTime(), r.endTime()));
+                    for (var c : r.changes())
+                        if (!c.skipped() && c.movedTo().equals(day)) held.add(onDay(c.start(), c.end()));
+                }
+                validateIntervals(held);
+            }
+        }
+        /** A span of one day. Its own id: two weeks of one rule can both be moved onto the same day. */
+        private static Interval onDay(LocalTime start, LocalTime end) {
+            return new Interval(UUID.randomUUID(), LocalDate.EPOCH.atTime(start).toInstant(java.time.ZoneOffset.UTC),
+                LocalDate.EPOCH.atTime(end).toInstant(java.time.ZoneOffset.UTC));
         }
         /**
          * Removes one activity, keeping or deleting the time recorded under it.
@@ -767,24 +1161,27 @@ public final class Model {
             var nextBlocks = blocks.stream().map(b -> b.activityId().equals(activityId)
                 ? new ScheduleBlock(b.id(), replacement, b.start(), b.end()) : b).toList();
             var nextRepeats = recurring.stream().map(r -> r.activityId().equals(activityId)
-                ? new RecurringBlock(r.id(), replacement, r.dayOfWeek(), r.startTime(), r.endTime()) : r).toList();
+                ? r.withActivity(replacement) : r).toList();
             var nextTasks = tasks.stream().map(t -> activityId.equals(t.activityId())
                 ? t.withActivity(replacement) : t).toList();
             return new State(kept, nextSessions, nextBlocks, nextRepeats, nextTasks, habits, tags,
-                settings, notes, anki, lists);
+                settings, notes, anki, lists, database);
         }
 
         public State withCore(List<Activity> a, List<Session> s, List<ScheduleBlock> b) {
-            return new State(a,s,b,recurring,tasks,habits,tags,settings,notes,anki,lists);
+            return new State(a,s,b,recurring,tasks,habits,tags,settings,notes,anki,lists,database);
         }
-        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,notes,anki,lists); }
-        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,notes,anki,lists); }
-        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,notes,anki,lists); }
-        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,notes,anki,lists); }
-        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,notes,anki,lists); }
-        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,anki,lists); }
-        public State withAnki(Anki next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,next,lists); }
-        public State withLists(List<TaskList> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,anki,next); }
+        public State withTasks(List<Task> next) { return new State(activities,sessions,blocks,recurring,next,habits,tags,settings,notes,anki,lists,database); }
+        public State withHabits(List<Habit> next) { return new State(activities,sessions,blocks,recurring,tasks,next,tags,settings,notes,anki,lists,database); }
+        public State withTags(List<Tag> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,next,settings,notes,anki,lists,database); }
+        public State withSettings(Settings next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,next,notes,anki,lists,database); }
+        public State withRecurring(List<RecurringBlock> next) { return new State(activities,sessions,blocks,next,tasks,habits,tags,settings,notes,anki,lists,database); }
+        public State withNotes(Notes next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,next,anki,lists,database); }
+        public State withAnki(Anki next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,next,lists,database); }
+        public State withLists(List<TaskList> next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,anki,next,database); }
+        /** Tasks and the database at once, for a change neither is valid without the other: a property's new type and its converted values. */
+        public State withTasks(List<Task> nextTasks, TaskDatabase nextDatabase) { return new State(activities,sessions,blocks,recurring,nextTasks,habits,tags,settings,notes,anki,lists,nextDatabase); }
+        public State withDatabase(TaskDatabase next) { return new State(activities,sessions,blocks,recurring,tasks,habits,tags,settings,notes,anki,lists,next); }
         public static State empty() { return new State(List.of(), List.of(), List.of()); }
     }
 }

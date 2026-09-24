@@ -1335,6 +1335,15 @@ final class Theme {
         public boolean getScrollableTracksViewportHeight() { return false; }
     }
 
+    /**
+     * A control with the name tests and CrudCoverageTest find it by (#59). The
+     * name is never shown; the accessible name, which is, stays the button's own.
+     */
+    static <T extends JComponent> T named(T control, String name) {
+        control.setName(name);
+        return control;
+    }
+
     static JPanel stack() {
         var p=new VerticalPanel();
         p.setAlignmentX(0);
