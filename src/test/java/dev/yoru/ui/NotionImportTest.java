@@ -48,10 +48,37 @@ public final class NotionImportTest {
 
     public static void main(String[] args)throws Exception {
         SwingUtilities.invokeAndWait(()->{
-            try { for(var theme:ThemeId.values()) one(theme); }
+            try { for(var theme:ThemeId.values()) one(theme); properties(); }
             catch(Exception e){throw new RuntimeException(e);}
         });
-        System.out.println("PASS: "+checks+" Notion import panel checks (auto-map, remap, preview, refusals, one write)");
+        System.out.println("PASS: "+checks+" Notion import panel checks (auto-map, remap, preview, refusals, one write, properties)");
+    }
+
+    /** The columns no role took, kept as properties when ticked (#68), and the priority role. */
+    private static void properties() throws Exception {
+        Theme.apply(ThemeId.MIDNIGHT);
+        var repo=new Memory();
+        var tracker=new Tracker(repo,Clock.systemUTC());
+        var form=new NotionImportPanel(tracker);
+        form.load(("Name,Priority,Effort,Difficulty,Created time\nRead it,High,2,Easy,x\nWrite it,Low,3,Easy,y\n").getBytes(),"Invented.csv");
+        check(((JComboBox<?>)find(form,"notion.priority")).getSelectedItem().equals("Priority"),"The priority column is chosen for its role");
+        var effort=(JCheckBox)find(form,"notion.property.Effort");
+        var difficulty=(JCheckBox)find(form,"notion.property.Difficulty");
+        var created=(JCheckBox)find(form,"notion.property.Created time");
+        check(effort.isSelected()&&effort.getText().equals("Effort · Number")&&difficulty.getText().equals("Difficulty · Select"),
+            "Each other column is offered as a property with the type its cells read as, ticked");
+        check(!created.isSelected(),"Notion's created time is offered but not ticked");
+        check(find(form,"notion.property.Name")==null,"A column a role took is not offered again");
+        difficulty.doClick();
+        check(form.mapping().properties().equals(java.util.List.of("Effort")),"Unticking a column leaves it out");
+        check(((JTextArea)find(form,"notion.message")).getText().contains("1 column kept as a property"),"The summary says how many are kept");
+        var batch=form.batch();
+        check(batch.database().properties().size()==1&&batch.database().properties().getFirst().name().equals("Effort"),
+            "The batch carries the property the import makes");
+        check(batch.tasks().getFirst().priority()==Priority.HIGH,"and the tasks their priorities");
+        tracker.importTasks(batch.newTags(),batch.tasks(),batch.database());
+        check(tracker.state().database().properties().size()==1&&tracker.state().tasks().getFirst().values().size()==1,
+            "Importing makes the property and its values in the one write");
     }
 
     private static void one(ThemeId theme) throws Exception {
@@ -85,7 +112,7 @@ public final class NotionImportTest {
         check(String.valueOf(rows.getValueAt(0,3)).equals("TODO"),"The preview shows the status");
         check(String.valueOf(rows.getValueAt(0,4)).equals("Biology"),"The preview shows the tag the class becomes");
         check(String.valueOf(rows.getValueAt(0,5)).contains("Read pages 1-30"),"The preview shows the page text becoming notes");
-        check(String.valueOf(rows.getValueAt(3,4)).equals("Biology (+1 more)"),"A second class is shown as not imported, since a task holds one");
+        check(String.valueOf(rows.getValueAt(3,4)).equals("Biology, Mathematics"),"A row with two classes shows both, since a task keeps both (#66)");
         check(Boolean.TRUE.equals(rows.getValueAt(0,0)),"Rows start ticked");
         check(message.getText().contains("5 of 5 rows ready")&&message.getText().contains("2 with page notes")
             &&message.getText().contains("4 new tags"),"The summary counts what the import would do: "+message.getText());

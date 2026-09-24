@@ -622,7 +622,8 @@ public final class Model {
     public record PropertyOption(UUID id, String name, int colour) {
         public PropertyOption {
             Objects.requireNonNull(id);
-            name = requireName(name, 60, "option name");
+            // As long as a tag's name, which is how an option is drawn.
+            name = requireName(name, 40, "option name");
             requireColour(colour);
         }
     }

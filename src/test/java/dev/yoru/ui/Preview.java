@@ -229,6 +229,38 @@ public final class Preview {
             else if (!task.title().equals("Ask about open lab hours")) tracker.moveTask(task.id(), classes.id());
         }
 
+        // Tasks as a database (#68): two statuses of the owner's, a priority on
+        // a few tasks, and properties the table shows as columns, one of them
+        // kept for the Classes list.
+        var props = tracker.properties();
+        var waiting = props.addStatus("Waiting", TaskStatus.TODO);
+        props.addStatus("Review", TaskStatus.DOING);
+        var effort = props.addProperty("Effort", PropertyType.NUMBER, null);
+        var difficulty = props.addProperty("Difficulty", PropertyType.SELECT, null);
+        var easy = props.addOption(difficulty.id(), "Easy");
+        var hard = props.addOption(difficulty.id(), "Hard");
+        var graded = props.addProperty("Graded", PropertyType.CHECKBOX, classes.id());
+        props.addProperty("Syllabus link", PropertyType.URL, null);
+        for (var task : tracker.state().tasks()) {
+            switch (task.title()) {
+                case "Finish lab 3" -> {
+                    props.setPriority(task.id(), Priority.URGENT);
+                    props.setValue(task.id(), effort.id(), new Value.Amount(java.math.BigDecimal.valueOf(3)));
+                    props.setValue(task.id(), difficulty.id(), new Value.Choice(hard.id()));
+                    props.setValue(task.id(), graded.id(), new Value.Tick());
+                }
+                case "Read chapter 4" -> {
+                    props.setPriority(task.id(), Priority.HIGH);
+                    props.setValue(task.id(), effort.id(), new Value.Amount(new java.math.BigDecimal("1.5")));
+                    props.setValue(task.id(), difficulty.id(), new Value.Choice(easy.id()));
+                }
+                case "Ask about open lab hours" -> props.setStatus(task.id(),
+                    new dev.yoru.application.TaskProperties.StatusChoice(TaskStatus.TODO, waiting), zone);
+                case "Practice quiz" -> props.setPriority(task.id(), Priority.LOW);
+                default -> { }
+            }
+        }
+
         var folder = tracker.pages().createFolder(null, "Notebook");
         var note = tracker.pages().createPage(folder.id(), "Study notes", """
             # Study notes

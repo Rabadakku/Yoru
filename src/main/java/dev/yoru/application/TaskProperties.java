@@ -226,7 +226,7 @@ public final class TaskProperties {
         private UUID option(String name) {
             String clean = name.strip();
             if (clean.isEmpty()) return null;
-            if (clean.length() > 60) clean = clean.substring(0, 60).strip();
+            if (clean.length() > 40) clean = clean.substring(0, 40).strip();
             for (var o : options) if (o.name().equalsIgnoreCase(clean)) return o.id();
             if (options.size() >= Property.MAX_OPTIONS) return null;
             var made = new PropertyOption(UUID.randomUUID(), clean, colour(options.size()));
@@ -330,6 +330,90 @@ public final class TaskProperties {
     }
 
     // ------------------------------------------------------------ values
+
+    /**
+     * What a form says about one property: a value, or for a select the
+     * options picked and the names typed that no option has yet, which are
+     * made in the same write. None clears the value.
+     */
+    public record Entry(Value value, List<UUID> chosen, List<String> typed) {
+        public Entry {
+            chosen = chosen == null ? List.of() : List.copyOf(chosen);
+            typed = typed == null ? List.of() : List.copyOf(typed);
+        }
+        public static Entry of(Value value) { return new Entry(Objects.requireNonNull(value), List.of(), List.of()); }
+        public static Entry options(List<UUID> chosen, List<String> typed) { return new Entry(null, chosen, typed); }
+        public static Entry none() { return new Entry(null, List.of(), List.of()); }
+        boolean empty() { return value == null && chosen.isEmpty() && typed.isEmpty(); }
+    }
+
+    /**
+     * A task as a form saves it — its own fields, the tags typed for it, and
+     * its property values — in one write, so a refusal anywhere leaves no new
+     * tag or option behind for a task that was never kept.
+     */
+    public void save(Task task, List<Tag> newTags, Map<UUID, Entry> entries) throws IOException {
+        var tags = new ArrayList<>(state().tags());
+        for (var tag : newTags) {
+            if (tags.stream().anyMatch(t -> t.name().equalsIgnoreCase(tag.name()) || t.id().equals(tag.id())))
+                throw new IllegalArgumentException("The tag \"" + tag.name() + "\" already exists.");
+            tags.add(tag);
+        }
+        var properties = new ArrayList<>(database().properties());
+        for (var entry : entries.entrySet()) {
+            var at = indexOf(properties, property(entry.getKey()));
+            var p = properties.get(at);
+            var result = resolve(p, entry.getValue());
+            properties.set(at, result.property());
+            task = task.withValue(p.id(), result.value());
+        }
+        var tasks = new ArrayList<>(state().tasks());
+        int index = -1;
+        for (int i = 0; i < tasks.size(); i++) if (tasks.get(i).id().equals(task.id())) index = i;
+        if (index < 0) tasks.add(task); else tasks.set(index, task);
+        tracker.commit(state().withTags(tags).withTasks(tasks, database().withProperties(properties)));
+    }
+
+    /** One property's entry on one task, new options and all, in one write. */
+    public void set(UUID task, UUID property, Entry entry) throws IOException {
+        var t = task(task);
+        var p = property(property);
+        if (!p.type().stored()) throw new IllegalArgumentException("\"" + p.name() + "\" is read from the task, not typed in.");
+        var result = resolve(p, entry);
+        var next = t.withValue(property, result.value());
+        if (next.equals(t) && result.property().equals(p)) return;
+        var tasks = state().tasks().stream().map(x -> x.id().equals(task) ? next : x).toList();
+        var properties = database().properties().stream().map(x -> x.id().equals(property) ? result.property() : x).toList();
+        tracker.commit(state().withTasks(tasks, database().withProperties(properties)));
+    }
+
+    private record Resolved(Property property, Value value) { }
+
+    /** An entry as a value, with the options it names made on the property. */
+    private static Resolved resolve(Property p, Entry entry) {
+        if (entry.empty()) return new Resolved(p, null);
+        if (entry.value() != null) {
+            if (!p.accepts(entry.value())) throw new IllegalArgumentException("\"" + p.name() + "\" cannot hold that value.");
+            return new Resolved(p, entry.value());
+        }
+        if (!p.type().hasOptions()) throw new IllegalArgumentException("\"" + p.name() + "\" has no options to choose.");
+        var options = new ArrayList<>(p.options());
+        var ids = new ArrayList<UUID>();
+        for (var id : entry.chosen()) {
+            if (p.option(id) == null) throw new IllegalArgumentException("An option of \"" + p.name() + "\" no longer exists.");
+            if (!ids.contains(id)) ids.add(id);
+        }
+        for (var name : entry.typed()) {
+            var known = options.stream().filter(o -> o.name().equalsIgnoreCase(name.strip())).findFirst();
+            if (known.isPresent()) { if (!ids.contains(known.get().id())) ids.add(known.get().id()); continue; }
+            var made = new PropertyOption(UUID.randomUUID(), name, colour(options.size()));
+            options.add(made);
+            ids.add(made.id());
+        }
+        var changed = p.withOptions(options);
+        if (ids.isEmpty()) return new Resolved(changed, null);
+        return new Resolved(changed, p.type() == PropertyType.SELECT ? new Value.Choice(ids.getFirst()) : new Value.Choices(ids));
+    }
 
     /** One property's value on one task, or none for null. */
     public void setValue(UUID task, UUID property, Value value) throws IOException {

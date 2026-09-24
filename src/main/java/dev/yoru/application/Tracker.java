@@ -414,6 +414,16 @@ public final class Tracker {
      * at, because a task can only reference a tag that exists in the same write.
      */
     public int importTasks(List<Tag> newTags, List<Task> batch) throws IOException {
+        return importTasks(newTags, batch, state.database());
+    }
+
+    /**
+     * The same, with the task database the batch's properties need (#68): an
+     * import that keeps columns as properties makes them, their options and
+     * the tasks' values in this one write.
+     */
+    public int importTasks(List<Tag> newTags, List<Task> batch, TaskDatabase database) throws IOException {
+        Objects.requireNonNull(database);
         if (batch.size() > 1000) throw new IllegalArgumentException("Import at most 1000 tasks at once.");
         var seen = new HashSet<String>();
         for (Tag tag : newTags) {
@@ -430,7 +440,7 @@ public final class Tracker {
             // assignment of the same name on the same day (#import).
             if (next.stream().noneMatch(existing -> existing.sameImportEntryAs(task))) { next.add(task); added++; }
         }
-        commit(state.withTags(tags).withTasks(next));
+        commit(state.withTags(tags).withTasks(next, database));
         return added;
     }
 

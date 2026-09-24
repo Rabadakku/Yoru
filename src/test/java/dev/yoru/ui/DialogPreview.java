@@ -30,7 +30,11 @@ public final class DialogPreview {
         for (var child : c.getComponents()) if (child instanceof Container nested) layout(nested);
     }
 
+    /** How many were written, counted rather than kept by hand: a stale number said 16 of 21. */
+    private static int rendered;
+
     private static void render(Path out, String name, Object body, String[] options) throws Exception {
+        rendered++;
         var pane = new JOptionPane(body, JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION,
             null, options, options[0]);
         pane.setSize(pane.getPreferredSize());
@@ -112,6 +116,27 @@ public final class DialogPreview {
                 tracker.addTag("Language", 0xE8B24C);
                 tracker.addTag("Writing", 0xA98BD4);
                 render(out, "tags", new TagEditor(tracker, () -> { }), new String[]{"Done"});
+                // Tasks as a database (#68): the manager, a select's options, and a cell's editor.
+                var props = tracker.properties();
+                var effort = props.addProperty("Effort", PropertyType.NUMBER, null);
+                var difficulty = props.addProperty("Difficulty", PropertyType.SELECT, null);
+                props.addOption(difficulty.id(), "Easy");
+                props.addOption(difficulty.id(), "Hard");
+                props.addProperty("Syllabus link", PropertyType.URL, null);
+                props.hideProperty(effort.id(), true);
+                props.addStatus("Waiting", TaskStatus.TODO);
+                props.addStatus("Review", TaskStatus.DOING);
+                render(out, "properties", new PropertyManager(tracker, () -> { }), new String[]{"Done"});
+                render(out, "property-options", new PropertyManager.OptionEditor(tracker, difficulty.id(), () -> { }), new String[]{"Done"});
+                var skills = props.addProperty("Skills", PropertyType.MULTI_SELECT, null);
+                props.addOption(skills.id(), "Reading");
+                props.addOption(skills.id(), "Writing");
+                var editor = PropertyEditors.of(props.property(skills.id()), null);
+                var cell = stack();
+                cell.add(label("Essay rough draft", TYPE_CAPTION, MUTED));
+                gap(cell, SPACE_SM);
+                cell.add(editor.component());
+                render(out, "property-value", cell, new String[]{"Save", "Cancel"});
                 tracker.addList("Reading", 0x90D8DA);
                 render(out, "bulk-move", new TaskBulkActions.MoveForm(tracker.state()), new String[]{"Move", "Cancel"});
                 render(out, "bulk-date", new TaskBulkActions.DateForm(false), new String[]{"Apply", "Cancel"});
@@ -167,7 +192,7 @@ public final class DialogPreview {
                     RepeatWeek.choices(rule, week).toArray(String[]::new));
                 render(out, "repeat-week-change", new RepeatWeek.ChangeForm(shell, rule, week), new String[]{"Save", "Cancel"});
 
-                System.out.println("Rendered 16 dialogs to " + out);
+                System.out.println("Rendered " + rendered + " dialogs to " + out);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

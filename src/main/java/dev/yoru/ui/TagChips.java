@@ -42,8 +42,18 @@ final class TagChips {
         /** How many pills the last paint had room for, so a test can ask. */
         private int shown;
 
-        Cell(List<Tag> tags, Runnable edit) {
+        /** What the cell holds, for its tooltip and screen reader: "Tags", or a property's name (#68). */
+        private final String noun;
+        /** What an empty cell offers on hover. */
+        private final String hint;
+
+        Cell(List<Tag> tags, Runnable edit) { this(tags, edit, "Tags", "+ tag"); }
+
+        /** Pills of any kind that look like tags: a select property's options (#68). */
+        Cell(List<Tag> tags, Runnable edit, String noun, String hint) {
             this.tags = List.copyOf(tags);
+            this.noun = noun;
+            this.hint = hint;
             setOpaque(false);
             setContentAreaFilled(false);
             setBorderPainted(false);
@@ -52,9 +62,11 @@ final class TagChips {
             setFont(captionFont());
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             var names = String.join(", ", this.tags.stream().map(Tag::name).toList());
-            setToolTipText(this.tags.isEmpty() ? "Add a tag" : "Tags: " + names + " · click to change");
-            getAccessibleContext().setAccessibleName(this.tags.isEmpty() ? "No tags. Activate to add one"
-                : "Tags: " + names + ". Activate to change them");
+            boolean tagged = noun.equals("Tags");
+            setToolTipText(this.tags.isEmpty() ? (tagged ? "Add a tag" : "Choose " + noun) : noun + ": " + names + " · click to change");
+            getAccessibleContext().setAccessibleName(this.tags.isEmpty()
+                ? (tagged ? "No tags. Activate to add one" : noun + ": none. Activate to choose")
+                : noun + ": " + names + ". Activate to change " + (tagged ? "them" : "it"));
             addActionListener(e -> edit.run());
             addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override public void mouseEntered(java.awt.event.MouseEvent e) { over = true; repaint(); }
@@ -78,7 +90,7 @@ final class TagChips {
             var m = getFontMetrics(getFont());
             int width = 0;
             for (var tag : tags) width += (width > 0 ? SPACE_XS : 0) + m.stringWidth(tag.name()) + 2 * padX();
-            if (tags.isEmpty()) width = m.stringWidth("+ tag") + 2 * padX();
+            if (tags.isEmpty()) width = m.stringWidth(hint) + 2 * padX();
             return new Dimension(width, pillHeight(m) + 2 * RING);
         }
 
@@ -93,7 +105,7 @@ final class TagChips {
                 shown = 0;
                 if (over || isFocusOwner()) {
                     g.setColor(MUTED);
-                    g.drawString("+ tag", padX(), y + RING + m.getAscent());
+                    g.drawString(hint, padX(), y + RING + m.getAscent());
                 }
                 ring(g);
                 g.dispose();

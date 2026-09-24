@@ -34,6 +34,61 @@ public final class NotionTest {
         public void close(){}
     }
 
+    /** Columns kept as properties (#68): their types read from the cells, their values, and a second import that makes nothing twice. */
+    private static void properties()throws Exception{
+        var csv="Name,Priority,Effort,Difficulty,Skills,Link,Graded,Handed in,Comment,Created time\n"
+            +"Read the first chapter,High,2,Easy,\"Reading, Writing\",https://example.com/one,Yes,\"September 12, 2026\",Short one,\"September 1, 2026 9:00 AM\"\n"
+            +"Lab report,P0,\"1,250.5\",Hard,Writing,https://example.com/two,No,2026-09-20,\"A longer comment, with a comma\",\"September 1, 2026 9:00 AM\"\n"
+            +"Essay plan,low,,Easy,Reading,,No,,,\"September 1, 2026 9:00 AM\"\n";
+        var sheet=NotionImport.read(csv.getBytes(),"Invented.csv");
+        var mapping=NotionImport.autoMap(sheet.headers());
+        check(mapping.priority().equals("Priority"),"The priority column is found");
+        check(mapping.properties().equals(List.of("Effort","Difficulty","Skills","Link","Graded","Handed in","Comment")),
+            "The rest are kept as properties, Notion's created time left out: "+mapping.properties());
+        var kinds=NotionImport.kinds(sheet,mapping.properties());
+        check(kinds.get("Effort")==PropertyType.NUMBER&&kinds.get("Difficulty")==PropertyType.SELECT
+            &&kinds.get("Skills")==PropertyType.MULTI_SELECT&&kinds.get("Link")==PropertyType.URL
+            &&kinds.get("Graded")==PropertyType.CHECKBOX&&kinds.get("Handed in")==PropertyType.DATE
+            &&kinds.get("Comment")==PropertyType.TEXT,"Each column's type is read from its cells: "+kinds);
+        var candidates=NotionImport.preview(sheet,mapping);
+        check(candidates.get(0).priority()==Priority.HIGH&&candidates.get(1).priority()==Priority.URGENT&&candidates.get(2).priority()==Priority.LOW,
+            "Priority words and a P0 scale become priorities");
+        var repo=new Memory();
+        var tracker=new Tracker(repo,Clock.systemUTC());
+        // One property already there under the same name, but as text: it keeps its own type.
+        tracker.properties().addProperty("effort",PropertyType.TEXT,null);
+        var batch=NotionImport.prepare(candidates,tracker.state(),"Invented",kinds);
+        check(tracker.importTasks(batch.newTags(),batch.tasks(),batch.database())==3,"The rows import");
+        var db=tracker.state().database();
+        check(db.properties().size()==7,"Six new properties and the one already there: "+db.properties().stream().map(Property::name).toList());
+        var effort=db.properties().stream().filter(p->p.name().equalsIgnoreCase("effort")).findFirst().orElseThrow();
+        check(effort.type()==PropertyType.TEXT,"A property already called so keeps its own type");
+        java.util.function.Function<String,Task> task=title->tracker.state().tasks().stream().filter(t->t.title().equals(title)).findFirst().orElseThrow();
+        java.util.function.Function<String,Property> property=name->tracker.state().database().properties().stream().filter(p->p.name().equals(name)).findFirst().orElseThrow();
+        var first=task.apply("Read the first chapter");
+        check(first.values().get(effort.id()).equals(new Value.Text("2")),"and its cells arrive as that type");
+        var lab=task.apply("Lab report");
+        check(lab.priority()==Priority.URGENT,"A task arrives with its priority");
+        var skills=property.apply("Skills");
+        check(skills.options().stream().map(PropertyOption::name).toList().equals(List.of("Reading","Writing"))
+            &&((Value.Choices)first.values().get(skills.id())).options().size()==2,"A multi-select column makes its options, each once");
+        check(first.values().get(property.apply("Graded").id()) instanceof Value.Tick&&!lab.values().containsKey(property.apply("Graded").id()),
+            "Yes ticks a checkbox and No leaves it clear");
+        check(first.values().get(property.apply("Handed in").id()).equals(new Value.Day(LocalDate.of(2026,9,12))),"A written-out date is read");
+        check(first.values().get(property.apply("Link").id()).equals(new Value.Text("https://example.com/one")),"A link is kept");
+        check(lab.values().get(property.apply("Comment").id()).equals(new Value.Text("A longer comment, with a comma")),"Text is kept whole");
+        check(!task.apply("Essay plan").values().containsKey(property.apply("Link").id()),"An empty cell is no value");
+        // The same export again: no property or option is made twice.
+        var again=NotionImport.prepare(NotionImport.preview(sheet,mapping),tracker.state(),"Invented",kinds);
+        check(again.database().equals(tracker.state().database()),"A second import of the same export makes no property or option again");
+        check(tracker.importTasks(again.newTags(),again.tasks(),again.database())==0,"and adds no task twice");
+        // A number column one of whose cells is not a number: that cell is left out, the import is not refused.
+        var odd=NotionImport.read("Name,Pages\nOne,12\nTwo,a dozen\n".getBytes(),"Odd.csv");
+        var oddBatch=NotionImport.prepare(NotionImport.preview(odd,NotionImport.autoMap(odd.headers())),State.empty(),"Odd",
+            Map.of("Pages",PropertyType.NUMBER));
+        check(oddBatch.tasks().get(0).values().size()==1&&oddBatch.tasks().get(1).values().isEmpty(),"A cell its property cannot hold is left out");
+    }
+
     public static void main(String[] args)throws Exception {
         var sheet=NotionImport.read(NotionFixture.zip(),"Study Tasks.zip");
         check(sheet.headers().equals(List.of("Name","Status","Class","Due")),"The CSV's own headers are read from inside the zip");
@@ -55,7 +110,12 @@ public final class NotionTest {
         check(sparse.title().equals("Task")&&sparse.status().equals("Completed")
             &&sparse.due().equals("When")&&sparse.tags().equals("Subject"),"Unusual names still map by their words");
         var nothing=NotionImport.autoMap(List.of("Alpha","Beta"));
-        check(nothing.equals(new NotionImport.Mapping(null,null,null,null)),"Unknown columns map to nothing rather than guessing");
+        check(nothing.title()==null&&nothing.status()==null&&nothing.due()==null&&nothing.tags()==null&&nothing.priority()==null,
+            "Unknown columns fill no field rather than guessing");
+        check(nothing.properties().equals(List.of("Alpha","Beta")),"and are kept as properties of their own names (#68)");
+        var stamps=NotionImport.autoMap(List.of("Name","Priority","Effort","Created time","Last edited by"));
+        check(stamps.priority().equals("Priority")&&stamps.properties().equals(List.of("Effort")),
+            "A priority column is recognised, and Notion's own created and edited columns are left out");
 
         var candidates=NotionImport.preview(sheet,mapping);
         check(candidates.size()==5,"Every titled row becomes a candidate");
@@ -260,7 +320,8 @@ public final class NotionTest {
         check(longCandidate.notes().equals("The reading itself."),
             "and its page's heading and property lines still stay out of the notes");
 
-        System.out.println("PASS: "+checks+" Notion import checks (zip and CSV, auto-map, remap, notes, tags, duplicates, one transaction)");
+        properties();
+        System.out.println("PASS: "+checks+" Notion import checks (zip and CSV, auto-map, remap, notes, tags, duplicates, one transaction, properties)");
     }
 
     private static byte[] tooManyRows() {

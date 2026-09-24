@@ -55,7 +55,8 @@ public final class CrudCoverageTest {
         for (var row : List.of("Activities", "Sessions", "Schedule blocks", "Weekly repeats", "Tasks", "Repeating tasks",
                 "Tags", "Lists", "Daily habits", "Time-since trackers")) ROWS.put(row, "CVED");
         ROWS.put("Settings", "VED");
-        for (var row : List.of("Vaults", "Pages and folders", "Anki integration")) ROWS.put(row, "CVED");
+        for (var row : List.of("Vaults", "Pages and folders", "Anki integration",
+                "Task properties", "Property options", "Statuses")) ROWS.put(row, "CVED");
     }
 
     /** What the tracker did for each row, and what the interface offers for it. */
@@ -262,6 +263,40 @@ public final class CrudCoverageTest {
         check(t.state().notes().pages().isEmpty() && t.state().notes().folders().isEmpty(), "A page and folder are deleted forever");
         mark("Pages and folders", "CVED");
 
+        // Task properties (#68), their options, and the owner's statuses.
+        var props = t.properties();
+        var effort = props.addProperty("Invented effort", PropertyType.NUMBER, null);
+        check(props.property(effort.id()).type() == PropertyType.NUMBER, "A property is made and read back");
+        props.renameProperty(effort.id(), "Invented hours");
+        props.hideProperty(effort.id(), true);
+        props.changeType(effort.id(), PropertyType.TEXT);
+        check(props.property(effort.id()).name().equals("Invented hours") && props.property(effort.id()).hidden(),
+            "A property is renamed, hidden and retyped");
+        var pick = props.addProperty("Invented pick", PropertyType.SELECT, null);
+        var option = props.addOption(pick.id(), "Invented option");
+        check(props.property(pick.id()).option(option.id()) != null, "An option is made and read back");
+        props.renameOption(pick.id(), option.id(), "Invented choice");
+        props.recolourOption(pick.id(), option.id(), 0x123456);
+        check(props.property(pick.id()).option(option.id()).name().equals("Invented choice"), "An option is renamed and recoloured");
+        failed(repo, t, () -> props.deleteOption(pick.id(), option.id()));
+        props.deleteOption(pick.id(), option.id());
+        check(props.property(pick.id()).options().isEmpty(), "An option is deleted");
+        mark("Property options", "CVED");
+        failed(repo, t, () -> props.deleteProperty(effort.id()));
+        props.deleteProperty(effort.id());
+        props.deleteProperty(pick.id());
+        check(t.state().database().properties().isEmpty(), "A property is deleted");
+        mark("Task properties", "CVED");
+        var waiting = props.addStatus("Invented waiting", TaskStatus.TODO);
+        check(props.statusChoices().stream().anyMatch(c -> waiting.equals(c.option())), "A status is made and offered");
+        props.renameStatus(waiting.id(), "Invented pending");
+        props.recolourStatus(waiting.id(), 0x654321);
+        check(props.status(waiting.id()).name().equals("Invented pending"), "A status is renamed and recoloured");
+        failed(repo, t, () -> props.deleteStatus(waiting.id()));
+        props.deleteStatus(waiting.id());
+        check(t.state().database().statuses().isEmpty(), "A status is deleted");
+        mark("Statuses", "CVED");
+
         // The Anki integration and the counts it keeps.
         t.anki(t.state().anki().enabled(true));
         t.ankiSeen(new AnkiSnapshot("Invented profile", 12, new TreeMap<>(Map.of(LocalDate.of(2026, 10, 6), 40L)), NOW));
@@ -426,6 +461,36 @@ public final class CrudCoverageTest {
         item(lists, "list.rename." + ids.get("list"), "Lists", "edit");
         item(lists, "list.colour." + ids.get("list"), "Lists", "edit");
         item(lists, "list.delete." + ids.get("list"), "Lists", "delete");
+        // Task properties, their options and statuses: the manager, and the table.
+        usable(board, "task.properties", "Task properties", "view");
+        var manager = new PropertyManager(tracker, () -> { });
+        usable(manager, "property.add", "Task properties", "create");
+        var difficulty = tracker.state().database().properties().stream().filter(p -> p.type() == PropertyType.SELECT).findFirst().orElseThrow();
+        usable(manager, "property.hide." + difficulty.id(), "Task properties", "edit: hide");
+        usable(manager, "property.more." + difficulty.id(), "Task properties", "edit: its menu");
+        var propertyMenu = manager.menu(difficulty);
+        item(propertyMenu, "property.rename." + difficulty.id(), "Task properties", "edit");
+        item(propertyMenu, "property.retype." + difficulty.id(), "Task properties", "edit");
+        item(propertyMenu, "property.delete." + difficulty.id(), "Task properties", "delete");
+        item(propertyMenu, "property.options." + difficulty.id(), "Property options", "view");
+        var options = new PropertyManager.OptionEditor(tracker, difficulty.id(), () -> { });
+        usable(options, "option.add", "Property options", "create");
+        var anOption = difficulty.options().getFirst();
+        var optionMenu = options.menu(anOption);
+        item(optionMenu, "option.rename." + anOption.id(), "Property options", "edit");
+        item(optionMenu, "option.colour." + anOption.id(), "Property options", "edit");
+        item(optionMenu, "option.delete." + anOption.id(), "Property options", "delete");
+        var withValue = tracker.state().tasks().stream().filter(x -> x.values().containsKey(difficulty.id())).findFirst().orElseThrow();
+        usable(board, "task.value." + difficulty.id() + "." + withValue.id(), "Task properties", "edit a value");
+        usable(manager, "status.add", "Statuses", "create");
+        var own = tracker.state().database().statuses().getFirst();
+        var statusMenu = manager.statusMenu(own);
+        item(statusMenu, "status.rename." + own.id(), "Statuses", "edit");
+        item(statusMenu, "status.colour." + own.id(), "Statuses", "edit");
+        item(statusMenu, "status.delete." + own.id(), "Statuses", "delete");
+        var waitingTask = tracker.state().tasks().stream().filter(x -> own.id().equals(x.statusId())).findFirst().orElseThrow();
+        usable(board, "task.status." + waitingTask.id(), "Statuses", "view and step through");
+
         tracker.addTask(new Task(UUID.randomUUID(), null, List.of(), "Invented laundry", "", LocalDate.now(),
             TaskStatus.TODO, "Manual entry", Instant.now(), 99, null, List.of()).withRepeat(Repeat.weekly(1, EnumSet.of(LocalDate.now().getDayOfWeek()), LocalDate.now())));
         var repeating = tracker.state().tasks().getLast().id();
