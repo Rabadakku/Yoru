@@ -621,11 +621,11 @@ public final class Model {
      * The last thing Anki said, so the card can show it while Anki is closed.
      *
      * Counts and times only: how many reviews today, how many on each of the
-     * last thirty days, the profile they came from, and when they were read.
+     * available review days, the profile they came from, and when they were read.
      */
     public record AnkiSnapshot(String profile, long today, Map<LocalDate, Long> days, Instant fetchedAt) {
-        /** A month is all the card ever draws, and all that is worth keeping. */
-        public static final int DAYS = 30;
+        /** Match the vault record bound without silently truncating a long streak. */
+        public static final int MAX_DAYS = 100_000;
         public AnkiSnapshot {
             profile = Objects.requireNonNull(profile);
             if (profile.length() > 200) throw new IllegalArgumentException("That profile name is too long.");
@@ -635,7 +635,7 @@ public final class Model {
                 if (day.getValue() == null || day.getValue() < 0) throw new IllegalArgumentException("A review count cannot be negative.");
                 kept.put(day.getKey(), day.getValue());
             }
-            while (kept.size() > DAYS) kept.remove(kept.firstKey());
+            if (kept.size() > MAX_DAYS) throw new IllegalArgumentException("Too many Anki review days.");
             days = Collections.unmodifiableSortedMap(kept);
             requireTime(fetchedAt);
         }

@@ -160,10 +160,8 @@ final class AnkiCard extends JPanel {
 
     /** Keeps the counts in the vault, so the line still says something while Anki is closed. */
     private void keep(AnkiConnect.Snapshot snapshot) {
-        var kept = new TreeMap<LocalDate, Long>(snapshot.days());
-        while (kept.size() > AnkiSnapshot.DAYS) kept.remove(kept.firstKey());
         try {
-            tracker.get().ankiSeen(new AnkiSnapshot(snapshot.profile(), snapshot.today(), kept, snapshot.fetchedAt()));
+            tracker.get().ankiSeen(new AnkiSnapshot(snapshot.profile(), snapshot.today(), snapshot.days(), snapshot.fetchedAt()));
         } catch (Exception e) {
             trouble = "Latest Anki counts could not be saved; keeping previous data";
         }

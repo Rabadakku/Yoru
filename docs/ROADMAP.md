@@ -1,6 +1,20 @@
 # Yoru roadmap
 
-## In progress — bulk task actions (#59)
+## In review — automatic Anki streak (#100)
+
+`codex/anki-streak` adds a read-only Anki streak to Habits without creating a
+manual habit. Any date with reviews counts, independent of imported timed
+sessions. Daily aggregate history is retained beyond the chart’s month, so
+longer runs survive offline and encrypted/portable roundtrips. Offline streaks
+are explicitly dated as of the last sync; switching profiles replaces history.
+Existing short caches fill in at the next successful refresh. No schema change.
+
+Validation: full isolated suite passed in a clean checkout, including 15
+streak/persistence and 10 UI checks. Automatic refresh retains 100 review days;
+400-day summaries survive encrypted and portable roundtrips. Reviewed all five
+themes and enlarged text. No live personal Anki profile was opened.
+
+## In review — bulk task actions (#59, PR #101)
 
 `codex/bulk-task-actions` adds selection to the task table for status, list,
 due date, planned day, tags and deletion. Each operation validates the whole
@@ -235,8 +249,8 @@ Anki 25.09.4 backend and a fresh synthetic collection. Personal profiles were
 not opened. The tag workflow verifies Java 22 before building all three installers.
 See [release notes](RELEASE-1.0.14.md) for setup and scope.
 
-Follow-up integrations: [Apple Health #40](https://github.com/Rabadakku/Yoru/issues/40)
-is limited to workouts and steps; [LeetCode #41](https://github.com/Rabadakku/Yoru/issues/41)
+Follow-up integrations: Apple Health #40 was subsequently cancelled (see above);
+[LeetCode #41](https://github.com/Rabadakku/Yoru/issues/41)
 tracks coding practice.
 
 ## Release 1.0.13 — September 20, 2026
