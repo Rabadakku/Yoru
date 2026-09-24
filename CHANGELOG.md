@@ -2,7 +2,7 @@
 
 Task lists with a rail beside the board, several tags a task made as you type,
 repeating tasks that stay one task with a history, and a pomodoro on Today with
-its own sounds. See [release details](docs/RELEASE-1.0.21.md). The vault moves
+its own sounds. See [release details](docs/releases/RELEASE-1.0.21.md). The vault moves
 to schema 20; older vaults open with nothing lost.
 
 # v1.0.20 — Habits at a glance
@@ -10,28 +10,28 @@ to schema 20; older vaults open with nothing lost.
 Each habit is one line, so a page of them fits on the screen; habits tick off
 from the keyboard; the task calendar makes tasks on a day; Anki's connection
 test says what went wrong; the drawn views follow the text size. See
-[release details](docs/RELEASE-1.0.20.md). No vault migration.
+[release details](docs/releases/RELEASE-1.0.20.md). No vault migration.
 
 # v1.0.19 — Interface detail polish
 
 Quieter tabs, rounded scrollbars, consistent hover feedback and accurate Edit
-menu states. See [release details](docs/RELEASE-1.0.19.md). No vault migration.
+menu states. See [release details](docs/releases/RELEASE-1.0.19.md). No vault migration.
 
 # v1.0.18 — A quieter workspace
 
 Collapsible sidebar, system typography, native Mac menus and optional system
-appearance. See [release details](docs/RELEASE-1.0.18.md). No vault migration.
+appearance. See [release details](docs/releases/RELEASE-1.0.18.md). No vault migration.
 
 # v1.0.15 — Anki study time counts
 
 Finished Anki sittings are now added to your tracked time while Anki is
 connected, at the length Anki itself reports, and never twice. See
-[release notes](docs/RELEASE-1.0.15.md). No vault migration.
+[release notes](docs/releases/RELEASE-1.0.15.md). No vault migration.
 
 # v1.0.14 — Anki review tracking
 
 Today now displays Anki review totals, seven dates of history and the active
-profile through AnkiConnect. See [setup and release notes](docs/RELEASE-1.0.14.md).
+profile through AnkiConnect. See [setup and release notes](docs/releases/RELEASE-1.0.14.md).
 No vault migration or game reward changes.
 
 # v1.0.2 — functionality and artwork repairs

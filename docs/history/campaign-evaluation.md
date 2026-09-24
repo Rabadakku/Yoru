@@ -5,7 +5,7 @@
 The owner clarified that the entire game must be playable **inside Yoru**, with
 battles behaving like the original. Study replaces repetitive encounter and
 training grinding; the resulting Pokémon must be usable in that same campaign.
-[PRODUCT-GOALS.md](PRODUCT-GOALS.md) is the authoritative product description.
+[PRODUCT-GOALS.md](../PRODUCT-GOALS.md) is the authoritative product description.
 
 The previous evaluation recommended launching RetroArch separately and granting
 play-time credits. That recommendation is superseded: it neither puts gameplay
@@ -15,7 +15,7 @@ also overstated what had been verified. No complete campaign was tested.
 ## Reference and available foundations
 
 Initial target: Emerald Hoenn + National Dex Edition, identified
-in [PRODUCT-GOALS.md](PRODUCT-GOALS.md). This is a variant; verify
+in [PRODUCT-GOALS.md](../PRODUCT-GOALS.md). This is a variant; verify
 its differences rather than silently mixing it with vanilla Emerald data.
 
 The earlier extraction report recorded 854 trainer entries, 1,695 trainer-party

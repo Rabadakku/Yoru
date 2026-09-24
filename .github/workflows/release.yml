@@ -148,7 +148,7 @@ jobs:
           notes="$(mktemp)"
           # Written here rather than committed, so the first-open explanation
           # ships with the release that needs it.
-          release_notes="docs/RELEASE-${TAG#v}.md"
+          release_notes="docs/releases/RELEASE-${TAG#v}.md"
           if [ -f "$release_notes" ]; then
             cat "$release_notes" > "$notes"
             printf '\n\n' >> "$notes"

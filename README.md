@@ -21,7 +21,7 @@ repeat — every weekday, on the last Friday, three days after you last did it.
 Today's timer can now be a pomodoro, with gentle sounds of its own at the end
 of each interval.
 
-See the [release notes](docs/RELEASE-1.0.21.md) or
+See the [release notes](docs/releases/RELEASE-1.0.21.md) or
 [all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/Yoru-1.0.21-previews.zip).
 Further interface refinements are tracked in the [roadmap](docs/ROADMAP.md).
 

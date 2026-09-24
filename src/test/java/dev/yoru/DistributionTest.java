@@ -7,7 +7,7 @@ import java.util.jar.JarFile;
 /**
  * What the shipped jar must not contain (#16).
  *
- * SHARED_WORKSPACE.md says release jars must not carry the personal artwork or
+ * docs/history/shared-workspace.md records that release jars must not carry the personal artwork or
  * the game files. "We did not mean to include them" is not a guarantee, so this
  * opens the jar the build actually produced and looks.
  *
