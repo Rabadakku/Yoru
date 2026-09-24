@@ -131,6 +131,11 @@ public final class DialogPreview {
                 render(out,"habit-missed",HabitsPanel.missedPeriodForm(new DateTimeField(
                     Instant.parse("2026-08-14T10:00:00Z"),java.time.ZoneOffset.UTC,"Restarted at")),new String[]{"Add restart","Cancel"});
 
+                tracker.addActivity("Reading",0);
+                tracker.addActivity("Writing",0);
+                render(out,"session-move",new SessionActions.MoveForm(tracker.state()),new String[]{"Move","Cancel"});
+                render(out,"session-shift",new SessionActions.ShiftForm(),new String[]{"Apply","Cancel"});
+
                 // The weekly template: the only dialog that groups by weekday.
                 var planner = new Tracker(new Repository() {
                     State state = State.empty();
@@ -152,7 +157,7 @@ public final class DialogPreview {
                     java.time.LocalTime.of(11, 0), java.time.LocalTime.of(12, 0));
                 render(out, "weekly", new WeeklyTemplate(planner, () -> { }), new String[]{"Done"});
 
-                System.out.println("Rendered 14 dialogs to " + out);
+                System.out.println("Rendered 16 dialogs to " + out);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

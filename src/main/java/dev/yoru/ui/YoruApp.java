@@ -999,36 +999,8 @@ public final class YoruApp extends JPanel implements Shell {
             p.add(clear);
         }
         gap(p,SPACE_MD);
-        // Both actions need a row, so both open disabled with the reason on
-        // them rather than as a dialog that tells you to do something first.
-        var editSession=button("Edit selected session",()-> {
-            int index=t.getSelectedRow();
-            if(index>=0)editTime(sessions.get(t.convertRowIndexToModel(index)),null);
-        });
-        var deleteSession=button("Delete selected session",()-> {
-            int index=t.getSelectedRow();
-            if(index>=0&&Dialogs.confirmDestructive(this,"Delete this recorded session.","Delete session","Delete"))
-                perform(()->tracker.deleteSession(sessions.get(t.convertRowIndexToModel(index)).id()));
-        });
-        editSession.setEnabled(false); deleteSession.setEnabled(false);
-        if(t==null) {
-            String why="No recorded sessions yet";
-            editSession.setToolTipText(why); deleteSession.setToolTipText(why);
-        } else {
-            editSession.setToolTipText("Select a session in the table first");
-            deleteSession.setToolTipText("Select a session in the table first");
-            t.getSelectionModel().addListSelectionListener(e->{
-                boolean picked=t.getSelectedRow()>=0;
-                editSession.setEnabled(picked);
-                editSession.setToolTipText(picked?"Edit the selected session":"Select a session in the table first");
-                deleteSession.setEnabled(picked);
-                deleteSession.setToolTipText(picked?"Delete the selected session":"Select a session in the table first");
-            });
-            t.addMouseListener(new MouseAdapter(){public void mouseClicked(MouseEvent e){if(e.getClickCount()==2&&t.getSelectedRow()>=0)editTime(sessions.get(t.convertRowIndexToModel(t.getSelectedRow())),null);}});
-        }
-        var sessionActions=row();
-        sessionActions.add(editSession);sessionActions.add(deleteSession);
-        p.add(sessionActions);
+        p.add(new SessionActions(tracker,t,sessions,session->editTime(session,null),
+            ()->showPage("Data"),()->closed,failure->Dialogs.error(this,failure.getMessage())));
         gap(p,SPACE_XL);
         Object[][] dailyRows=days.entrySet().stream().sorted(Map.Entry.<LocalDate,Long>comparingByKey().reversed()).map(e->new Object[] {
             e.getKey(),Analytics.duration(e.getValue())
