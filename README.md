@@ -11,19 +11,20 @@ notes in one encrypted vault on your own machine. No account, no cloud sync.
 
 ![Yoru Today in the light theme, with a focus timer, schedule, tasks and habits](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/yoru-today-light.png)
 
-*Screenshots use invented sample data. The interface shown is from version 1.0.21.*
+*Screenshots use invented sample data. The interface shown is from version 1.0.21; 1.1.0 adds to it.*
 
-## What's new in 1.0.21
+## What's new in 1.1.0
 
-File tasks in lists (Chores, Personal, School) from a rail beside the board,
-give a task several tags and create new ones as you type, and make a task
-repeat — every weekday, on the last Friday, three days after you last did it.
-Today's timer can now be a pomodoro, with gentle sounds of its own at the end
-of each interval.
+Ask Claude about your week and have it plan with you: Yoru is now a tool for
+Claude Desktop, Claude Code and other MCP apps, with no API key, off until you
+switch it on, and never able to delete anything. Tasks gain priorities, your
+own statuses and properties; "Essay draft tomorrow 5pm #school !high" makes a
+whole task in one line; Cmd/Ctrl-K opens a command palette; and one week of a
+weekly repeat can be skipped or moved.
 
-See the [release notes](docs/releases/RELEASE-1.0.21.md) or
-[all interface previews](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/Yoru-1.0.21-previews.zip).
-Further interface refinements are tracked in the [roadmap](docs/ROADMAP.md).
+See the [release notes](docs/releases/RELEASE-1.1.0.md), or
+[everything that changed](CHANGELOG.md). Further work is tracked in the
+[roadmap](docs/ROADMAP.md).
 
 ## Features
 
@@ -46,14 +47,18 @@ before saving.
 
 Compare planned blocks with recorded time in a week grid. Drag to create,
 move or resize a plan, add weekly repeats and choose which day starts the week.
+Skip or move one week of a repeat without changing the rule.
 
 ### Tasks and habits
 
-Tasks have due dates, **To do → Doing → Done** status, several colour tags each,
+Tasks have due dates and times, **To do → Doing → Done** status with statuses
+of your own, priorities, several colour tags each, properties you define,
 search, manual ordering and a month calendar. File them in your own lists,
-make them repeat, and drag them between lists. Paste a task list or import a
-Notion export, then review it before adding anything. Link tasks to Markdown
-pages.
+make them repeat, and drag them between lists. Type a whole task in one line,
+"Essay draft tomorrow 5pm #school !high every monday", or press Cmd/Ctrl-K
+anywhere. Select several tasks to change or delete them together. Paste a task
+list or import a Notion export, then review it before adding anything. Link
+tasks to Markdown pages.
 
 Daily habits show their last seven days, streak and 30-day consistency on one
 line, with the full history a click away. Time-since trackers show how long

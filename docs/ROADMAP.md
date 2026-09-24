@@ -20,9 +20,22 @@ what each feature does is in [FEATURES.md](FEATURES.md). Older entries, from
 5. **Waiting on the owner:** the timer concept (#62), the logo (#64), sign-off
    on the redesign (#63) and a native-keyboard check on a real Mac (#49).
 
+## Release 1.1.0 — Claude, tasks as a database, quick add
+
+Everything below down to 1.0.21, from PRs #99 to #110. See the
+[release notes](releases/RELEASE-1.1.0.md). Schema 23, export format 12.
+
+Also in PR #110, beside the AI work: the spring clean's first pass (#45) —
+test discovery with parallel runs (about ten minutes down to under two), dead
+code removed, `-Xlint:all` clean and enforced in CI, one clock for every page,
+the Schedule and Data pages out of `YoruApp`, the game's leftovers gone, and
+the docs split into current and history — and interface polish (#63): quiet
+disabled buttons, report-style totals, the week's header, planned blocks named,
+and Today's schedule with weekly repeats.
+
 ## AI assistants: Yoru as a tool for Claude (#47)
 
-On `claude/wizardly-mayer-7jnqwb`. The owner wanted Claude in Yoru without an
+Merged in PR #110. The owner wanted Claude in Yoru without an
 API key, and Anthropic does not let third-party apps sign in with claude.ai.
 So Claude's own apps call Yoru instead: Yoru is a Model Context Protocol
 server that Claude Desktop, Claude Code or any other MCP client starts with

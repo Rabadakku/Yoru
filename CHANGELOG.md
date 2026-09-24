@@ -1,3 +1,13 @@
+# v1.1.0 — Use Yoru with Claude, tasks as a database, quick add
+
+Claude Desktop, Claude Code and other MCP apps can read and, when you allow it,
+edit your workspace, with no API key and nothing deleted. Tasks gain
+priorities, statuses and properties of your own; one typed line makes a whole
+task; a command palette opens on Cmd/Ctrl-K; one week of a weekly repeat can be
+skipped or moved; and every record can be corrected in bulk. See
+[release details](docs/releases/RELEASE-1.1.0.md). The vault moves to schema 23;
+older vaults open with nothing lost.
+
 # v1.0.21 — Lists, tags, repeating tasks and a pomodoro
 
 Task lists with a rail beside the board, several tags a task made as you type,
