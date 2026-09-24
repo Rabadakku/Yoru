@@ -552,7 +552,7 @@ public final class YoruApp extends JPanel implements Shell {
         back.setToolTipText("Previous week");
         back.getAccessibleContext().setAccessibleName("Previous week");
         nav.add(back);
-        nav.add(label(week+" — "+week.plusDays(6),TYPE_HEADING,TEXT));
+        nav.add(label(DateText.span(week,week.plusDays(6)),TYPE_HEADING,TEXT));
         var forward=button("→",()->{week=week.plusWeeks(1);showPage("Schedule");});
         forward.setToolTipText("Next week");
         forward.getAccessibleContext().setAccessibleName("Next week");

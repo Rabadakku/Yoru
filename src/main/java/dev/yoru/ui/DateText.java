@@ -37,6 +37,17 @@ final class DateText {
     static String date(LocalDate date) { return SHORT.format(date); }
     /** "September 14, 2026", for a column with room to say it in full. */
     static String longDate(LocalDate date) { return LONG.format(date); }
+    /**
+     * A week, or any span of days, written once: "Sep 20 – 26, 2026", "Sep 28 – Oct 4, 2026",
+     * "Dec 28, 2026 – Jan 3, 2027". The schedule's header wrote two ISO dates, which read
+     * like data and were cut off at a narrow width (#45).
+     */
+    static String span(LocalDate from, LocalDate to) {
+        var month = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
+        if (from.getYear() != to.getYear()) return date(from) + " – " + date(to);
+        if (from.getMonth() != to.getMonth()) return month.format(from) + " – " + month.format(to) + ", " + to.getYear();
+        return month.format(from) + " – " + to.getDayOfMonth() + ", " + to.getYear();
+    }
     /** "11:00 AM". Seconds are not written; a field that shows this keeps them unless the text is changed. */
     static String time(LocalTime time) { return CLOCK.format(time); }
 

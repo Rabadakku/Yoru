@@ -562,8 +562,10 @@ final class ScheduleGrid extends JPanel {
             g.setStroke(plain);
             g.setFont(Theme.captionFont());
             g.setColor(Theme.MUTED);
+            // What is planned, not which kind of plan: the outline already says
+            // planned, the dashes say every week, and the tooltip says moved.
             if(box.height>=titleRoom())
-                g.drawString(clip(g,s.repeating()?s.changed()?"moved":"weekly":"planned",box.width-8),
+                g.drawString(clip(g,s.label(),box.width-8),
                     box.x+6,box.y+caption().getAscent()+Theme.SPACE_XS);
             return;
         }
