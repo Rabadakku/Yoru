@@ -23,7 +23,7 @@ final class HabitZoneForm extends JPanel {
         zones.getAccessibleContext().setAccessibleName("Time zone");
         zones.setRenderer(new DefaultListCellRenderer() {
             @Override public Component getListCellRendererComponent(JList<?> list,Object value,int index,boolean selected,boolean focus) {
-                return super.getListCellRendererComponent(list,value==null?"":value.toString().replace('_',' '),index,selected,focus);
+                return super.getListCellRendererComponent(list,value==null?"":"Z".equals(value)?"UTC":value.toString().replace('_',' '),index,selected,focus);
             }
         });
         zones.setSelectedItem(habit.zone());

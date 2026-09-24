@@ -29,6 +29,8 @@ public final class HabitControlsUiTest {
         check(item(menu,"habit.zone."+first.id()).isEnabled(),"Time zone is available in the daily menu");
         var form=new HabitZoneForm(first);
         check(form.zones.getSelectedItem().equals("Z"),"A fixed-offset zone already in a vault remains selectable");
+        var rendered=(JLabel)form.zones.getRenderer().getListCellRendererComponent(new JList<>(),"Z",0,false,false);
+        check(rendered.getText().equals("UTC"),"A stored UTC offset is shown with its familiar name");
         form.zones.setSelectedItem("Pacific/Auckland");form.save(t,first.id());
         check(t.state().habits().get(1).zone().equals("Pacific/Auckland"),"The actual form saves the chosen zone");
         var since=t.state().habits().getLast();
