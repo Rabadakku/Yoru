@@ -298,6 +298,17 @@ public final class Tracker {
         next.set(next.indexOf(old),new Session(old.id(),activityId,start,end));
         commit(state.withCore(state.activities(),next,state.blocks()));
     }
+    public void editSessions(Collection<UUID> ids, SessionBatch.Change change) throws IOException {
+        var next=SessionBatch.edit(state,ids,change,clock.instant());
+        if(next.equals(state))return;
+        repository.backup();
+        commit(next);
+    }
+    public void deleteSessions(Collection<UUID> ids) throws IOException {
+        var next=SessionBatch.delete(state,ids);
+        repository.backup();
+        commit(next);
+    }
     public void editBlock(UUID blockId, UUID activityId, Instant start, Instant end) throws IOException {
         requireActivity(activityId);var next=new ArrayList<>(state.blocks());
         var old=next.stream().filter(x->x.id().equals(blockId)).findFirst().orElseThrow(()->new IllegalArgumentException("Block no longer exists."));
