@@ -108,6 +108,10 @@ public final class YoruApp extends JPanel implements Shell {
     }
 
     public YoruApp(Tracker tracker,Repository vault) { this(tracker,vault,null,null,null,null); }
+    /** A window on a vault the store manages, as the launcher opens one, for tests of the vault's own controls. */
+    static YoruApp managed(Tracker tracker,Repository vault,VaultStore store,String name,char[] secret) {
+        return new YoruApp(tracker,vault,store,name,secret,null);
+    }
     private YoruApp(Tracker tracker,Repository vault,VaultStore store,String openName,char[] secret,Assistants assistants) {
         super(new BorderLayout());
         this.tracker=tracker;

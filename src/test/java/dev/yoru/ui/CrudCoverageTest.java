@@ -606,10 +606,7 @@ public final class CrudCoverageTest {
                 var failure = new Throwable[1];
                 SwingUtilities.invokeAndWait(() -> {
                     try {
-                        var constructor = YoruApp.class.getDeclaredConstructor(Tracker.class, Repository.class,
-                            VaultStore.class, String.class, char[].class);
-                        constructor.setAccessible(true);
-                        var app = constructor.newInstance(new Tracker(vault, Clock.systemUTC()), vault, store, "Windowed",
+                        var app = YoruApp.managed(new Tracker(vault, Clock.systemUTC()), vault, store, "Windowed",
                             "invented-password-2".toCharArray());
                         var card = app.vaultCard();
                         usable(card, "vault.new", "Vaults", "create");
