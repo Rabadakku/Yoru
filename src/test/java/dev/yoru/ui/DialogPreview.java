@@ -120,6 +120,7 @@ public final class DialogPreview {
                 tracker.addHabit("Evening reading",HabitKind.DAILY,java.time.ZoneOffset.UTC,null);
                 var daily=tracker.state().habits().getFirst();
                 tracker.checkIn(daily.id(),java.time.LocalDate.of(2024,2,29),true);
+                render(out,"habit-zone",new HabitZoneForm(daily),new String[]{"Save","Cancel"});
                 var history=(DailyHabitHistory)HabitsPanel.historyGrid(tracker,()->{},daily);
                 history.show(java.time.LocalDate.of(2024,2,29));
                 render(out,"habit-history",history,new String[]{"Done"});
@@ -151,7 +152,7 @@ public final class DialogPreview {
                     java.time.LocalTime.of(11, 0), java.time.LocalTime.of(12, 0));
                 render(out, "weekly", new WeeklyTemplate(planner, () -> { }), new String[]{"Done"});
 
-                System.out.println("Rendered 13 dialogs to " + out);
+                System.out.println("Rendered 14 dialogs to " + out);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

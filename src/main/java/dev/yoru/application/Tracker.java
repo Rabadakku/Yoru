@@ -467,6 +467,30 @@ public final class Tracker {
         repository.backup();
         replaceHabit(renamed);
     }
+    /** Changes the daily boundary without reinterpreting recorded calendar dates. */
+    public void habitZone(UUID id, ZoneId zone) throws IOException {
+        var h=habit(id);
+        if(h.kind()!=HabitKind.DAILY) throw new IllegalArgumentException("Choose a daily tracker.");
+        var next=new Habit(h.id(),h.name(),h.kind(),Objects.requireNonNull(zone).getId(),h.checkIns(),h.starts(),h.since());
+        if(next.equals(h))return;
+        repository.backup();
+        replaceHabit(next);
+    }
+
+    /** Moves among neighbours of the same kind, leaving the other list in place. */
+    public void moveHabit(UUID id, int direction) throws IOException {
+        if(direction!=-1&&direction!=1)throw new IllegalArgumentException("Choose up or down.");
+        var h=habit(id);
+        var next=new ArrayList<>(state.habits());
+        int from=next.indexOf(h),to=from+direction;
+        while(to>=0&&to<next.size()&&next.get(to).kind()!=h.kind())to+=direction;
+        if(to<0||to>=next.size())return;
+        Collections.swap(next,from,to);
+        var changed=state.withHabits(next);
+        repository.backup();
+        commit(changed);
+    }
+
     public void deleteHabit(UUID id) throws IOException {
         habit(id); // Refuse stale controls before backing up or writing.
         var remaining=state.habits().stream().filter(h->!h.id().equals(id)).toList();

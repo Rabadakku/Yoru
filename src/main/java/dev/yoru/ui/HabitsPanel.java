@@ -192,13 +192,31 @@ final class HabitsPanel {
         return column;
     }
 
-    private static JPopupMenu dailyMenu(Tracker tracker,Runnable refresh,JPanel owner,Habit habit) {
+    static JPopupMenu dailyMenu(Tracker tracker,Runnable refresh,JPanel owner,Habit habit) {
         var menu=Menus.popup();
         menu.add(Menus.item("History…","habit.history."+habit.id(),true,()->showHistory(tracker,refresh,owner,habit),null));
+        menu.add(Menus.item("Time zone…","habit.zone."+habit.id(),true,()-> {
+            var form=new HabitZoneForm(habit);
+            while(Dialogs.confirm(owner,form,"Daily habit time zone","Save")) {
+                try{form.save(tracker,habit.id());refresh.run();return;}
+                catch(Exception failure){Dialogs.error(owner,failure.getMessage());}
+            }
+        },null));
+        habitOrder(menu,tracker,refresh,owner,habit);
         menu.addSeparator();
         menu.add(Menus.item("Rename…","habit.rename."+habit.id(),true,()->rename(tracker,refresh,owner,habit),null));
         menu.add(Menus.item("Delete…","habit.delete."+habit.id(),true,()->delete(tracker,refresh,owner,habit),null));
         return menu;
+    }
+
+    private static void habitOrder(JPopupMenu menu,Tracker tracker,Runnable refresh,Component owner,Habit habit) {
+        var sameKind=tracker.state().habits().stream().filter(h->h.kind()==habit.kind()).map(Habit::id).toList();
+        int index=sameKind.indexOf(habit.id());
+        menu.addSeparator();
+        menu.add(Menus.item("Move up","habit.up."+habit.id(),index>0,
+            ()->act(owner,refresh,()->tracker.moveHabit(habit.id(),-1)),"Already first"));
+        menu.add(Menus.item("Move down","habit.down."+habit.id(),index>=0&&index<sameKind.size()-1,
+            ()->act(owner,refresh,()->tracker.moveHabit(habit.id(),1)),"Already last"));
     }
 
     private static void showHistory(Tracker tracker,Runnable refresh,Component owner,Habit habit) {
@@ -397,7 +415,7 @@ final class HabitsPanel {
         return line;
     }
 
-    private static JPopupMenu sinceMenu(Tracker tracker,Runnable refresh,JPanel card,Habit habit,ZoneId zone) {
+    static JPopupMenu sinceMenu(Tracker tracker,Runnable refresh,JPanel card,Habit habit,ZoneId zone) {
         var menu=Menus.popup();
         menu.add(Menus.item("Edit start date…","habit.editStart."+habit.id(),true,()-> {
             var input=new DateTimeField(habit.starts().getLast(),zone);
@@ -408,6 +426,7 @@ final class HabitsPanel {
         },null));
         menu.add(Menus.item("History…","habit.periods."+habit.id(),true,
             ()->Dialogs.info(card,"Your history",history(tracker,habit.id(),zone,refresh)),null));
+        habitOrder(menu,tracker,refresh,card,habit);
         menu.addSeparator();
         menu.add(Menus.item("Rename…","habit.renameMenu."+habit.id(),true,()->rename(tracker,refresh,card,habit),null));
         menu.add(Menus.item("Delete…","habit.deleteMenu."+habit.id(),true,()->delete(tracker,refresh,card,habit),null));
