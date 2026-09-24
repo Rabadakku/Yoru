@@ -1,11 +1,14 @@
 package dev.yoru.ui;
 
 import dev.yoru.application.Tracker;
+import dev.yoru.domain.Model.HabitKind;
 import dev.yoru.domain.Model.Task;
 import dev.yoru.domain.Model.ThemeId;
 import java.awt.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -121,6 +124,14 @@ public final class TextFitTest {
             tracker.editList(list.id(), longest(list.name() + " for the autumn term", LIST_NAME), list.colour());
         for (var habit : tracker.state().habits())
             tracker.renameHabit(habit.id(), longest(habit.name() + " before the end of every study day", HABIT_NAME));
+        // And every time-since counter near its widest, counted in calendar
+        // units: "10y 11mo 28d 23h 59m" beside Start again and ⋯ is wider than
+        // the column at 150% text, and the ⋯ was cut off.
+        for (var habit : tracker.state().habits())
+            if (habit.kind() == HabitKind.TIME_SINCE)
+                tracker.editHabitStart(habit.id(), tracker.now().atZone(ZoneId.of(habit.zone()))
+                    .minusYears(10).minusMonths(11).minusDays(28).minusHours(23).minusMinutes(59)
+                    .truncatedTo(ChronoUnit.MINUTES).toInstant());
     }
 
     /** {@code words} repeated to exactly {@code limit} characters, less any space it ends on. */

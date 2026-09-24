@@ -56,7 +56,8 @@ pages.
 
 Daily habits show their last seven days, streak and 30-day consistency on one
 line, with the full history a click away. Time-since trackers show how long
-they have run, to the minute, and keep every previous period. Tick today's
+they have run in years, months, days, hours and minutes, and keep every
+previous period. Tick today's
 habits off beside your tasks, from the mouse or the keyboard. In a daily habit’s
 History, browse earlier weeks or use Show date to correct older check-ins. In
 a time-since tracker’s History, Add missed restart records a past boundary

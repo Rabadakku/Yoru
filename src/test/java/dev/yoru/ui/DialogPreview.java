@@ -125,7 +125,7 @@ public final class DialogPreview {
                 history.show(java.time.LocalDate.of(2024,2,29));
                 render(out,"habit-history",history,new String[]{"Done"});
                 tracker.addHabit("Evening reset",HabitKind.TIME_SINCE,java.time.ZoneOffset.UTC,
-                    Instant.parse("2026-08-01T10:00:00Z"));
+                    Instant.parse("2024-08-01T10:00:00Z"));
                 var since=tracker.state().habits().getLast();
                 render(out,"habit-periods",HabitsPanel.history(tracker,since.id(),java.time.ZoneOffset.UTC,()->{}),new String[]{"Done"});
                 render(out,"habit-missed",HabitsPanel.missedPeriodForm(new DateTimeField(

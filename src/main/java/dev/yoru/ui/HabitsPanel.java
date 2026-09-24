@@ -248,9 +248,16 @@ final class HabitsPanel {
      * end moves onto a line of its own.
      */
     static final class EndOrUnder implements LayoutManager {
+        /**
+         * Where the end goes: beside the subject, under it, or under it at its
+         * narrowest when it is wider than even a line of its own (a long
+         * time-since counter and its controls at 200% text in a half-width
+         * column, see {@link CounterEnd}).
+         */
+        private enum Place { BESIDE, UNDER, NARROWEST }
         private final int floor;
         /** How the row was last measured, so a layout that disagrees can ask again. */
-        private Boolean measuredBeside;
+        private Place measured;
         EndOrUnder(int floor) { this.floor=floor; }
 
         @Override public void addLayoutComponent(String name,Component c) { }
@@ -267,18 +274,24 @@ final class HabitsPanel {
             return width==0?Integer.MAX_VALUE:width-insets.left-insets.right;
         }
 
-        boolean beside(Container row) {
-            if(row.getComponentCount()<2) return true;
-            return room(row)>=floor+SPACE_MD+row.getComponent(1).getPreferredSize().width;
+        private Place place(Container row) {
+            if(row.getComponentCount()<2) return Place.BESIDE;
+            int room=room(row),end=row.getComponent(1).getPreferredSize().width;
+            if(room>=floor+SPACE_MD+end) return Place.BESIDE;
+            return end<=room?Place.UNDER:Place.NARROWEST;
+        }
+
+        private static Dimension size(Component end,Place place) {
+            return place==Place.NARROWEST?end.getMinimumSize():end.getPreferredSize();
         }
 
         @Override public Dimension preferredLayoutSize(Container row) {
             var insets=row.getInsets();
             var subject=row.getComponent(0).getPreferredSize();
-            var end=row.getComponentCount()>1?row.getComponent(1).getPreferredSize():new Dimension();
-            boolean side=beside(row);
-            measuredBeside=side;
-            var inner=side?new Dimension(subject.width+SPACE_MD+end.width,Math.max(subject.height,end.height))
+            var place=place(row);
+            measured=place;
+            var end=row.getComponentCount()>1?size(row.getComponent(1),place):new Dimension();
+            var inner=place==Place.BESIDE?new Dimension(subject.width+SPACE_MD+end.width,Math.max(subject.height,end.height))
                 :new Dimension(Math.max(subject.width,end.width),subject.height+SPACE_XS+end.height);
             return new Dimension(inner.width+insets.left+insets.right,inner.height+insets.top+insets.bottom);
         }
@@ -293,10 +306,10 @@ final class HabitsPanel {
             int width=row.getWidth()-insets.left-insets.right,height=row.getHeight()-insets.top-insets.bottom;
             var subject=row.getComponent(0);
             var end=row.getComponentCount()>1?row.getComponent(1):null;
-            boolean side=beside(row);
             if(end==null) { subject.setBounds(x,y,width,height); return; }
-            var endSize=end.getPreferredSize();
-            if(side) {
+            var place=place(row);
+            var endSize=size(end,place);
+            if(place==Place.BESIDE) {
                 int subjectWidth=Math.max(0,width-endSize.width-SPACE_MD);
                 subject.setBounds(x,y,subjectWidth,height);
                 end.setBounds(x+width-endSize.width,y+Math.max(0,(height-endSize.height)/2),endSize.width,Math.min(height,endSize.height));
@@ -305,14 +318,65 @@ final class HabitsPanel {
                 subject.setBounds(x,y,width,subjectHeight);
                 end.setBounds(x,y+subjectHeight+SPACE_XS,Math.min(width,endSize.width),endSize.height);
             }
-            // Measured for the other arrangement, before the row had its width:
+            // Measured for another arrangement, before the row had its width:
             // what holds it set aside the wrong height, and a box layout keeps
-            // what it measured until it is told otherwise.
-            if(measuredBeside!=null&&measuredBeside!=side) {
-                measuredBeside=side;
+            // what it measured until it is told otherwise. Under at the end's
+            // narrowest is as tall again as under, so it counts as another.
+            if(measured!=null&&measured!=place) {
+                measured=place;
                 for(Container holder=row.getParent();holder!=null;holder=holder.getParent())
                     if(holder.getLayout() instanceof LayoutManager2 cached) cached.invalidateLayout(holder);
                 if(row instanceof JComponent component) component.revalidate();
+            }
+        }
+    }
+
+    /**
+     * A time-since row's end: the counter, then its controls on the same line,
+     * or on the line under it when the row cannot hold both on one.
+     *
+     * Counted in calendar units, a tracker that has run for years reads
+     * "10y 11mo 30d 23h 59m", and at 150% text in a half-width column that
+     * with Start again and ⋯ is wider than the column itself, so moving the
+     * end under the name was not enough: the ⋯ was cut off. The preferred size
+     * is the single line, which a row asks for first; the minimum is the two
+     * lines, which {@link EndOrUnder} falls back to.
+     */
+    static final class CounterEnd implements LayoutManager {
+        @Override public void addLayoutComponent(String name,Component c) { }
+        @Override public void removeLayoutComponent(Component c) { }
+
+        private static Dimension padded(Container end,int width,int height) {
+            var insets=end.getInsets();
+            return new Dimension(width+insets.left+insets.right,height+insets.top+insets.bottom);
+        }
+
+        @Override public Dimension preferredLayoutSize(Container end) {
+            var counter=end.getComponent(0).getPreferredSize();
+            var controls=end.getComponent(1).getPreferredSize();
+            return padded(end,counter.width+SPACE_MD+controls.width,Math.max(counter.height,controls.height));
+        }
+
+        @Override public Dimension minimumLayoutSize(Container end) {
+            var counter=end.getComponent(0).getPreferredSize();
+            var controls=end.getComponent(1).getPreferredSize();
+            return padded(end,Math.max(counter.width,controls.width),counter.height+SPACE_XS+controls.height);
+        }
+
+        @Override public void layoutContainer(Container end) {
+            var insets=end.getInsets();
+            int x=insets.left,y=insets.top;
+            int width=end.getWidth()-insets.left-insets.right,height=end.getHeight()-insets.top-insets.bottom;
+            var counter=end.getComponent(0);
+            var controls=end.getComponent(1);
+            var c=counter.getPreferredSize();
+            var k=controls.getPreferredSize();
+            if(width>=c.width+SPACE_MD+k.width) {
+                counter.setBounds(x,y+Math.max(0,(height-c.height)/2),c.width,Math.min(height,c.height));
+                controls.setBounds(x+width-k.width,y+Math.max(0,(height-k.height)/2),k.width,Math.min(height,k.height));
+            } else {
+                counter.setBounds(x,y,Math.min(width,c.width),c.height);
+                controls.setBounds(x,y+c.height+SPACE_XS,Math.min(width,k.width),k.height);
             }
         }
     }
@@ -355,18 +419,55 @@ final class HabitsPanel {
         return strip;
     }
 
+    private static final String[] UNITS={"y","mo","d","h","m"},UNIT_WORDS={"year","month","day","hour","minute"};
+
     /**
-     * How long a period has run, to the minute: "12d 4h 33m", "4h 33m", "33m".
-     *
-     * No seconds, which tick for nothing and pull the eye from the rest of the
-     * page, and no leading units that are zero (#52).
+     * How long a period has run, from its largest unit down to the minute:
+     * "1y 2mo 3d 4h 5m", "3d 0h 5m", "5m". Every unit below the largest is
+     * written even when it is zero, so the counter only changes width when it
+     * gains a unit. No seconds, which tick for nothing (#52).
      */
-    static String elapsed(Duration running) {
-        long minutes=Math.max(0,running.toMinutes());
-        long days=minutes/1440, hours=minutes/60%24, rest=minutes%60;
-        if(days>0) return days+"d "+hours+"h "+rest+"m";
-        if(hours>0) return hours+"h "+rest+"m";
-        return rest+"m";
+    static String elapsed(Instant start,Instant end,ZoneId zone) {
+        return units(span(start,end,zone),false);
+    }
+
+    /** The same, in words for a screen reader: "1 year, 2 months, 0 days, 4 hours, 5 minutes". */
+    static String elapsedWords(Instant start,Instant end,ZoneId zone) {
+        return units(span(start,end,zone),true);
+    }
+
+    /**
+     * Years, months and days on the calendar in the habit's zone, then the hours
+     * and minutes that have really passed. A month from 31 January is the end of
+     * February, and a day across a clock change is still one day; the hours and
+     * minutes after the last whole day are real elapsed time, so a repeated
+     * autumn hour still counts.
+     */
+    private static long[] span(Instant start,Instant end,ZoneId zone) {
+        if(!end.isAfter(start)) return new long[5];
+        var cursor=start.atZone(zone);
+        var finish=end.atZone(zone);
+        long years=finish.getYear()-cursor.getYear();
+        if(cursor.plusYears(years).isAfter(finish)) years--;
+        cursor=cursor.plusYears(years);
+        long months=java.time.temporal.ChronoUnit.MONTHS.between(YearMonth.from(cursor),YearMonth.from(finish));
+        if(cursor.plusMonths(months).isAfter(finish)) months--;
+        cursor=cursor.plusMonths(months);
+        long days=java.time.temporal.ChronoUnit.DAYS.between(cursor.toLocalDate(),finish.toLocalDate());
+        if(cursor.plusDays(days).isAfter(finish)) days--;
+        cursor=cursor.plusDays(days);
+        long minutes=Duration.between(cursor,finish).toMinutes();
+        return new long[]{years,months,days,minutes/60,minutes%60};
+    }
+
+    private static String units(long[] span,boolean words) {
+        var out=new java.util.StringJoiner(words?", ":" ");
+        boolean started=false;
+        for(int i=0;i<span.length;i++) {
+            started|=span[i]>0||i==span.length-1;
+            if(started) out.add(words?plural((int)span[i],UNIT_WORDS[i]):span[i]+UNITS[i]);
+        }
+        return out.toString();
     }
 
     /** When a period began, as every other date on this page is written. */
@@ -394,7 +495,13 @@ final class HabitsPanel {
 
         var elapsed=label("",TYPE_HEADING,TEXT);
         elapsed.setName("habit.elapsed."+habit.id());
-        Runnable update=()->elapsed.setText(elapsed(Duration.between(habit.starts().getLast(),Instant.now())));
+        Runnable update=()->{
+            var now=tracker.now();
+            elapsed.setText(elapsed(habit.starts().getLast(),now,zone));
+            String words=elapsedWords(habit.starts().getLast(),now,zone);
+            elapsed.setToolTipText(words);
+            elapsed.getAccessibleContext().setAccessibleName(words);
+        };
         update.run();
         // A minute is as often as this can change, and nothing ticks off screen.
         var timer=new Timer(60_000,e->update.run());
@@ -411,7 +518,11 @@ final class HabitsPanel {
         more.setToolTipText("Edit the start, see the history, rename or delete");
         more.getAccessibleContext().setAccessibleName("Actions for "+habit.name());
         more.addActionListener(e->sinceMenu(tracker,refresh,line,habit,zone).show(more,0,more.getHeight()));
-        line.add(trailing(elapsed,again,more));
+        var end=new JPanel(new CounterEnd());
+        end.setOpaque(false);
+        end.add(elapsed);
+        end.add(trailing(again,more));
+        line.add(end);
         return line;
     }
 
@@ -566,11 +677,11 @@ final class HabitsPanel {
                 var starts=habit.starts();
                 for(int i=0;i<starts.size();i++) {
                     var start=starts.get(i);
-                    var end=i+1<starts.size()?starts.get(i+1):Instant.now();
+                    var end=i+1<starts.size()?starts.get(i+1):tracker.now();
                     String when=began(start,zone);
                     var line=wrappingRow();
                     line.add(label(when,TYPE_BODY,TEXT));
-                    line.add(label(Analytics.report(Duration.between(start,end).getSeconds()),TYPE_BODY,MUTED));
+                    line.add(label(elapsed(start,end,zone),TYPE_BODY,MUTED));
                     if(i==starts.size()-1)line.add(label("current",TYPE_CAPTION,CYAN));
                     var edit=button("Edit",()-> {
                         var input=new DateTimeField(start,zone,"Start");
