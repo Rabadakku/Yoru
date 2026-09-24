@@ -50,7 +50,6 @@ clock.
 | `update` | `ReleaseFeed`, `Download`, `Updates`, `MacInstall`, `Version`. |
 | `json` | `Json`, the bounded codec. |
 | `ai` | AI assistants over the Model Context Protocol (#47): `Mcp` (the protocol, no I/O), `WorkspaceTools` (the tools, run against `Tracker`), `Bridge` (the owner-only socket between `Yoru --mcp` and the running app), `McpMain` (the `--mcp` process) and `ClaudeSetup` (the command and Claude Desktop's settings). `OpenAiTasks` keeps the paste-a-reply task import. |
-| `plugins` | `ImportProvider`, a contract nothing implements yet. |
 | `ui` | Swing. `YoruApp` is the window: navigation, the ticker and the vault. Pages reach it through `Shell`. |
 
 ### The three rules that hold it together

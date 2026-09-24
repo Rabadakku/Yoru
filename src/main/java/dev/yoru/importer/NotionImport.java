@@ -26,12 +26,6 @@ import java.util.zip.ZipInputStream;
  * and {@link #prepare} builds the records for a single
  * {@code Tracker.importTasks} write, so a mapping half-way through being fixed
  * can never leave a partial import behind.
- *
- * Deliberately not a {@code plugins.ImportProvider}: that contract's
- * {@code Observation} is a measured value with a unit, which cannot carry a
- * title, a deadline, notes and tags. The shape is the same — user-selected bytes
- * in, proposals out, nothing written until the caller commits — but the record
- * differs because the data does.
  */
 public final class NotionImport {
     private NotionImport() { }

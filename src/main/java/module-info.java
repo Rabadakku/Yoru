@@ -7,7 +7,6 @@ module dev.yoru {
     requires java.net.http;
     exports dev.yoru.domain;
     exports dev.yoru.application;
-    exports dev.yoru.plugins;
 
     // Theme installs its own combo, checkbox and slider UI delegates by class
     // name, and java.desktop instantiates them reflectively. Reflection into a

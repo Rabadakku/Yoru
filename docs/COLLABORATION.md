@@ -84,7 +84,7 @@ divide so you do not both edit these:
 
 Safe to work on in parallel, because they are largely self-contained:
 `ui/TasksPanel`, `ui/HabitsPanel`, `ui/ScheduleGrid`, `ui/BuddyScene`,
-`ai/*`, `plugins/*`, and anything under `src/test`.
+`ai/*`, and anything under `src/test`.
 
 **If your change needs a new stored field, say so on the issue first.** Two
 agents adding fields to `Model` and `EncryptedVault` at once produces a schema
