@@ -252,7 +252,7 @@ public final class Preview {
         for (int day = 0; day < 9; day++) if (day != 3) tracker.checkIn(habit, today.minusDays(day), true);
         tracker.addHabit("Stretch", HabitKind.DAILY, zone, null);
         tracker.addHabit("Time since last soda", HabitKind.TIME_SINCE, zone,
-            Instant.now().minusSeconds(18 * 86400 + 7340));
+            Instant.now().atZone(zone).minusYears(1).minusMonths(2).minusDays(18).minusSeconds(7340).toInstant());
 
         // Sunday-first here, matching the tracker Yoru is replacing, so the
         // preview actually exercises a non-default week start (#26), and the

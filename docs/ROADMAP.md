@@ -1,6 +1,30 @@
 # Yoru roadmap
 
-## Bulk session actions (#59)
+## Time-since in calendar units
+
+On `claude/time-since-units`, carried over from uncommitted work on
+`codex/time-since-units` that never reached the remote. The owner asked for
+the time-since counter in minutes, hours, days, months and years. It now reads
+"1y 2mo 3d 4h 5m": years, months and days on the calendar in the habit's zone,
+then real elapsed hours and minutes. Every unit below the largest is written
+even when zero, so the counter changes width only when it gains a unit. The
+history list uses the same format, and screen readers hear whole words
+("1 year, 2 months, …"). No stored fields or schema changes.
+
+The longer counter did not fit. At 150% text the counter, Start again and ⋯
+were wider than the Habits column, so moving them under the name still cut
+off ⋯. The row's end now puts the counter on its own line and the controls
+under it (`HabitsPanel.CounterEnd`). `EndOrUnder` treats that as a third
+arrangement, so the row is measured again when it switches. Stacked `Columns`
+now update each card's height at every layout instead of fixing it when they
+stack, which had cut off the grown row at 125% in the smallest window.
+
+Validation: `TimeSinceTest` covers leap years, month ends, both daylight-saving
+changes, the live counter and history, spoken units, and narrow columns.
+`TextFitTest` now also sets every time-since tracker to about eleven years
+("10y 11mo 29d 23h 59m") and passes at every text size and minimum window.
+
+## Merged — bulk session actions (#59, PR #106)
 
 `codex/session-bulk-actions` adds multiple selection to recorded sessions on
 Data, with Move to activity, Shift times (elapsed minutes) and confirmed Delete.
@@ -18,7 +42,7 @@ checks and 22 UI checks cover sorting/filtering, failures, running timers, Anki
 IDs and DST. Inspected controls in all five themes and both 100%/200% text sizes,
 including move/shift dialogs. The preview inventory passed all 302 checks.
 
-## Habit order and daily time zone (#59, PR #105)
+## Merged — habit order and daily time zone (#59, PR #105)
 
 `codex/habit-controls` adds Move up/down to both kinds of habit and Time zone
 to the daily habit menu. Each kind reorders only among its own neighbours; the

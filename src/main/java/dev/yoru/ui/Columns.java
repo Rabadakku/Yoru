@@ -26,7 +26,19 @@ Columns(JComponent left,JComponent right) {
             @Override public void componentResized(ComponentEvent e) { apply(getWidth()<STACK_BELOW); }
         });
     }
-    @Override public void doLayout() { apply(getWidth() < STACK_BELOW); super.doLayout(); }
+    @Override public void doLayout() {
+        apply(getWidth() < STACK_BELOW);
+        // Held when the cards were stacked, which is before their rows had a
+        // width. A row that then moves its figures under its name grows, and
+        // a card held to its old height cut off the time-since counter and its
+        // controls at 125% text in the smallest window.
+        if (stacked) {
+            holdToOwnHeight(left);
+            holdToOwnHeight(right);
+            ((LayoutManager2) getLayout()).invalidateLayout(this);
+        }
+        super.doLayout();
+    }
 
     /**
      * Measured in the arrangement its width calls for, once it has one.
