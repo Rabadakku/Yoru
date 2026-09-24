@@ -12,4 +12,4 @@ javac --release 22 -encoding UTF-8 -Xlint:all,-serial ${YORU_WERROR:+-Werror} -d
 # Bundled resources ride the classpath beside the classes,
 # so they land in the jar the next line packs from build/classes.
 if [ -d src/main/resources ]; then cp -R src/main/resources/. build/classes/; fi
-jar --create --file build/yoru.jar --main-class dev.yoru.ui.YoruApp -C build/classes .
+jar --create --file build/yoru.jar --main-class dev.yoru.Yoru -C build/classes .

@@ -20,7 +20,7 @@ public final class ClaudeSetupTest {
     public static void main(String[] args) throws Exception {
         var command = ClaudeSetup.command();
         check(command.getLast().equals("--mcp"), "The command starts the tool server: " + command);
-        check(command.contains("dev.yoru.ui.YoruApp"), "From a build, it names the main class and the classes");
+        check(command.contains("dev.yoru.Yoru"), "From a build, it names the main class and the classes");
 
         var installed = List.of("/Applications/Yoru.app/Contents/MacOS/Yoru", "--mcp");
         var snippet = Json.object(Json.read(ClaudeSetup.desktopSnippet(installed)));

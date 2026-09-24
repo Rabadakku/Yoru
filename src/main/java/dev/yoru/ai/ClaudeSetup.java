@@ -42,9 +42,9 @@ public final class ClaudeSetup {
         String java = ProcessHandle.current().info().command().orElse("java");
         try {
             var where = Path.of(McpMain.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            return List.of(java, "-cp", where.toString(), "dev.yoru.ui.YoruApp", "--mcp");
+            return List.of(java, "-cp", where.toString(), "dev.yoru.Yoru", "--mcp");
         } catch (URISyntaxException | RuntimeException unknown) {
-            return List.of(java, "-cp", "yoru.jar", "dev.yoru.ui.YoruApp", "--mcp");
+            return List.of(java, "-cp", "yoru.jar", "dev.yoru.Yoru", "--mcp");
         }
     }
 

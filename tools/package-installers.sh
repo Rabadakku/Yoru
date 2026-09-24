@@ -82,7 +82,7 @@ set -- \
   --copyright "The Yoru project" \
   --dest "$out" \
   --module-path "$module_path" \
-  --module dev.yoru/dev.yoru.ui.YoruApp \
+  --module dev.yoru/dev.yoru.Yoru \
   --add-modules java.desktop,java.prefs,java.net.http \
   --icon "$icon"
 

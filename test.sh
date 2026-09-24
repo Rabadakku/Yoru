@@ -47,10 +47,18 @@ java -Djava.awt.headless=true --module-path build/classes --module dev.yoru/dev.
 # on standard output and nothing else there.
 reply=$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
     '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-    | java --module-path build/classes --module dev.yoru/dev.yoru.ui.YoruApp --mcp 2>/dev/null)
+    | java --module-path build/classes --module dev.yoru/dev.yoru.Yoru --mcp 2>/dev/null)
 case "$reply" in
     '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"'*'"id":2,"result":{"tools":[{"name":"get_overview"'*) ;;
     *) echo "FAIL: Yoru --mcp did not answer as a tool server: $reply" >&2; exit 1 ;;
 esac
 [ "$(printf '%s\n' "$reply" | wc -l)" -eq 2 ] || { echo "FAIL: Yoru --mcp wrote more than its replies" >&2; exit 1; }
 echo "PASS: Yoru --mcp answers the protocol from the named module"
+# And without the window system: on a Mac, loading the toolkit can put a second
+# Yoru in the Dock while an assistant is using it.
+loaded=$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"ping"}' \
+    | java -Xlog:class+load=info --module-path build/classes --module dev.yoru/dev.yoru.Yoru --mcp 2>/dev/null)
+case "$loaded" in
+    *'java.awt.Toolkit '*|*'javax.swing.'*) echo "FAIL: Yoru --mcp loaded the window system" >&2; exit 1 ;;
+esac
+echo "PASS: Yoru --mcp never loads the window system"

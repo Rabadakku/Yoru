@@ -154,8 +154,9 @@ central promise of the app.
 
 ## AI assistants
 
-Yoru has no AI client. An AI app starts `Yoru --mcp` (the same launcher, which
-checks its first argument before touching the window system) and talks JSON-RPC
+Yoru has no AI client. An AI app starts `Yoru --mcp` (the same launcher, whose
+main class `dev.yoru.Yoru` has no Swing in it and checks its first argument
+before anything of the window loads) and talks JSON-RPC
 on standard input and output. That process answers the handshake and the tool
 list itself, and forwards each tool call over `Bridge` to the running app, one
 connection per call, so it survives the app being opened, closed or relocked.

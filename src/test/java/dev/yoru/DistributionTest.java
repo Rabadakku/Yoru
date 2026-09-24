@@ -51,7 +51,7 @@ public final class DistributionTest {
             }
             var manifest=file.getManifest();
             check(manifest!=null,"The jar has a manifest");
-            check("dev.yoru.ui.YoruApp".equals(manifest.getMainAttributes().getValue("Main-Class")),
+            check("dev.yoru.Yoru".equals(manifest.getMainAttributes().getValue("Main-Class")),
                 "The jar starts the application, not a test harness");
         }
 

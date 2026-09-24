@@ -799,10 +799,8 @@ public final class YoruApp extends JPanel implements Shell {
             + "Open it with any Game Boy Advance emulator. Yoru will not touch it again.");
     }
 
-    public static void main(String[] args) throws java.io.IOException {
-        // Started by an AI app (#47): speak the protocol on standard input and
-        // output, and never open a window or a vault.
-        if(args.length>0&&args[0].equals("--mcp")) { dev.yoru.ai.McpMain.main(args); return; }
+    /** Opens the window. Started through {@link dev.yoru.Yoru}, which sends {@code --mcp} elsewhere first. */
+    public static void main(String[] args) {
         DesktopChrome.prepare();
         if (SystemAppearance.enabled()) Theme.systemStyle=SystemAppearance.read();
         SwingUtilities.invokeLater(()-> {
