@@ -445,7 +445,8 @@ public final class Tracker {
         if (since != null && since.isAfter(clock.instant())) throw new IllegalArgumentException("Start cannot be in the future.");
         var next = new ArrayList<>(state.habits());
         next.add(new Habit(UUID.randomUUID(), name, kind, zone.getId(), Set.of(),
-            kind == HabitKind.DAILY ? List.of() : List.of(Objects.requireNonNull(since))));
+            kind == HabitKind.DAILY ? List.of() : List.of(Objects.requireNonNull(since)),
+            (kind == HabitKind.DAILY ? clock.instant() : since).atZone(zone).toLocalDate()));
         commit(state.withHabits(next));
     }
     public void checkIn(UUID id, LocalDate date, boolean done) throws IOException {
@@ -453,11 +454,15 @@ public final class Tracker {
         if(h.kind()!=HabitKind.DAILY) throw new IllegalArgumentException("Choose a daily tracker.");
         if(date.isAfter(LocalDate.now(clock.withZone(ZoneId.of(h.zone()))))) throw new IllegalArgumentException("Cannot check off a future day.");
         var dates = new HashSet<>(h.checkIns()); if(done) dates.add(date); else dates.remove(date);
-        replaceHabit(new Habit(h.id(),h.name(),h.kind(),h.zone(),dates,h.starts()));
+        var began = date.isBefore(h.since()) && done ? date : h.since();
+        var next = new Habit(h.id(),h.name(),h.kind(),h.zone(),dates,h.starts(),began);
+        if(next.equals(h))return;
+        if(!done || date.isBefore(LocalDate.now(clock.withZone(ZoneId.of(h.zone()))))) repository.backup();
+        replaceHabit(next);
     }
     public void renameHabit(UUID id, String name) throws IOException {
         var h=habit(id);
-        var renamed=new Habit(h.id(),name,h.kind(),h.zone(),h.checkIns(),h.starts());
+        var renamed=new Habit(h.id(),name,h.kind(),h.zone(),h.checkIns(),h.starts(),h.since());
         if(renamed.equals(h))return;
         repository.backup();
         replaceHabit(renamed);
@@ -502,7 +507,27 @@ public final class Tracker {
             throw new IllegalArgumentException("A period has to start before the one after it began.");
         var starts=new ArrayList<>(h.starts());
         starts.set(index,newStart);
-        replaceHabit(new Habit(h.id(),h.name(),h.kind(),h.zone(),h.checkIns(),starts));
+        var next=new Habit(h.id(),h.name(),h.kind(),h.zone(),h.checkIns(),starts);
+        if(next.equals(h))return;
+        repository.backup();
+        replaceHabit(next);
+    }
+
+    /** Inserts a missed restart, preserving every existing boundary (#59). */
+    public void addHabitPeriod(UUID id, Instant start) throws IOException {
+        var h=habit(id);
+        if(h.kind()!=HabitKind.TIME_SINCE) throw new IllegalArgumentException("Choose a time-since tracker.");
+        if(start.isAfter(clock.instant())) throw new IllegalArgumentException("Start cannot be in the future.");
+        start=start.truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
+        final var minute=start;
+        if(h.starts().stream().anyMatch(value->value.truncatedTo(java.time.temporal.ChronoUnit.MINUTES).equals(minute)))
+            throw new IllegalArgumentException("A period already starts in that minute.");
+        var starts=new ArrayList<>(h.starts());
+        starts.add(start);
+        starts.sort(Comparator.naturalOrder());
+        var next=new Habit(h.id(),h.name(),h.kind(),h.zone(),h.checkIns(),starts);
+        repository.backup();
+        replaceHabit(next);
     }
 
     /**

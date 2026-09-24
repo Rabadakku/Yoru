@@ -1,6 +1,24 @@
 # Yoru roadmap
 
-## In review — automatic Anki streak (#100)
+## In review — correcting habit history (#59)
+
+`codex/habit-history-fixes` opens the daily history beyond four weeks with paging and
+a jump-to-date field. Old check-ins can be added or removed in place; corrections
+are backed up before saving. Removing a check-in or renaming a habit preserves
+its beginning, so consistency does not silently discard missed days. Creation
+uses the tracker clock in the habit’s zone.
+
+Time-since history has Add missed restart, inserting a minute-aligned boundary
+without moving existing starts. Duplicate minutes and future starts are refused
+before backup/save. No stored fields or schema changes. Reordering and the other
+CRUD areas in #59 remain open.
+
+Validation: the complete isolated suite passed in a clean checkout, including
+30 history/persistence checks and 15 UI checks. All five themes and 200% text
+were reviewed; the history remains scrollable within a bounded dialog. Existing
+legacy vault fixtures and encrypted/portable roundtrips pass.
+
+## Merged — automatic Anki streak (#100, PR #103)
 
 `codex/anki-streak` adds a read-only Anki streak to Habits without creating a
 manual habit. Any date with reviews counts, independent of imported timed
@@ -14,7 +32,7 @@ streak/persistence and 10 UI checks. Automatic refresh retains 100 review days;
 400-day summaries survive encrypted and portable roundtrips. Reviewed all five
 themes and enlarged text. No live personal Anki profile was opened.
 
-## In review — bulk task actions (#59, PR #101)
+## Merged — bulk task actions (#59, PR #101)
 
 `codex/bulk-task-actions` adds selection to the task table for status, list,
 due date, planned day, tags and deletion. Each operation validates the whole

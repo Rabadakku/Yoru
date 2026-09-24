@@ -54,7 +54,10 @@ pages.
 Daily habits show their last seven days, streak and 30-day consistency on one
 line, with the full history a click away. Time-since trackers show how long
 they have run, to the minute, and keep every previous period. Tick today's
-habits off beside your tasks, from the mouse or the keyboard.
+habits off beside your tasks, from the mouse or the keyboard. In a daily habit’s
+History, browse earlier weeks or use Show date to correct older check-ins. In
+a time-since tracker’s History, Add missed restart records a past boundary
+without moving the existing ones. History corrections are backed up first.
 
 ![Yoru Habits in the dark theme, with daily habits and time-since trackers](https://github.com/Rabadakku/Yoru/releases/download/v1.0.21/yoru-habits-dark.png)
 

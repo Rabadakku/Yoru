@@ -2,7 +2,7 @@ package dev.yoru.ui;
 
 import dev.yoru.application.Repository;
 import dev.yoru.application.Tracker;
-import dev.yoru.domain.Model.State;
+import dev.yoru.domain.Model.*;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
@@ -53,6 +53,8 @@ public final class DialogPreview {
         SwingUtilities.invokeAndWait(() -> {
             try {
                 Theme.install();
+                if(args.length>2)TextSize.use(Integer.parseInt(args[2]));
+                if(args.length>1)Theme.apply(ThemeId.valueOf(args[1]));
 
                 // The launcher's welcome card: the first screen anyone sees,
                 // drawn by the launcher itself so this cannot drift from it.
@@ -115,6 +117,19 @@ public final class DialogPreview {
                 render(out, "bulk-date", new TaskBulkActions.DateForm(false), new String[]{"Apply", "Cancel"});
                 render(out, "bulk-tags", new TaskBulkActions.TagsForm(tracker.state()), new String[]{"Apply", "Cancel"});
 
+                tracker.addHabit("Evening reading",HabitKind.DAILY,java.time.ZoneOffset.UTC,null);
+                var daily=tracker.state().habits().getFirst();
+                tracker.checkIn(daily.id(),java.time.LocalDate.of(2024,2,29),true);
+                var history=(DailyHabitHistory)HabitsPanel.historyGrid(tracker,()->{},daily);
+                history.show(java.time.LocalDate.of(2024,2,29));
+                render(out,"habit-history",history,new String[]{"Done"});
+                tracker.addHabit("Evening reset",HabitKind.TIME_SINCE,java.time.ZoneOffset.UTC,
+                    Instant.parse("2026-08-01T10:00:00Z"));
+                var since=tracker.state().habits().getLast();
+                render(out,"habit-periods",HabitsPanel.history(tracker,since.id(),java.time.ZoneOffset.UTC,()->{}),new String[]{"Done"});
+                render(out,"habit-missed",HabitsPanel.missedPeriodForm(new DateTimeField(
+                    Instant.parse("2026-08-14T10:00:00Z"),java.time.ZoneOffset.UTC,"Restarted at")),new String[]{"Add restart","Cancel"});
+
                 // The weekly template: the only dialog that groups by weekday.
                 var planner = new Tracker(new Repository() {
                     State state = State.empty();
@@ -136,7 +151,7 @@ public final class DialogPreview {
                     java.time.LocalTime.of(11, 0), java.time.LocalTime.of(12, 0));
                 render(out, "weekly", new WeeklyTemplate(planner, () -> { }), new String[]{"Done"});
 
-                System.out.println("Rendered 10 dialogs to " + out);
+                System.out.println("Rendered 13 dialogs to " + out);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
