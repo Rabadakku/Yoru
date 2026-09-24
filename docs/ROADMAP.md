@@ -1,15 +1,18 @@
 # Yoru roadmap
 
-## Outstanding tickets (#59, #68, #74; PR #109)
+## Merged — repeat weeks, tasks as a database, quick add (#59, #68, #74; PR #109)
 
 On `claude/outstanding-tickets-97unts`, working down the open tickets in the
-order #65 sets. Everything below passed the full isolated suite.
+order #65 sets. Everything below passed the full isolated suite, together with
+PR #108, as a non-root user.
 
 - **#59, one week of a weekly repeat (schema 21).** A weekly block can be
   skipped, moved or changed for one week and restored later, from the week
   grid or its card. `CrudCoverageTest` now runs in `./test.sh`: a table of
   every record the owner keeps, with the controls that create, view, edit and
-  delete it, failing when a control goes missing. #59 still depends on #108.
+  delete it, failing when a control goes missing. With #108's activity and
+  tag order, every record in #59 can now be created, viewed, edited, deleted
+  and reordered from the interface.
 - **#68, tasks as a database (schema 22).** Priorities, statuses of the
   owner's own inside the three groups, and properties of every type, managed
   from Properties on the Tasks page. The table folds the extra columns under
@@ -42,7 +45,22 @@ Next, in this order:
 
 #49, #62, #63 and #64 wait on the owner and stay open.
 
-## Time-since in calendar units
+## Merged — activity and tag order (#59, PR #108)
+
+On `claude/reorder-activities-tags`. Each activity row on Data and each tag in
+the tag manager has ↑ and ↓ arrows, turned off at either end. `Tracker.moveActivity`
+and `Tracker.moveTag` swap an item with its neighbour, back up first, and write
+nothing at an end. Sessions, blocks and tasks refer to activities and tags by id,
+so only the order changes. After a move, focus returns to the same arrow on the
+item's new row (`ui.Reorder`), so an item can be moved several places from the
+keyboard. No stored fields or schema changes: the lists already kept their order.
+
+Validation: `ReorderTest` (23 checks: ends, refusals, failed saves and backups,
+both vault formats), plus arrow checks in `ActivityUiTest` and `TaskBoardTest`.
+The Data page was reviewed at 100% and 200% text, and the tag manager in
+`DialogPreview`.
+
+## Merged — time-since in calendar units (PR #107)
 
 On `claude/time-since-units`, carried over from uncommitted work on
 `codex/time-since-units` that never reached the remote. The owner asked for
