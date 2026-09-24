@@ -8,8 +8,13 @@ public final class Analytics {
      * One expansion of a weekly template entry onto a real date. Derived, never
      * stored: two occurrences of the same Monday block in different weeks share
      * a recurringId, which is how the grid maps a drawn box back to its rule.
+     *
+     * @param week    the day the rule puts this week's block on, which names the
+     *                week when it is changed on its own (#59).
+     * @param changed whether this week's block was moved from where the rule puts it.
      */
-    public record Occurrence(UUID recurringId, UUID activityId, Instant start, Instant end) { }
+    public record Occurrence(UUID recurringId, UUID activityId, Instant start, Instant end,
+                             LocalDate week, boolean changed) { }
 
     /**
      * Expands the weekly template across the seven days from weekStart.
@@ -17,6 +22,11 @@ public final class Analytics {
      * Resolved in the given zone, so a 09:00 class is 09:00 local on every one of
      * those days regardless of a daylight-saving change between them — which is
      * the whole reason the template stores LocalTime rather than Instant.
+     *
+     * A week changed on its own (#59) is left where the rule would put it and
+     * drawn where it was moved to instead, or not at all when it was skipped.
+     * A block moved into this week from a day just outside it is this week's to
+     * draw, and one moved out of it is not.
      *
      * On the day a zone skips an hour, a time inside the gap moves later by the
      * length of the gap, so a block starting inside it is shorter that day. One
@@ -26,17 +36,36 @@ public final class Analytics {
      */
     public static List<Occurrence> occurrences(State state, LocalDate weekStart, ZoneId zone) {
         var out = new ArrayList<Occurrence>();
-        for (int offset = 0; offset < 7; offset++) {
-            LocalDate date = weekStart.plusDays(offset);
-            for (var rule : state.recurring()) {
-                if (rule.dayOfWeek() != date.getDayOfWeek()) continue;
-                var start = ZonedDateTime.of(date, rule.startTime(), zone).toInstant();
-                var end = ZonedDateTime.of(date, rule.endTime(), zone).toInstant();
-                if (!end.isAfter(start)) continue;
-                out.add(new Occurrence(rule.id(), rule.activityId(), start, end));
+        var weekEnd = weekStart.plusDays(7);
+        for (var rule : state.recurring()) {
+            for (int offset = 0; offset < 7; offset++) {
+                LocalDate date = weekStart.plusDays(offset);
+                if (rule.dayOfWeek() != date.getDayOfWeek() || rule.changeOn(date) != null) continue;
+                add(out, rule, date, date, rule.startTime(), rule.endTime(), false, zone);
+            }
+            for (var change : rule.changes()) {
+                if (change.skipped()) continue;
+                var day = change.movedTo();
+                if (day.isBefore(weekStart) || !day.isBefore(weekEnd)) continue;
+                add(out, rule, change.date(), day, change.start(), change.end(), true, zone);
             }
         }
         out.sort(Comparator.comparing(Occurrence::start));
+        return List.copyOf(out);
+    }
+
+    private static void add(List<Occurrence> out, RecurringBlock rule, LocalDate week, LocalDate day,
+                            LocalTime from, LocalTime to, boolean changed, ZoneId zone) {
+        var start = ZonedDateTime.of(day, from, zone).toInstant();
+        var end = ZonedDateTime.of(day, to, zone).toInstant();
+        if (end.isAfter(start)) out.add(new Occurrence(rule.id(), rule.activityId(), start, end, week, changed));
+    }
+
+    /** The blocks the weekly template holds on one day, changed weeks and all. */
+    public static List<Occurrence> occurrencesOn(State state, LocalDate day, ZoneId zone) {
+        var out = new ArrayList<Occurrence>();
+        for (var o : occurrences(state, day, zone))
+            if (o.start().atZone(zone).toLocalDate().equals(day)) out.add(o);
         return List.copyOf(out);
     }
 

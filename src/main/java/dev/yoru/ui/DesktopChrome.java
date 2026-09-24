@@ -41,6 +41,7 @@ final class DesktopChrome {
         var bar = new JMenuBar(); bar.setName("workspace.menu");
         var file = new JMenu("File");
         file.add(item("New page", KeyStroke.getKeyStroke(KeyEvent.VK_N,key), app::newNote));
+        file.add(item("Command palette…", KeyStroke.getKeyStroke(KeyEvent.VK_K,key), () -> CommandPalette.open(app)));
         file.addSeparator();
         file.add(item("Close vault", KeyStroke.getKeyStroke(KeyEvent.VK_W,key|InputEvent.SHIFT_DOWN_MASK), app::closeVault));
         bar.add(file);

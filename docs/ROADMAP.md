@@ -1,6 +1,51 @@
 # Yoru roadmap
 
-## Activity and tag order (#59)
+## Merged — repeat weeks, tasks as a database, quick add (#59, #68, #74; PR #109)
+
+On `claude/outstanding-tickets-97unts`, working down the open tickets in the
+order #65 sets. Everything below passed the full isolated suite, together with
+PR #108, as a non-root user.
+
+- **#59, one week of a weekly repeat (schema 21).** A weekly block can be
+  skipped, moved or changed for one week and restored later, from the week
+  grid or its card. `CrudCoverageTest` now runs in `./test.sh`: a table of
+  every record the owner keeps, with the controls that create, view, edit and
+  delete it, failing when a control goes missing. With #108's activity and
+  tag order, every record in #59 can now be created, viewed, edited, deleted
+  and reordered from the interface.
+- **#68, tasks as a database (schema 22).** Priorities, statuses of the
+  owner's own inside the three groups, and properties of every type, managed
+  from Properties on the Tasks page. The table folds the extra columns under
+  the title rather than scrolling sideways, which `TextFitTest` forbids.
+  Notion imports map their columns to properties.
+- **#74, quick add (schema 23).** One line makes a whole task:
+  "Essay draft tomorrow 5pm #school !high every monday /classes". The parts
+  it recognises are highlighted and listed under the line, and each can be
+  kept as plain text. It works from the + New task row and from a new command
+  palette (Cmd/Ctrl-K), which also goes to any page. Tasks can now be due at a
+  time of day. A setting turns the parsing off. `QuickAddTest` checks 86
+  phrases against a fixed date, and the rules for ambiguous ones are written
+  in `application.QuickAdd`.
+
+Next, in this order:
+
+1. **Claude integration.** Claude integration is wanted without an API key.
+   Anthropic does not allow third-party apps to offer claude.ai sign-in, so
+   Yoru will not call Claude. Instead Claude's own apps call Yoru: Yoru becomes
+   a local MCP server that Claude Desktop or Claude Code starts. It reaches the
+   running, unlocked app over a connection only the same user account can
+   open. It is off by default in Settings → Integrations, reads first, and
+   makes changes only behind a second switch, through `Tracker` like any other
+   edit. No network code in Yoru. Supersedes the API-key plan in #47.
+2. The rest of #65: #70, #69, #71, #72, #73, then #83, #84, #76, #77, #75,
+   #80, #81, #82, #79, #78, #60, #41, #47, #46 and #45.
+3. An audit of the closed tickets against what shipped, allowing for the
+   directions that changed since (the game removed in #58, Apple Health
+   cancelled in #40, the decorative portrait withdrawn).
+
+#49, #62, #63 and #64 wait on the owner and stay open.
+
+## Merged — activity and tag order (#59, PR #108)
 
 On `claude/reorder-activities-tags`. Each activity row on Data and each tag in
 the tag manager has ↑ and ↓ arrows, turned off at either end. `Tracker.moveActivity`
@@ -13,8 +58,7 @@ keyboard. No stored fields or schema changes: the lists already kept their order
 Validation: `ReorderTest` (23 checks: ends, refusals, failed saves and backups,
 both vault formats), plus arrow checks in `ActivityUiTest` and `TaskBoardTest`.
 The Data page was reviewed at 100% and 200% text, and the tag manager in
-`DialogPreview`. The rest of #59: skip or change one week of a weekly repeat
-(needs a stored exception, so a schema bump), and `CrudCoverageTest`.
+`DialogPreview`.
 
 ## Merged — time-since in calendar units (PR #107)
 

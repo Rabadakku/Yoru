@@ -260,6 +260,8 @@ public final class YoruApp extends JPanel implements Shell {
     @Override public Component owner() { return this; }
     @Override public boolean reducedMotion() { return reducedMotion; }
     @Override public void show(String next) { showPage(next); }
+    /** The page on screen, for the tests. */
+    String page() { return page; }
     @Override public void refresh() { if(!closed) showPage(page); }
     @Override public ZoneId zone() { return zone; }
     @Override public String activityName(UUID id) { return name(id); }
@@ -543,8 +545,8 @@ public final class YoruApp extends JPanel implements Shell {
         // What the page makes goes on its title's line; what moves the grid
         // stays with the grid it moves.
         p.add(pageHeaderFor("Schedule","RECORDED SESSIONS · PLANNED BLOCKS · WEEKLY TEMPLATE",
-            button("+ Plan block",()->timeDialog(true)),
-            ghost(button("Weekly template…",()->WeeklyTemplate.open(this,tracker,()->showPage("Schedule"))))));
+            named(button("+ Plan block",()->timeDialog(true)),"schedule.plan"),
+            named(ghost(button("Weekly template…",()->WeeklyTemplate.open(this,tracker,()->showPage("Schedule")))),"schedule.template")));
         p.add(nav);
         gap(p,SPACE_MD);
 
@@ -559,6 +561,11 @@ public final class YoruApp extends JPanel implements Shell {
                 if(existing!=null) perform(()->tracker.editSession(id,existing.activityId(),start,end));
             }
             public void open(UUID id,boolean recorded) { editOnGrid(id,recorded); }
+            public void moveRepeat(UUID ruleId,LocalDate week,Instant start,Instant end) {
+                RepeatWeek.moveOnGrid(YoruApp.this,ruleId,week,start,end);
+            }
+            public void openRepeat(UUID ruleId,LocalDate week) { RepeatWeek.open(YoruApp.this,ruleId,week); }
+            public boolean repeatsEditable() { return true; }
         });
         var frame=new JPanel(new BorderLayout());
         frame.setOpaque(true);
@@ -602,8 +609,9 @@ public final class YoruApp extends JPanel implements Shell {
             var when=b.start().atZone(zone);
             // A locale-stable day and a 24-hour time: the grid, the list and the
             // editor all say the same thing about when a block starts.
-            line.add(label(when.getDayOfWeek().getDisplayName(TextStyle.SHORT,Locale.ENGLISH)+" "
-                +when.format(DateTimeFormatter.ofPattern("HH:mm"))+" – "+b.end().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")),TYPE_CAPTION,GOLD_TEXT),BorderLayout.WEST);
+            line.add(named(label(when.getDayOfWeek().getDisplayName(TextStyle.SHORT,Locale.ENGLISH)+" "
+                +when.format(DateTimeFormatter.ofPattern("HH:mm"))+" – "+b.end().atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")),TYPE_CAPTION,GOLD_TEXT),
+                "block.when."+b.id()),BorderLayout.WEST);
             // The name gives way and the match figure stays whole: one label cut
             // "…" through both, and the figure was the part lost.
             var what=new JPanel();
@@ -614,16 +622,29 @@ public final class YoruApp extends JPanel implements Shell {
             what.add(Box.createHorizontalGlue());
             line.add(what,BorderLayout.CENTER);
             var actions=row();
-            actions.add(ghost(button("Edit",()->editTime(null,b))));
-            actions.add(ghost(button("Delete",()->{
+            // Named for a screen reader: a column of "Edit" buttons says nothing about which block each edits.
+            String spoken=name(b.activityId())+" "+when.getDayOfWeek().getDisplayName(TextStyle.FULL,Locale.ENGLISH)
+                +" "+when.format(DateTimeFormatter.ofPattern("HH:mm"));
+            var edit=named(ghost(button("Edit",()->editTime(null,b))),"block.edit."+b.id());
+            edit.getAccessibleContext().setAccessibleName("Edit planned "+spoken);
+            actions.add(edit);
+            actions.add(named(ghost(button("Delete",()->{
                 if(Dialogs.confirmDestructive(this,"Delete this planned block?","Delete block","Delete"))
                     perform(()->tracker.deleteBlock(b.id()));
-            })));
+            })),"block.delete."+b.id()));
+            ((JButton)actions.getComponent(actions.getComponentCount()-1)).getAccessibleContext()
+                .setAccessibleName("Delete planned "+spoken);
             line.add(actions,BorderLayout.EAST);
             list.add(line);
         }
         p.add(list);
         gap(p,SPACE_LG);
+        // The weekly template's blocks for this week, each able to be skipped
+        // or moved on its own (#59) without the pointer.
+        if(!tracker.state().recurring().isEmpty()) {
+            p.add(RepeatWeek.card(this,week));
+            gap(p,SPACE_LG);
+        }
 
         var note=card();
         note.add(sectionHeader("PLANNED ≠ REQUIRED",GOLD));
@@ -791,7 +812,7 @@ public final class YoruApp extends JPanel implements Shell {
         // An ellipsis on every action that opens a dialog, and none on the ones
         // that do not: the label is then the promise of what happens next.
         p.add(pageHeaderFor("Data","DURATION · HISTORY · EXPORT",
-            button("+ Log time",()->timeDialog(false)),
+            named(button("+ Log time",()->timeDialog(false)),"sessions.log"),
             ghost(button("Export sessions CSV…",this::export)),
             ghost(button("Export vault JSON…",this::exportVault)),
             ghost(button("Import vault JSON…",this::importVault))));
@@ -1054,11 +1075,6 @@ public final class YoruApp extends JPanel implements Shell {
         actions.add(named(button("Delete vault…",this::deleteVault),"vault.delete"));
         c.add(actions);
         return c;
-    }
-
-    private JButton named(JButton button,String name) {
-        button.setName(name);
-        return button;
     }
 
     /**

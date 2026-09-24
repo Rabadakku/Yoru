@@ -72,7 +72,9 @@ final class WeeklyTemplate extends JPanel {
             gap(this,SPACE_XS);
             for(var rule:onDay) {
                 var line=new JPanel(new BorderLayout(SPACE_MD,0));line.setOpaque(false);line.setAlignmentX(0);
-                line.add(label(DateText.time(rule.startTime())+" – "+DateText.time(rule.endTime())+" · "+name(rule.activityId()),TYPE_LABEL,TEXT),BorderLayout.CENTER);
+                String changed=rule.changes().isEmpty()?"":" · "+rule.changes().size()
+                    +(rule.changes().size()==1?" week changed on its own":" weeks changed on their own");
+                line.add(label(DateText.time(rule.startTime())+" – "+DateText.time(rule.endTime())+" · "+name(rule.activityId())+changed,TYPE_LABEL,TEXT),BorderLayout.CENTER);
                 var actions=tightRow();
                 var edit=button("Edit",()->edit(rule));
                 edit.setName("repeat.edit."+rule.id());
@@ -137,6 +139,13 @@ final class WeeklyTemplate extends JPanel {
         form.add(label("Time",TYPE_LABEL,TEXT));form.add(times);
         form.add(label("Times like 9:00 AM, 9:30p or 21:30.",TYPE_CAPTION,MUTED));gap(form,SPACE_MD);
         form.add(label("Activity",TYPE_LABEL,TEXT));form.add(chosen);
+        if(!rule.changes().isEmpty()) {
+            // Said before it happens: a rule moved to another day has no block
+            // left on the dates its changed weeks name (#59).
+            gap(form,SPACE_MD);
+            form.add(label("Moving it to another day puts back the "+rule.changes().size()
+                +(rule.changes().size()==1?" week":" weeks")+" changed on their own.",TYPE_CAPTION,MUTED));
+        }
         while(Dialogs.confirm(this,form,"Edit repeating block","Save")) {
             try {
                 save(tracker,rule.id(),chosen.getSelectedItem(),(DayOfWeek)picker.getSelectedItem(),start.getText(),end.getText());

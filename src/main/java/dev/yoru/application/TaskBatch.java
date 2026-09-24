@@ -8,7 +8,11 @@ import java.util.*;
 public final class TaskBatch {
     private TaskBatch() { }
 
-    public sealed interface Change permits Status, Move, Due, Planned, Tags { }
+    public sealed interface Change permits Status, Move, Due, Planned, Tags, Prioritize { }
+    /** One priority for the whole selection (#68). */
+    public record Prioritize(Priority value) implements Change {
+        public Prioritize { Objects.requireNonNull(value); }
+    }
     public record Status(TaskStatus value) implements Change {
         public Status { Objects.requireNonNull(value); }
     }
@@ -59,6 +63,7 @@ public final class TaskBatch {
                 case Move edit -> task.withList(edit.listId());
                 case Due edit -> task.withDates(edit.value(), task.plannedFor());
                 case Planned edit -> task.withDates(task.due(), edit.value());
+                case Prioritize edit -> task.withPriority(edit.value());
                 case Tags edit -> {
                     var values = new LinkedHashSet<>(task.tagIds());
                     switch (edit.mode()) {

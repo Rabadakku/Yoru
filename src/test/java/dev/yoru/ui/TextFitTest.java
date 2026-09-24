@@ -124,6 +124,21 @@ public final class TextFitTest {
             tracker.editList(list.id(), longest(list.name() + " for the autumn term", LIST_NAME), list.colour());
         for (var habit : tracker.state().habits())
             tracker.renameHabit(habit.id(), longest(habit.name() + " before the end of every study day", HABIT_NAME));
+        // Tasks as a database (#68): every property, option and status name at
+        // its longest, and a long text and link in the cells.
+        var props = tracker.properties();
+        for (var own : tracker.state().database().statuses())
+            props.renameStatus(own.id(), longest(own.name() + " on the reply from the department office", 40));
+        for (var property : tracker.state().database().properties()) {
+            props.renameProperty(property.id(), longest(property.name() + " recorded against the course outline", 60));
+            for (var option : property.options())
+                props.renameOption(property.id(), option.id(), longest(option.name() + " for a first attempt at it", 40));
+        }
+        var text = props.addProperty(longest("Summary of the assignment brief and marking", 60), dev.yoru.domain.Model.PropertyType.TEXT, null);
+        var link = tracker.state().database().properties().stream().filter(p -> p.type() == dev.yoru.domain.Model.PropertyType.URL).findFirst().orElseThrow();
+        var first = tracker.state().tasks().getFirst();
+        props.setValue(first.id(), text.id(), new dev.yoru.domain.Model.Value.Text(longest("Two sections, each with a worked example and a short reflection", 400)));
+        props.setValue(first.id(), link.id(), new dev.yoru.domain.Model.Value.Text("https://example.com/" + "courses/autumn/syllabus/".repeat(8) + "week-4"));
         // And every time-since counter near its widest, counted in calendar
         // units: "10y 11mo 28d 23h 59m" beside Start again and ⋯ is wider than
         // the column at 150% text, and the ⋯ was cut off.

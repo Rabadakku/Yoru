@@ -92,6 +92,58 @@ public final class LegacyVaultTest {
         "vgyH11gZldhTWCZJ6zpA4aX8KWonPkTgVqLk+umHPBOb93k0iqRzvXKXQAgfIC2EKb0wMp5m" +
         "0R76+b/f3fzXxWH/1+4Ly3oUq5nQshQhPiIy1Hs6lHxPJxBTN67xuZJWnLQEzxE=";
 
+    /**
+     * A vault written by the unmodified schema 20 build (main at 09c15c1, after
+     * 1.0.21): two invented weekly repeats and a planned block. Opened now,
+     * every week of each repeat follows its rule (#59).
+     */
+    private static final String WEEKLY_VAULT =
+        "WU9SVQAAAAGjO7HmGSR5OFWhVBfWyqtDl575AtLNGWFeaFKpLcwLKvHHGp0a9k7UXU9iAjVN" +
+        "dgz2AZ1bmTdSH4duhmCnykiy0g7JM8EzFeiasqoc1yDuhBn9gQrT9He4b9zfRXjeZVt+CDgu" +
+        "UjvkYxXUm5DWyKbvaAWJNDZ3aSapU6KgUe/9x9gSW3c/YyCvcixcp4MFDL4/hH4vPd1JikBa" +
+        "CwdeDKQ+YRgzhdwFv+m3/M9cN5GgvykOkz08MTfVV1RekXpP0WNqcAECCWYAPAQ4w4/pbomy" +
+        "BftuQvJ9PfjdMI6QbjopDnuKRX1ip9dLYHPJvpkNWmzZYuxYW0sx2wv/tPIXkpMfZti+gSLL" +
+        "+IXqwLi8teTcUVfv5Ebxhs5wYEwPGaedXzGH+9Ig85QeQruJVLpg+hAvN+F8qUjFzctxPKKr" +
+        "PH/IMmvUcB4TFAAKWfuiSDc0fDPFLcOXOgonq1U7Fhhw";
+
+    /**
+     * A vault written by the schema 21 build (`610a59d`, before tasks became a
+     * database): a tagged task in progress and a weekly repeating one in a
+     * list, all invented. Opened now, neither has a priority, a status of the
+     * owner's or a property value, and there are no properties (#68).
+     */
+    private static final String BEFORE_DATABASE_VAULT =
+        "WU9SVQAAAAGBJRxuI1Q5hmYWuh2MdEK3q154+O0h5tzGec0d0nGVjYZzuqPdG7RaI1tfeneD" +
+        "4mooFHor+VIEBNYRcS2MOehHSzjWPO4pOQY6mO41/bHMMHOW3Z/w/OWMkq38mjkMdHXKL/gn" +
+        "IPrBu48BqI56BGPFKk8s62U7n6PvkqIJHedMxJPI5qB8ubsyqr7NikQiwZraxeAzce1vPzcX" +
+        "ypQFsscZHrgO0IbkLKBpivBX0VOpwSvGPoj+c4+rAMv1EM/bXiPnB29wHJk6QHFvFXl+EVdr" +
+        "ReDkC72YAwuk+XTih8Va4k4Q4yjVew6WPdIkEuy6c6KnweXC7UPAZ6UnJMWoYfKMTI7wvB52" +
+        "yeGeylU4SQ1tWSUUJ0dmsSJ3M8ME3wKsYq4jQILfzai6n42YwE3293x7ZFpSlQ/6W2Tbrkr0" +
+        "gL5QiI66qkjNOzMpRh6dAr9GoR46EDj+t/oXFhJglGEsoT+FumenG5HoDLL++hqlt30031hG" +
+        "KFWvS+pOG7btOKt8I8bIjhYLWp5tXPRxQL6dqpkoAMI3E5v0dQut/+WVNsYyrPeCxLr6iLD7" +
+        "2fr05USFMgy4uRRWvoNmeLw3qi6wf1JPxSbF9guE+rvQ1pLk5SWeWH+FJUkKAg0vIFShXPbW" +
+        "Hsq3m+ZL1Kb8MJSYm71x3FhJ4XAEHAa4XxGsmME4ShMTxfR+rJxnPTx7UVdtS9gvtzcZqpJz" +
+        "6A==";
+
+    /**
+     * A vault written by the schema 22 build (`31c3fe1`, before a task could be
+     * due at a time of day): a tagged task with a priority, a status of the
+     * owner's and a number, and an undated one, all invented. Opened now,
+     * neither is due at a time (#74).
+     */
+    private static final String BEFORE_DUE_TIME_VAULT =
+        "WU9SVQAAAAENIdkZRNgHjThGBFQXMXw8I8wYFKSMAbWbh5auLHYMaNY7ZRl46F9olha5+iuA" +
+        "gUy/QmAZiWBB9vxP6F2RWt6757GDwihO+L7c2EY/BqUvp+raomb5cwHl4T03UJEqJGTy2VN1" +
+        "6GB2QTtIHD7+TDqCgXjdYzS8yOiQg9INxReVCnfDpCgn+0HFvi1deTyzN4lqNEj2p4Yk5P5j" +
+        "D1aRFcQCvDvQ292AhmPmYlzRDhfL/TNFrtZbwgkyUz5NUrZp+8eGahQ6wf/aCZ9ar79iM2SE" +
+        "G6ITZIs0Yr/azw+EgqQAl7SS3XXT8KZV/QyPh5qoOs0kYa464Qes0nhFfM+SGQBPEYXa+4Vr" +
+        "M0hsXuj2S5Cx0Yst3QsYGBZQ3yuVHvx5Pd1HrSemAuQgsT1OqdkAdyfaxLTs6epfKyzc70KM" +
+        "4fTGKruSww0iw0Y0YxwptnNNTp1ayGa/1K0uWveTs6WvCHJKfKq5hOLEmqPr2oulcUbkTNnu" +
+        "6OBY632spDZpGqi1/gA/tMAQhX6e+MxezcEsEVJVia6G5bT4KQE0HW1P+Nl/bSr34ZlK0dGY" +
+        "0qu+ZUtLWLX7HMJvGnNXecVlB1TovIM39obX5VLqPbbJbDs9/EChJQzrWWUdEqBsQosPY7FF" +
+        "2eQBaQct8AeEH5WuWW26UajKsHEkgGgIzXYg4x6wIYifSS4NLIj7BEKb7ukK3DvGyzU+DjIX" +
+        "vPU232gdjjAbMiZsNgvo6euUY3YcUGKlG23Z2G0IXOd1eBj4oYewPF9ELZGB3C2wvOvt6J72";
+
     public static void main(String[] args)throws Exception{
         Path dir=Files.createTempDirectory("yoru-legacy-");
         try {
@@ -159,6 +211,9 @@ public final class LegacyVaultTest {
         illustrated();
         beforePages();
         oneTag();
+        weekly();
+        beforeDatabase();
+        beforeDueTime();
         System.out.println("PASS: "+checks+" legacy vault checks (an older build's file still opens)");
     }
 
@@ -197,6 +252,111 @@ public final class LegacyVaultTest {
     }
 
     /** The 1.0.19 vault above: a tag each, becoming a list of tags each (#66). */
+    /** The schema 20 vault above: its repeats open unchanged, then keep a week changed on its own. */
+    private static void weekly() throws Exception {
+        Path dir=Files.createTempDirectory("yoru-weekly-");
+        try {
+            Path file=dir.resolve("weekly.vault");
+            Files.write(file,Base64.getDecoder().decode(WEEKLY_VAULT));
+            State loaded;
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){loaded=vault.load();}
+            check(loaded.activities().stream().map(Activity::name).toList().equals(List.of("Invented lecture","Invented lab")),
+                "A schema 20 vault keeps its activities");
+            check(loaded.recurring().size()==2,"and both weekly repeats");
+            var lecture=loaded.recurring().getFirst();
+            var lab=loaded.recurring().get(1);
+            check(lecture.dayOfWeek()==java.time.DayOfWeek.MONDAY&&lecture.startTime().equals(java.time.LocalTime.of(9,0))
+                &&lecture.endTime().equals(java.time.LocalTime.of(10,30)),"The lecture keeps its day and times");
+            check(lab.dayOfWeek()==java.time.DayOfWeek.THURSDAY&&lab.endTime().equals(java.time.LocalTime.of(16,0)),
+                "and so does the lab");
+            check(loaded.recurring().stream().allMatch(r->r.changes().isEmpty()),"Every week of each follows its rule (#59)");
+            check(loaded.blocks().size()==1,"The planned block after them is read where it was");
+
+            var monday=LocalDate.parse("2026-10-05");
+            var changed=loaded.withRecurring(List.of(lecture.withChange(monday,RepeatChange.skip(monday)),lab));
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){vault.save(changed);}
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){
+                check(vault.load().equals(changed),"A skipped week survives a save at the current schema and a reopen");
+            }
+            check(Files.exists(Path.of(file+".v20.bak")),"The schema 20 file is kept as a backup before the upgrade");
+        } finally {
+            try(var files=Files.walk(dir)){
+                for(var path:files.sorted(Comparator.reverseOrder()).toList())Files.delete(path);
+            }
+        }
+    }
+
+    /** The schema 21 vault above: its tasks open with no database details, then keep some. */
+    private static void beforeDatabase() throws Exception {
+        Path dir=Files.createTempDirectory("yoru-before-database-");
+        try {
+            Path file=dir.resolve("before-database.vault");
+            Files.write(file,Base64.getDecoder().decode(BEFORE_DATABASE_VAULT));
+            State loaded;
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){loaded=vault.load();}
+            var essay=loaded.tasks().stream().filter(t->t.title().equals("Invented essay")).findFirst().orElseThrow();
+            var laundry=loaded.tasks().stream().filter(t->t.title().equals("Invented laundry")).findFirst().orElseThrow();
+            check(essay.status()==TaskStatus.DOING&&essay.tagIds().size()==1&&essay.notes().equals("Two pages."),
+                "A schema 21 task keeps its status, tag and notes");
+            check(laundry.repeats()&&laundry.listId()!=null&&laundry.due().equals(LocalDate.parse("2026-09-25")),
+                "and a repeating task in a list keeps its rule, list and date");
+            check(loaded.tasks().stream().allMatch(t->t.details().equals(Details.NONE)),
+                "Neither has a priority, a status of the owner's or a property value (#68)");
+            check(essay.edited().equals(essay.createdAt()),"and each was last edited when it was made");
+            check(loaded.database().equals(TaskDatabase.EMPTY),"The vault has no properties or statuses of its own");
+            check(loaded.habits().size()==1,"and the habit after the tasks is read where it was");
+
+            var effort=new Property(UUID.randomUUID(),"Effort",PropertyType.NUMBER,List.of(),null,false);
+            var waiting=new StatusOption(UUID.randomUUID(),"Waiting",TaskStatus.TODO,0xE8B24C);
+            var withDatabase=loaded.withDatabase(new TaskDatabase(List.of(waiting),List.of(effort)))
+                .withTasks(loaded.tasks().stream().map(t->t.title().equals("Invented laundry")
+                    ?t.withDetails(new Details(Priority.HIGH,waiting.id(),java.util.Map.of(effort.id(),new Value.Amount(java.math.BigDecimal.TEN)),null))
+                    :t).toList());
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){vault.save(withDatabase);}
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){
+                check(vault.load().equals(withDatabase),"A priority, a status and a property value survive a save and reopen");
+            }
+            check(Files.exists(Path.of(file+".v21.bak")),"The schema 21 file is kept as a backup before the upgrade");
+        } finally {
+            try(var files=Files.walk(dir)){
+                for(var path:files.sorted(Comparator.reverseOrder()).toList())Files.delete(path);
+            }
+        }
+    }
+
+    /** The schema 22 vault above: its tasks open with no due time and keep their details, then keep a time. */
+    private static void beforeDueTime() throws Exception {
+        Path dir=Files.createTempDirectory("yoru-before-due-time-");
+        try {
+            Path file=dir.resolve("before-due-time.vault");
+            Files.write(file,Base64.getDecoder().decode(BEFORE_DUE_TIME_VAULT));
+            State loaded;
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){loaded=vault.load();}
+            var report=loaded.tasks().stream().filter(t->t.title().equals("Invented report")).findFirst().orElseThrow();
+            var reading=loaded.tasks().stream().filter(t->t.title().equals("Invented reading")).findFirst().orElseThrow();
+            check(loaded.tasks().stream().allMatch(t->t.dueTime()==null),"No schema 22 task is due at a time of day (#74)");
+            var effort=loaded.database().properties().getFirst();
+            check(report.details().priority()==Priority.HIGH
+                &&report.details().statusId().equals(loaded.database().statuses().getFirst().id())
+                &&report.details().values().get(effort.id()).equals(new Value.Amount(new java.math.BigDecimal("3"))),
+                "A schema 22 task keeps its priority, its owner's status and its number");
+            check(report.due().equals(LocalDate.parse("2026-10-02"))&&reading.due()==null,"and its due date, or none");
+            check(loaded.habits().size()==1,"and the habit after the tasks is read where it was");
+
+            var timed=loaded.withTasks(loaded.tasks().stream().map(t->t.title().equals("Invented report")
+                ?t.withDetails(t.details().withDueTime(java.time.LocalTime.of(17,0))):t).toList());
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){vault.save(timed);}
+            try(var vault=new EncryptedVault(file,PASSWORD.toCharArray())){
+                check(vault.load().equals(timed),"A due time survives a save and reopen");
+            }
+            check(Files.exists(Path.of(file+".v22.bak")),"The schema 22 file is kept as a backup before the upgrade");
+        } finally {
+            try(var files=Files.walk(dir)){
+                for(var path:files.sorted(Comparator.reverseOrder()).toList())Files.delete(path);
+            }
+        }
+    }
+
     private static void oneTag() throws Exception {
         Path dir=Files.createTempDirectory("yoru-one-tag-");
         try {

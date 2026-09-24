@@ -153,7 +153,7 @@ final class TodayPage {
         var active=tracker.active();
         if(activities.isEmpty()) {
             focus.add(emptyState("No activities yet.","Create one to start a session.",
-                button("+ Activity",shell::addActivity)));
+                named(button("+ Activity",shell::addActivity),"activity.new")));
             return focus;
         }
         var choose=plainCombo(new JComboBox<Activity>(activities.toArray(Activity[]::new)));
@@ -184,8 +184,8 @@ final class TodayPage {
             if(tracker.active()==null) shell.perform(()->tracker.start(((Activity)choose.getSelectedItem()).id()));
             else clockOut();
         }));
-        controls.add(button("+ Activity",shell::addActivity));
-        controls.add(button("+ Log time",()->shell.timeDialog(false)));
+        controls.add(named(button("+ Activity",shell::addActivity),"activity.new"));
+        controls.add(named(button("+ Log time",()->shell.timeDialog(false)),"sessions.log"));
         if(active!=null)controls.add(button("Edit timer",()->shell.editTime(active)));
         controls.setName("today.timer.controls");
         focus.add(controls);
