@@ -2,7 +2,9 @@
  * Desktop modular monolith. Storage and UI are internal implementation details.
  */
 module dev.yoru {
-    requires java.desktop;
+    // Transitive because dev.yoru.ui is exported (below) and its public
+    // classes are Swing components: whoever can see them must see Swing too.
+    requires transitive java.desktop;
     requires java.prefs;
     requires java.net.http;
     exports dev.yoru.domain;

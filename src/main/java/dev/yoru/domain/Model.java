@@ -64,7 +64,6 @@ public final class Model {
             catch (IllegalArgumentException | NullPointerException unknown) { return MIDNIGHT; }
         }
     }
-    /** Overworld sprite set. Not called Character — that shadows java.lang.Character. */
     /**
      * A task's state. The stored form is the constant's name; {@code label} is
      * only how it is written on screen, so a task's status button reads "To do"

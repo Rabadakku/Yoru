@@ -15,6 +15,10 @@ import java.time.format.TextStyle;
 import java.util.*;
 import java.util.List;
 import static dev.yoru.ui.Theme.*;
+// dev.yoru.ui is exported only so java.desktop can build Theme's UI delegates
+// (see module-info.java); no other module uses this class, so the package-private
+// types its Shell methods return are not an API anybody could miss.
+@SuppressWarnings("exports")
 public final class YoruApp extends JPanel implements Shell {
     private final Tracker tracker;
     /** The open vault. It is replaced when another vault is switched to (#41). */

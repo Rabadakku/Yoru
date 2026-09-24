@@ -414,7 +414,7 @@ public class VaultStore {
         if (!caseOnly) requireFree(to);
         requireStorable(to);
 
-        try (var held = lock(source, from)) {
+        try (var _ = lock(source, from)) {
             var moves = new ArrayList<Path[]>();
             try {
                 Path key = LocalAccess.keyPath(source);
@@ -495,7 +495,7 @@ public class VaultStore {
         if (holdsAnything(staging))
             throw new IOException("An earlier deletion of \"" + name + "\" left its copy in place. "
                 + "Restart Yoru so it can be put back first.");
-        try (var held = lock(vault, name)) {
+        try (var _ = lock(vault, name)) {
             List<Path> present = belongingTo(name);
             try {
                 Files.createDirectories(staging);
@@ -722,7 +722,7 @@ public class VaultStore {
         // Not a shape a removal leaves — it never writes over a key — so there
         // is nothing certain to act on.
         if (LocalAccess.enabled(vault)) return false;
-        try (var held = lock(vault, nameOf(vault))) {
+        try (var _ = lock(vault, nameOf(vault))) {
             char[] secret;
             try {
                 secret = LocalAccess.readKey(pending);

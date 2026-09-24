@@ -248,13 +248,13 @@ final class RepeatField extends JPanel {
 
     // ------------------------------------------------------------------ words
 
-    /** A rule in words: "Every 2 weeks on Tue and Thu, after it is done, until Oct 1, 2026". */
     /** {@link #describe} for the middle of a sentence: "every week on Mon", keeping the day's capital. */
     static String inSentence(Repeat rule) {
         var words = describe(rule);
         return Character.toLowerCase(words.charAt(0)) + words.substring(1);
     }
 
+    /** A rule in words: "Every 2 weeks on Tue and Thu, after it is done, until Oct 1, 2026". */
     static String describe(Repeat rule) {
         if (rule == null) return "Does not repeat";
         var out = new StringBuilder("Every ");
