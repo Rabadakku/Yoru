@@ -1514,7 +1514,9 @@ final class Theme {
         }
         @Override public void setContentAreaFilled(boolean value) { filled=value; repaint(); }
         @Override protected void paintComponent(Graphics graphics) {
-            if(filled) {
+            // A quiet button that is off draws no fill: filled, the one control
+            // in a row that could not be pressed was the one that stood out.
+            if(filled && (isEnabled() || !Boolean.TRUE.equals(getClientProperty(QUIET)))) {
                 var g=(Graphics2D)graphics.create();
                 Color fill=!isEnabled() ? DISABLED_FILL
                     : getModel().isPressed() ? shade(getBackground(),DARK?-24:-30)
@@ -1621,8 +1623,12 @@ final class Theme {
     static JButton ghost(JButton b) {
         b.setBackground(PANEL);
         b.setBorder(controlBorder(PANEL));
+        b.putClientProperty(QUIET, true);
         return b;
     }
+
+    /** Marks a {@link #ghost} button, whose disabled state is fainter text on no fill at all. */
+    static final String QUIET = "yoru.quiet";
 
     /**
      * The one selected treatment for a segmented choice: filled in the accent,
