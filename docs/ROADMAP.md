@@ -6,6 +6,14 @@ what each feature does is in [FEATURES.md](FEATURES.md). Older entries, from
 1.0.21 back to the first release, are in
 [history/roadmap-to-1.0.21.md](history/roadmap-to-1.0.21.md).
 
+## Proposed: rebuild in TypeScript
+
+[REBUILD-PLAN.md](REBUILD-PLAN.md) proposes rebuilding Yoru in a new
+repository as an Electron, React and TypeScript app. The reason is that Swing
+can't deliver the interface #63 asks for. The plan waits on the owner's
+decisions in its §3. If they approve it, 1.x takes bug fixes only, and the
+list below resumes in the new app after its cut-over milestone.
+
 ## Next
 
 1. **Tasks as a database, continued:** sub-tasks and checklists (#70), saved
