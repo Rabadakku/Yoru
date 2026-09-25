@@ -6,6 +6,18 @@ what each feature does is in [FEATURES.md](FEATURES.md). Older entries, from
 1.0.21 back to the first release, are in
 [history/roadmap-to-1.0.21.md](history/roadmap-to-1.0.21.md).
 
+## Approved: rebuild in TypeScript
+
+The owner approved [REBUILD-PLAN.md](REBUILD-PLAN.md) on 2026-09-25. Yoru
+will be rebuilt in a new repository as an Electron, React and TypeScript app.
+The reason is that Swing can't deliver the interface #63 asks for.
+
+The new app replaces Notion, Obsidian and the separate trackers for personal
+use, and later shares its code with a web app and a sync server (plan §12).
+M0 starts once the name and licence are decided (plan §11). 1.x takes bug
+fixes only, and the list below resumes in the new app after its cut-over
+milestone.
+
 ## Next
 
 1. **Tasks as a database, continued:** sub-tasks and checklists (#70), saved
