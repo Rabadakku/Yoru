@@ -1,7 +1,8 @@
 # Rebuilding Yoru in TypeScript: the plan
 
-Status: **approved by the owner on 2026-09-25.** Decisions 1, 2, 4 and 9 are
-answered, and the name (3) has a working answer. The rest of §3 waits for the
+Status: **approved by the owner on 2026-09-25.** Decisions 1, 2, 3, 4 and 9
+are answered. The first goal is a complete, polished local desktop app, built
+so that a server and a web app can connect to it later. The rest of §3 waits for the
 milestone that needs it. Written 2026-09-25 against Yoru 1.1.0.
 
 **The product:** one app that replaces Notion, Obsidian and the separate
@@ -128,9 +129,9 @@ Each decision has a recommendation. None of them is Claude's to make.
    using it, but shares its name with a well-known game character that
    dominates searches for it.
 
-   **Answered for now:** work continues in a private repository under a
-   working name. The owner picks the final name before M8, after a proper
-   trademark and app-store check.
+   **Answered 2026-09-25: Yoru.** Work happens in a private repository called
+   `yoru-next`. After the cut-over the owner retires the 1.x repositories and
+   the new one becomes Yoru. A trademark check comes before any customers.
 4. **Themes.** Apple's model is Light, Dark or System, plus an accent colour
    that follows the system. The alternative was to keep the five named themes.
    **Answered 2026-09-25:** light and dark only, following the system, with
