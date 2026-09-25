@@ -1,8 +1,8 @@
 # Rebuilding Yoru in TypeScript: the plan
 
-Status: **approved by the owner on 2026-09-25.** That covers the rebuild and
-the stack (decision 1). The rest of §3 is still open. Written 2026-09-25
-against Yoru 1.1.0.
+Status: **approved by the owner on 2026-09-25.** Decisions 1, 2, 4 and 9 are
+answered, and the name (3) has a working answer. The rest of §3 waits for the
+milestone that needs it. Written 2026-09-25 against Yoru 1.1.0.
 
 **The product:** one app that replaces Notion, Obsidian and the separate
 trackers for personal use. Later, the same code serves a web app and a server,
@@ -110,18 +110,31 @@ Each decision has a recommendation. None of them is Claude's to make.
 
    Notion, Obsidian, Linear and Claude Desktop are all Electron apps.
 2. **Replace "nothing is bundled" with a dependency policy.** No
-   JavaScript stack can meet the old rule. Proposed policy:
-   - permissive licences only (MIT, Apache-2.0, BSD, ISC);
+   JavaScript stack can meet the old rule. **Answered 2026-09-25:** the owner
+   asked for all the rules to be rewritten for a product that may have many
+   users and earn money. The new repository's `AGENTS.md` holds them:
+   - permissive licences only, because the product is proprietary;
    - every dependency named in `docs/DEPENDENCIES.md` with its reason;
-   - a committed lockfile and a generated notice file;
-   - still no bundled fonts, images or audio. Type comes from the system, and
-     sounds are synthesised as they are today.
-3. **Name.** Decide before scaffolding, because the name is built into the
-   bundle id, the vault file extension and the MCP server's name. Keeping
-   "Yoru" is a fine answer.
+   - assets made in-house or properly licensed, with where each came from;
+   - customer data kept out of everything committed;
+   - local-first, with no telemetry unless the user opts in.
+3. **Name.** The name is built into the bundle id, the vault file extension
+   and the MCP server's name, but it only becomes fixed at the first public
+   release (M8). Until then a rename is a find-and-replace.
+
+   The owner liked "Hibi" (日々), but at least four apps in the same category
+   already use it, one of them a habit and life-coaching app for the same
+   audience. "Michi" is used by a notes app. "Yoru" has no productivity app
+   using it, but shares its name with a well-known game character that
+   dominates searches for it.
+
+   **Answered for now:** work continues in a private repository under a
+   working name. The owner picks the final name before M8, after a proper
+   trademark and app-store check.
 4. **Themes.** Apple's model is Light, Dark or System, plus an accent colour
-   that follows the system (recommended). The alternative is to keep the five
-   named themes. They could come back later as tints.
+   that follows the system. The alternative was to keep the five named themes.
+   **Answered 2026-09-25:** light and dark only, following the system, with
+   one accent.
 5. **Platforms.** Recommended: design for the Mac first, and keep Windows and
    Linux builds that work but get less polish. Electron makes those two
    builds nearly free.
@@ -142,10 +155,13 @@ Each decision has a recommendation. None of them is Claude's to make.
    the roadmap after parity.
 9. **Licence and visibility of the new repository.** Yoru 1.x uses the
    Unlicense, which lets anyone take the code and sell it, including as a
-   hosted service. That doesn't fit a paid product. Recommended: keep the new
-   repository private until this is settled. The options are proprietary,
-   AGPL-3.0 (open, but a hosted copy must publish its changes) or
-   source-available. This needs deciding before M0 is pushed anywhere public.
+   hosted service. That doesn't fit a paid product. **Answered 2026-09-25:**
+   private and all rights reserved.
+
+   1.x is public so that its updates can come from GitHub releases. A private
+   repository's releases can't be downloaded without signing in. So by M8 the
+   new app needs a public release channel: either a public repository that
+   holds only installers and release notes, or a download host.
 10. **How synced data is protected (decide before §12's Phase B).** There are
     two options:
     - **End-to-end encrypted:** the server stores only ciphertext. This keeps
@@ -454,11 +470,10 @@ order at M8.
 
 ## 11. Next steps
 
-1. The owner answers the decisions M0 needs: the name (3), the licence and
-   visibility (9) and the dependency policy (2). The rest can wait until the
-   milestone that needs them.
-2. Create the new repository, private until decision 9 is made. Carry over the
-   privacy rules in AGENTS.md and this plan as `docs/ARCHITECTURE.md`.
+1. Done: the owner answered the decisions M0 needs (2, 4 and 9), and the name
+   has a working answer (3).
+2. Create the new private repository, with the rewritten rules, the product
+   goals and this plan split into architecture, design and plan documents.
 3. Start M0.
 4. Yoru 1.x takes bug fixes only. Its README points to the new app once M8 ships.
 
@@ -473,6 +488,12 @@ This changes one of 1.x's rules. "Not a cloud product: no account, no
 server, no sync" becomes **local-first**. The app is complete with no account
 and no network. Sync, the web app and accounts are optional, opt-in and come
 later. Nobody's data leaves their machine unless they turn sync on.
+
+The owner's model is Anki: the desktop app works fully on its own. Sync must
+not repeat what makes Anki's clunky. It runs automatically in the background,
+with no sync button, and never asks the user to choose between uploading and
+downloading or throws one side away. Changes merge field by field, and page
+text merges by character.
 
 In order, each phase starting only when the one before is done:
 
