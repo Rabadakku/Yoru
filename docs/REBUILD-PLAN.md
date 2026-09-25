@@ -8,6 +8,17 @@ against Yoru 1.1.0.
 trackers for personal use. Later, the same code serves a web app and a server,
 working towards paying customers (§12).
 
+**Who it's for:** people who want to master their behaviour, plan and track
+their lives, and do better.
+
+**The loop:** plan, do, track, review. It's what sets Yoru apart from a blank
+canvas like Notion or Obsidian. The plan (tasks, the week, goals) sits beside
+what actually happened (time, habits, check-ins), and the review compares the
+two. Every feature should serve one step of that loop.
+
+Yoru stays not gamified: no points and no streak-shaming. It's honest numbers,
+presented calmly.
+
 This is the founding document for the rebuild. Once approved, it moves into the
 new repository as its `docs/ARCHITECTURE.md`, and Yoru 1.x takes bug fixes only.
 
@@ -407,10 +418,17 @@ the cut-over in M8, except the design work that is the point of the rebuild.
 | M7 | Claude and Anki | Bridge, MCP server, tools, prompts, switches, Activity, the Desktop bundle and Code setup, AnkiConnect |
 | M8 | Cut-over | Signed installers if chosen, updates, docs. The owner uses it alongside 1.x for a week, then 1.x freezes |
 
-After M8, the #65 order resumes. Saved views (#69) come first, because the
-property-and-view engine already exists. Sub-tasks (#70), the side panel
-(#71), time-blocking (#83), reminders (#76) and the menu bar extra (#77)
-follow.
+After M8, the proposed order finishes the loop first, because that's what
+the product is for:
+
+1. Weekly and monthly reviews with the numbers filled in (#80).
+2. Goals that roll up from tasks, habits and time (#81).
+3. More kinds of habit (#82).
+4. Time-blocking tasks onto the week (#83).
+
+Then the rest of #65: saved views (#69), sub-tasks (#70), the side panel
+(#71), reminders (#76) and the menu bar extra (#77). The owner confirms this
+order at M8.
 
 ## 9. Risks
 
