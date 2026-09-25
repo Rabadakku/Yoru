@@ -1,7 +1,12 @@
 # Rebuilding Yoru in TypeScript: the plan
 
-Status: **proposal**. Nothing is built until the owner has answered §3.
-Written 2026-09-25 against Yoru 1.1.0.
+Status: **approved by the owner on 2026-09-25.** That covers the rebuild and
+the stack (decision 1). The rest of §3 is still open. Written 2026-09-25
+against Yoru 1.1.0.
+
+**The product:** one app that replaces Notion, Obsidian and the separate
+trackers for personal use. Later, the same code serves a web app and a server,
+working towards paying customers (§12).
 
 This is the founding document for the rebuild. Once approved, it moves into the
 new repository as its `docs/ARCHITECTURE.md`, and Yoru 1.x takes bug fixes only.
@@ -84,7 +89,8 @@ libraries doing the toolkit work, not from cutting features.
 
 Each decision has a recommendation. None of them is Claude's to make.
 
-1. **Stack: Electron + React + TypeScript** (§4). The alternatives were
+1. **Stack: Electron + React + TypeScript** (§4). **Approved 2026-09-25.** The
+   same code will later serve a web app (§12). The alternatives were
    considered and set aside:
    - **Tauri:** smaller, but the backend is Rust, and on a Mac it renders in
      WebKit, not the Chromium that Claude tests in.
@@ -123,6 +129,20 @@ Each decision has a recommendation. None of them is Claude's to make.
 
    LeetCode (#41) and meal planning (#60) were never built, so they stay on
    the roadmap after parity.
+9. **Licence and visibility of the new repository.** Yoru 1.x uses the
+   Unlicense, which lets anyone take the code and sell it, including as a
+   hosted service. That doesn't fit a paid product. Recommended: keep the new
+   repository private until this is settled. The options are proprietary,
+   AGPL-3.0 (open, but a hosted copy must publish its changes) or
+   source-available. This needs deciding before M0 is pushed anywhere public.
+10. **How synced data is protected (decide before §12's Phase B).** There are
+    two options:
+    - **End-to-end encrypted:** the server stores only ciphertext. This keeps
+      Yoru's privacy promise and sets it apart, but server-side search and AI
+      can't read the data.
+    - **Readable by the server:** simpler, and what Notion does.
+
+    Recommended: end-to-end encrypted.
 
 ## 4. Stack
 
@@ -169,10 +189,14 @@ packages/mcp       the stdio MCP server. Its tools come from core's command regi
 apps/desktop       Electron main and preload: wires core, ui, bridge and menus.
 apps/harness       development only. Runs core in Node and ui in a browser over a
                    WebSocket, seeded with invented data, for Playwright.
+apps/web, apps/server   later (§12). The same core and ui in a browser, and the sync
+                   service.
 ```
 
 `ui` never imports storage, and `core` never imports `ui`, Electron or React.
-dependency-cruiser fails the build when either rule breaks. The renderer's
+`core` also uses no Node-only API outside its storage adapter, so the same
+core can later run in a browser worker or on a server. dependency-cruiser
+fails the build when any of these rules breaks. The renderer's
 `Client` has two transports: IPC in the app and a WebSocket in the harness.
 Everything above the transport runs the same code. So a cloud session can
 drive the whole interface in the preinstalled Chromium and screenshot it.
@@ -225,6 +249,19 @@ queries that read them.
   allow that.
 - **Ids are UUIDv7**, ordered by time. **Time:** facts are UTC instants.
   Local meanings are stored as a plain date or time plus an IANA zone.
+- **Ready to sync, from the first migration.** Adding these later would mean
+  rewriting every table, and they cost almost nothing now:
+  - every row carries `created_at` and `updated_at`;
+  - a deletion is a tombstone (`deleted_at`) until it has been purged;
+  - nothing uses auto-increment ids;
+  - each `change_log` entry records the device it came from and a
+    hybrid logical clock.
+
+  With that in place, the change log can become the outbox that sync
+  replicates (§12).
+- **Storage is a port.** Desktop uses native SQLite with SQLCipher. The web
+  app will use SQLite compiled to WebAssembly, in the browser's private file
+  system. Both run the same SQL migrations.
 
 **Coming from Yoru 1.x.** The new app reads one thing: 1.x's JSON export,
 format 12. It never opens the binary vault, so none of the 23 schema readers
@@ -384,6 +421,7 @@ follow.
 | Electron's weight | A larger download and more memory than 1.x. The same trade Notion, Obsidian and Claude Desktop make |
 | The native SQLite module fails on one platform | CI builds all three installers from M1, not M8. Confirm FTS5 in the SQLCipher build in M1's first spike |
 | An unsigned Mac app | Gatekeeper's first-launch step and a custom update flow. See decision 6 |
+| Server and customer work starts before the personal app is good | §12's phases are in order. No accounts, server or billing before M8 |
 
 ## 10. What does not come across
 
@@ -396,10 +434,37 @@ follow.
 - Anything deferred under decision 8, until the owner says otherwise.
 - Handoff logs and history documents. Git and the issues keep that record.
 
-## 11. Next steps once approved
+## 11. Next steps
 
-1. The owner answers §3.
-2. Create the new repository. Carry over the privacy rules in AGENTS.md, the
-   licence, and this plan as `docs/ARCHITECTURE.md`.
+1. The owner answers the decisions M0 needs: the name (3), the licence and
+   visibility (9) and the dependency policy (2). The rest can wait until the
+   milestone that needs them.
+2. Create the new repository, private until decision 9 is made. Carry over the
+   privacy rules in AGENTS.md and this plan as `docs/ARCHITECTURE.md`.
 3. Start M0.
 4. Yoru 1.x takes bug fixes only. Its README points to the new app once M8 ships.
+
+## 12. Later: web, sync and customers
+
+The owner's direction is to work towards a server, a web app and paying
+customers. TypeScript lets desktop and web share almost all the code: the web
+app is `ui` and `core` in a browser, and the harness proves that from M0
+onwards.
+
+This changes one of 1.x's rules. "Not a cloud product: no account, no
+server, no sync" becomes **local-first**. The app is complete with no account
+and no network. Sync, the web app and accounts are optional, opt-in and come
+later. Nobody's data leaves their machine unless they turn sync on.
+
+In order, each phase starting only when the one before is done:
+
+| Phase | What | Needs |
+|---|---|---|
+| A. Personal app | M0–M8. The owner's daily tool, replacing Notion, Obsidian and the separate trackers | Nothing on this list |
+| B. Sync | One owner, several devices. A small sync service, with end-to-end encryption if chosen. Pages merge by character, not by overwrite (a CRDT such as Yjs, which CodeMirror supports) | Decision 10. The sync-ready rules in §5.3 |
+| C. Web app | The same `ui` and `core` in a browser over the WASM storage adapter. It signs in to sync | Phase B |
+| D. Customers | Accounts, billing, terms and privacy policy, backups and monitoring of the service, support. Also a remote MCP server, which makes Yoru a connector in Claude on the web, not only in the desktop apps | Decision 9. A trademark check of the name |
+
+What this changes now: only §5.1's rule that `core` avoids Node-only APIs,
+and §5.3's sync-ready tables. Everything else waits for its phase, so the
+personal app isn't delayed by customers it doesn't have yet.
